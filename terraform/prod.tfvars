@@ -1,5 +1,15 @@
 region           = "europe-west3"
-name             = "adorsys-gis"
-root_domain_name = "learn.adorsys.team"
+name             = "observe"
+root_domain_name = "observe.camer.digital"
 environment      = "prod"
-machine_type     = "c4a-highcpu-2"
+
+project_id = "observe-472521"
+
+wazuh_helm_chart_version = "0.6.0-rc.18"
+
+subject = {
+  country = "CM"
+  locality = "Douala"
+  organization = "BVMAC"
+  common_name = "root-ca"
+}

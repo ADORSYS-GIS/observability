@@ -13,11 +13,6 @@ variable "name" {
   description = "Deployment name"
 }
 
-variable "machine_type" {
-  type        = string
-  description = "Machine type"
-}
-
 variable "network_name" {
   type = string
 }
@@ -26,12 +21,10 @@ variable "sub_network_name" {
   type = string
 }
 
-variable "deletion_protection" {
-  type = bool
+variable "ip_range_pod" {
+  type = string
 }
 
-variable "labels" {
-  description = "Map of labels for project"
-  type = map(string)
-  default = {}
+variable "ip_range_services" {
+  type = string
 }

@@ -1,0 +1,61 @@
+global:
+  domain: ${dashboard_domain}
+
+fullnameOverride: wazuh
+
+indexer:
+  replicas: 2
+  persistence:
+    size: 100Gi
+  keycloak:
+    enabled: false
+
+master:
+  replicaCount: 1
+  persistence:
+    size: 50Gi
+
+worker:
+  replicaCount: 2
+  persistence:
+    size: 50Gi
+
+integration:
+  jira:
+    enabled: false
+
+extraVolumeConfigs:
+  '{{ include "common.names.fullname" $ }}-manager-backup':
+    resources:
+      requests:
+        storage: 10Gi
+  snort-alerts:
+    resources:
+      requests:
+        storage: 10Gi
+  owasp-zap-alerts:
+    resources:
+      requests:
+        storage: 10Gi
+
+dashboard:
+  ingress:
+    enabled: true
+    host: "${dashboard_domain}"
+    className: null
+    tls:
+      enabled: false
+      #useSecret: true
+    annotations:
+      networking.gke.io/managed-certificates: "${dashboard_certificate_name}"
+      kubernetes.io/ingress.global-static-ip-name: "${dashboard_name}"
+      #kubernetes.io/ingress.allow-http: "false"
+
+svcs:
+  '{{ include "common.names.fullname" $ }}-ext':
+    enabled: true
+    loadBalancerIP: "${manager_ip}" 
+  '{{ include "common.names.fullname" $ }}-dashboard':
+    annotations:
+      cloud.google.com/backend-config: '{"ports":{"dashboard":"wazuh-dashboard-backend-config"}}'
+      cloud.google.com/app-protocols: '{"dashboard":"HTTPS"}'

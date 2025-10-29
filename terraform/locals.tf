@@ -5,6 +5,9 @@ locals {
     owner       = local.name,
     environment = var.environment
   }
-
-  argo_hostname = var.argo_hostname != "" ? var.argo_hostname : "argo-cd.${var.root_domain_name}"
+  
+  wazuh_domains = {
+    dashboard = { domain = "siem.${var.root_domain_name}", regional = false },
+    manager   = { domain = "siem-events.${var.root_domain_name}", regional = true }
+  }
 }

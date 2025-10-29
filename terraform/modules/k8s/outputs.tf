@@ -1,11 +1,12 @@
-output "cluster_endpoint" {
-  value = "https://${module.gke.endpoint}"
+output "cluster_name" {
+  value = module.gke.cluster_name
 }
 
-output "cluster_ca" {
-  value = module.gke.ca_certificate
+output "cluster_location" {
+  value       = module.gke.location
+  description = "K8s Cluster location"
 }
 
-output "name" {
-  value = module.gke.name
+output "cluster_id" {
+  value = module.gke.cluster_id
 }

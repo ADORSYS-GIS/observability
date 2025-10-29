@@ -31,7 +31,7 @@ export TF_VAR_db_password="some-secret"
    
    Then, run the following command to initialize the backend:
    ```bash
-   tf init -var-file=dev.tfvars \
+   tf init -var-file=prod.tfvars \
     -backend-config="bucket=$BACKEND_BUCKET_STATE" \
     -backend-config="prefix=terraform/state" \
     -backend-config="credentials=$BACKEND_CREDENTIAL_FILE_PATH" \
@@ -40,12 +40,12 @@ export TF_VAR_db_password="some-secret"
    
 2. (Optional) First create the project. To do that, run the corresponding TF Module
    ```bash
-   tf apply -auto-approve -var-file=dev.tfvars -target=module.project
+   tf apply -auto-approve -var-file=prod.tfvars -target=module.project
    ```
    
 3. Then create the repository. To do that, run the corresponding TF Module
    ```bash
-   tf apply -auto-approve -var-file=dev.tfvars
+   tf apply -auto-approve -var-file=prod.tfvars
    ```
 
 

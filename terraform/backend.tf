@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket  = "tf-state-gis-dev"
+    bucket  = "observabilities-tool-tf-state-gis"
     prefix  = "terraform/state"
   }
 }

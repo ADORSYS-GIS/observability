@@ -1,25 +1,31 @@
 provider "google" {
   credentials = file(var.credentials)
 
-  region  = var.region
+  region = var.region
 }
 
 provider "google-beta" {
   credentials = file(var.credentials)
 
-  region  = var.region
+  region = var.region
 }
 
 provider "helm" {
   kubernetes {
-    host  = module.k8s.cluster_endpoint
-    token = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(module.k8s.cluster_ca)
+    cluster_ca_certificate = module.gke_auth.cluster_ca_certificate
+    host                   = module.gke_auth.host
+    token                  = module.gke_auth.token
   }
 }
 
 provider "kubernetes" {
-  host  = module.k8s.cluster_endpoint
-  token = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.k8s.cluster_ca)
+  cluster_ca_certificate = module.gke_auth.cluster_ca_certificate
+  host                   = module.gke_auth.host
+  token                  = module.gke_auth.token
+}
+
+provider "random" {
+}
+
+provider "tls" {
 }

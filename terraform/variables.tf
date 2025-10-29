@@ -16,12 +16,6 @@ variable "folder_id" {
   default     = null
 }
 
-variable "manage_dns" {
-  type        = bool
-  description = "Set whether the DNS instances with DNS hostnames"
-  default     = false
-}
-
 variable "region" {
   type        = string
   description = "The region where to deploy resources"
@@ -31,11 +25,6 @@ variable "name" {
   type        = string
   default     = "monitoring"
   description = "base name of this deployment"
-}
-
-variable "machine_type" {
-  type        = string
-  description = "Machine type"
 }
 
 variable "billing_account" {
@@ -100,26 +89,27 @@ variable "api_enabled_services" {
   ]
 }
 
-variable "argo_chart_version" {
-  type    = string
-  default = "8.3.5"
-}
-
-variable "argo_hostname" {
-  type    = string
-  default = ""
-}
-
-variable "argo_issuer" {
-  type = string
-}
-
-variable "argo_client_id" {
-  type      = string
+variable "wazuh_helm_chart_user" {
   sensitive = true
+  type      = string
 }
 
-variable "argo_client_secret" {
-  type      = string
+variable "wazuh_helm_chart_pass" {
   sensitive = true
+  type      = string
+}
+
+variable "wazuh_helm_chart_version" {
+  sensitive = true
+  type      = string
+}
+
+
+variable "subject" {
+  type = object({
+    country      = string
+    locality     = string
+    organization = string
+    common_name  = string
+  })
 }

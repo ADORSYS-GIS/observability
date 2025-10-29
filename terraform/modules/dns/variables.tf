@@ -18,13 +18,18 @@ variable "name" {
   description = "Deployment name"
 }
 
-variable "ip_address" {
-  type        = string
-  description = "IP Address"
-}
-
 variable "labels" {
   description = "Map of labels for project"
-  type = map(string)
+  type        = map(string)
+  default     = {}
+}
+
+variable "records" {
+  description = "Map of records for dns"
+  type = map(object({
+    type    = string
+    ttl     = number
+    records = list(string)
+  }))
   default = {}
 }

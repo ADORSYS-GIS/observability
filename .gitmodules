@@ -1,0 +1,3 @@
+[submodule "terraform/modules/wazuh/files/.wazuh-helm"]
+	path = terraform/modules/wazuh/files/.wazuh-helm
+	url = https://github.com/adorsys-gis/wazuh-helm
