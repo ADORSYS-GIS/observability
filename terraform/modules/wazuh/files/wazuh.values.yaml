@@ -8,8 +8,9 @@ indexer:
   persistence:
     size: 100Gi
   keycloak:
-    enabled: false
+    enabled: true
     openid_connect_url: "${openid_connect_url}/.well-known/openid-configuration"
+    base_redirect_url: "https://{{ .Values.global.domain }}"
 
 master:
   replicaCount: 1

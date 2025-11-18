@@ -93,6 +93,15 @@ variable "wazuh_helm_chart_version" {
   type      = string
 }
 
+variable "openid_client_id" {
+  sensitive = true
+  type = string
+}
+
+variable "openid_client_secret" {
+  sensitive = true
+  type = string
+}
 
 variable "subject" {
   type = object({

@@ -39,7 +39,7 @@ resources:
       healthCheck:
         type: HTTPS
         port: 5601
-        requestPath: /app/login
+        requestPath: /api/status
         timeoutSec: 5
         checkIntervalSec: 30
         healthyThreshold: 2

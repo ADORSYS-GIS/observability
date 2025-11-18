@@ -143,6 +143,9 @@ module "wazuh" {
   helm_chart_version = var.wazuh_helm_chart_version
   subject            = var.subject
 
+  openid_client_id     = var.openid_client_id
+  openid_client_secret = var.openid_client_secret
+
   ip_addresses = {
     for k, v in local.wazuh_domains :
     k => {

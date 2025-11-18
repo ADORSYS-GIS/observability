@@ -35,6 +35,16 @@ resource "helm_release" "wazuh" {
     name  = "cluster.auth.key"
     value = random_id.hex_16.hex
   }
+  
+  set_sensitive {
+    name  = "indexer.keycloak.client_id"
+    value = var.openid_client_id
+  }
+  
+  set_sensitive {
+    name  = "indexer.keycloak.client_secret"
+    value = var.openid_client_secret
+  }
 
   set {
     name  = "cluster.rootCaSecretName"

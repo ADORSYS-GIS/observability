@@ -7,6 +7,16 @@ variable "openid_connect_url" {
   default = "https://login.dev.wazuh.adorsys.team/realms/test-adorsys"
 }
 
+variable "openid_client_id" {
+  sensitive = true
+  type = string
+}
+
+variable "openid_client_secret" {
+  sensitive = true
+  type = string
+}
+
 variable "subject" {
   type = object({
     country      = string
