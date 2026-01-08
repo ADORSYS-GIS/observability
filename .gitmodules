@@ -1,6 +1,0 @@
-[submodule "terraform/modules/wazuh/files/.wazuh-helm"]
-	path = terraform/modules/wazuh/files/.wazuh-helm
-	url = https://github.com/adorsys-gis/wazuh-helm
-[submodule "terraform/modules/wazuh/files/.wazuh-cert-oauth2"]
-	path = terraform/modules/wazuh/files/.wazuh-cert-oauth2
-	url = https://github.com/ADORSYS-GIS/wazuh-cert-oauth2
