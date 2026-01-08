@@ -1,6 +1,7 @@
 # Manual LGTM Stack Deployment
 
 This guide explains how to manually deploy an observability stack.
+
 ## 1. Deployment Constraints
 
 The configuration in `lgtm-stack/manual/docker-compose.yaml` expects an external Docker network named `netbird_netbird` to exist. This is typically created by the NetBird management stack.
