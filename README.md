@@ -14,24 +14,10 @@ Complete infrastructure and application stack for observability on Google Kubern
 - **Cert-Manager**: Automated certificate management
 - **Ingress Controller**: Nginx ingress controller
 
-## Quick Start
-
-```bash
-# Setup
-make setup
-make pre-commit-install
-
-# View all commands
-make help
-```
-
 ## REPO STRUCTURE
 
 ```
 observability/
-├── Makefile
-│   └── USE: Automation shortcuts for common commands (setup, deploy, validate, clean)
-│
 ├── README.md
 │   └── USE: Project overview, quick start, and entry point for new users
 │
