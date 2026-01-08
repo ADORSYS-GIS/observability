@@ -1,10 +1,10 @@
-# Manual LGTM Stack Deployment
+# manual LGTM Stack Deployment
 
-This guide explains how to manually deploy the observability stack (Loki, Grafana, Tempo, Mimir) using the Docker Compose configuration found in `lgtm-stack/Manual`.
+This guide explains how to manually deploy the observability stack (Loki, Grafana, Tempo, Mimir) using the Docker Compose configuration found in `lgtm-stack/manual`.
 
 ## 1. Deployment Constraints
 
-The configuration in `lgtm-stack/Manual/docker-compose.yaml` expects an external Docker network named `netbird_netbird` to exist. This is typically created by the NetBird management stack.
+The configuration in `lgtm-stack/manual/docker-compose.yaml` expects an external Docker network named `netbird_netbird` to exist. This is typically created by the NetBird management stack.
 
 If you do not have NetBird running, you must create this network manually to avoid errors:
 
@@ -17,7 +17,7 @@ docker network create netbird_netbird
 1. Navigate to the manual configuration directory:
 
     ```bash
-    cd ../lgtm-stack/Manual
+    cd ../lgtm-stack/manual
     ```
 
 2. Start the services in detached mode:
