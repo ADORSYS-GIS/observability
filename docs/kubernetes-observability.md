@@ -96,7 +96,16 @@ If you prefer to deploy them standalone or manually, refer to their respective d
    kubectl config current-context
    ```
 
-2. **Initialize Terraform**
+2. **Clone the Repository**
+
+    If you haven't already, clone the project repository to your local machine.
+
+    ```bash
+    git clone https://github.com/Adorsys-gis/observability.git
+    cd observability
+    ```
+
+3. **Initialize Terraform**
 
     Navigate to the Terraform directory and initialize the project to download required providers and modules.
 
@@ -105,7 +114,7 @@ If you prefer to deploy them standalone or manually, refer to their respective d
     terraform init
     ```
 
-3. **Plan Deployment**
+4. **Plan Deployment**
 
     Generate an execution plan to verify the resources that will be created.
 
@@ -113,7 +122,7 @@ If you prefer to deploy them standalone or manually, refer to their respective d
     terraform plan
     ```
 
-4. **Apply Configuration**
+5. **Apply Configuration**
 
     Execute the plan to provision infrastructure and deploy the application stack.
 

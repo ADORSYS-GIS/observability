@@ -10,6 +10,13 @@ This guide explains how to deploy the **NGINX Ingress Controller** using the sta
 
 ## Deployment Steps
 
+Make sure you've cloned the repository before running Terraform.
+
+```bash
+git clone https://github.com/Adorsys-gis/observability.git
+cd observability
+```
+
 1. **Verify Context**:
    Ensure you are pointing to the correct cluster.
    ```bash
