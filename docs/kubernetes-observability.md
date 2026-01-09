@@ -85,8 +85,8 @@ The stack automatically provisions **Cert-Manager** and **NGINX Ingress Controll
 > **Important**: Set these to `true` in your `terraform.tfvars` if you are doing a fresh install of the entire stack and need these components.
 
 If you prefer to deploy them standalone or manually, refer to their respective documentation:
-- [Cert-Manager Documentation](../cert-manager/README.md)
-- [Ingress Controller Documentation](../ingress-controller/README.md)
+- [Cert-Manager Documentation](../cert-manager/README.md) - *See [Terraform Deployment Guide](../docs/cert-manager-terraform-deployment.md#variables) for full configuration options.*
+- [Ingress Controller Documentation](../ingress-controller/README.md) - *See [Terraform Deployment Guide](../docs/ingress-controller-terraform-deployment.md#variables) for full configuration options.*
 
 ## Installation
 

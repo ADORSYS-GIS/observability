@@ -16,17 +16,7 @@ variable "namespace" {
   default     = "cert-manager"
 }
 
-variable "create_namespace" {
-  description = "Whether to create the namespace"
-  type        = bool
-  default     = true
-}
 
-variable "install_crds" {
-  description = "Whether to install CRDs"
-  type        = bool
-  default     = true
-}
 
 variable "letsencrypt_email" {
   description = "Email address for Let's Encrypt certificate notifications"

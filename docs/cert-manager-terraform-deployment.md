@@ -68,3 +68,4 @@ cd observability
 | `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer` or `Issuer`) | `ClusterIssuer` |
 | `issuer_namespace` | Namespace for Issuer (if Kind is Issuer). Defaults to install namespace. | `null` |
 | `ingress_class_name` | Ingress class for solving challenges | `nginx` |
+| `issuer_server` | ACME server URL | `https://acme-v02...` |

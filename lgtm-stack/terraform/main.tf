@@ -160,10 +160,10 @@ module "cert_manager" {
   install_cert_manager = var.install_cert_manager
   cert_manager_version = var.cert_manager_version
   namespace            = "cert-manager"
-  install_crds         = true
-  letsencrypt_email    = var.letsencrypt_email
-  cert_issuer_name     = var.cert_issuer_name
-  cert_issuer_kind     = var.cert_issuer_kind
+
+  letsencrypt_email = var.letsencrypt_email
+  cert_issuer_name  = var.cert_issuer_name
+  cert_issuer_kind  = var.cert_issuer_kind
   # If Kind is Issuer, it must be in the observability namespace to be used by the ingress in that namespace.
   # If Kind is ClusterIssuer, this variable is ignored by the module logic.
   issuer_namespace   = var.namespace

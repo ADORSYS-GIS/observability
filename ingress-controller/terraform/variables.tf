@@ -22,11 +22,6 @@ variable "namespace" {
   default     = "ingress-nginx"
 }
 
-variable "create_namespace" {
-  description = "Whether to create the namespace"
-  type        = bool
-  default     = true
-}
 
 variable "replica_count" {
   description = "Number of replicas for the controller"
