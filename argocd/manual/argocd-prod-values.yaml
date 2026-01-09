@@ -37,7 +37,7 @@ server:
   # -------------------------------------
   ingress:
     enabled: true
-    ingressClassName: argocd-nginx # CHANGE THIS TO YOUR INGRESS CLASS NAME
+    ingressClassName: nginx # CHANGE THIS TO YOUR INGRESS CLASS NAME
     hostname: "YOUR_ARGO-CD_DOMAIN" # CHANGE THIS
     annotations:
       # Standard Nginx tuning
@@ -78,9 +78,9 @@ configs:
     url: https://YOUR_ARGO-CD_DOMAIN
     oidc.config: |
       name: Keycloak
-      issuer: https://keycloak.YOUR_KEYCLOAK_DOMAIN/realms/argocd
-      clientID: argocd
-      clientSecret: YOUR_KEYCLOAK_CLIENT_SECRET # Used by the Server for Web Login
+      issuer: https://YOUR_KEYCLOAK_DOMAIN/realms/YOUR_REALM
+      clientID: YOUR_CLIENT_ID
+      clientSecret: YOUR_CLIENT_SECRET
       requestedScopes: ["openid", "profile", "email", "groups"]
       enablePKCEAuthentication: true
       # PKCE is handled automatically by the ArgoCD CLI 
