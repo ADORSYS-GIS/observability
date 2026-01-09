@@ -93,25 +93,18 @@ If you're using OIDC authentication (e.g., Keycloak), you need to deploy and con
 
 > [!IMPORTANT]
 > **Keycloak Setup Required**: Before proceeding, ensure Keycloak is deployed and configured. Refer to the [Keycloak Getting Started Guide](https://www.keycloak.org/guides#getting-started) for deployment instructions across all platforms.
->
+> **Configure using**: [ArgoCD Keycloak Setup Guide](https://argo-cd.readthedocs.io/en/stable/operator-manual/user-management/keycloak/)
 > During setup, ensure the following entities are created:
 > - **A Realm**: (e.g., `argocd`)
-> - **An OIDC Client**: (e.g., `argocd`) with appropriate redirect URIs and a client secret.
+> - **An OIDC Client**: (e.g., `argocd`) with the following **Valid Redirect URIs** (Required):
+>   1. `https://argocd.YOUR_DOMAIN.com/auth/callback` (For browser login)
+>   2. `http://localhost:8085/auth/callback` (For CLI login)
+>   - **Note**: Ensure both are present in the list.
 > - **Users and Groups**: For authentication and access control.
 
-After deploying and configuring Keycloak, update your `argocd-prod-values.yaml` file with the following:
+After deploying and configuring Keycloak, open your `argocd-prod-values.yaml` file and locate the `configs.cm` section.
 
-```yaml
-configs:
-  cm:
-    oidc.config: |
-      name: Keycloak
-      issuer: https://keycloak.YOUR_KEYCLOAK_DOMAIN/realms/argocd # CHANGE THIS TO YOUR KEYCLOAK DOMAIN ISSUER URL
-      clientID: argocd # CHANGE THIS if different
-      clientSecret: YOUR_KEYCLOAK_CLIENT_SECRET # CHANGE THIS to your Keycloak client secret
-      requestedScopes: ["openid", "profile", "email", "groups"]
-      enablePKCEAuthentication: true # In case you want to enable cli authentication
-```
+Update the placeholders (e.g., `YOUR_KEYCLOAK_DOMAIN`, `YOUR_CLIENT_ID`, `YOUR_CLIENT_SECRET`) with your actual Keycloak values. The file is pre-configured with the necessary structure; you simply need to fill in the blanks.
 
 **Where to find these values in Keycloak:**
 - **issuer**: `https://<keycloak-domain>/realms/<realm-name>`
@@ -135,23 +128,10 @@ helm install argocd argo/argo-cd \
 > [!NOTE]
 > The version `7.7.12` is specified for consistency. You can check for the latest version with `helm search repo argo/argo-cd` and update accordingly.
 
-### Step 6: Wait for Deployment
-
-Monitor the deployment progress:
-
-```bash
-# Watch all pods in the argocd namespace
-kubectl get pods -n argocd -w
-
-# Check deployment status
-kubectl get deployments -n argocd
-```
-
-Wait until all pods are in `Running` state and all deployments show `READY` status.
-
 ---
 
 ## Verification
+
 
 ### Step 1: Check Pod Status
 
@@ -161,19 +141,9 @@ Verify all Argo CD pods are running:
 kubectl get pods -n argocd
 ```
 
-Expected output should show all pods in `Running` state:
+**Expected Output:**
 
-```
-NAME                                                READY   STATUS    RESTARTS   AGE
-argocd-application-controller-0                     1/1     Running   0          5m
-argocd-applicationset-controller-xxx                1/1     Running   0          5m
-argocd-dex-server-xxx                               1/1     Running   0          5m
-argocd-notifications-controller-xxx                 1/1     Running   0          5m
-argocd-redis-ha-haproxy-xxx                         1/1     Running   0          5m
-argocd-redis-ha-server-0                            2/2     Running   0          5m
-argocd-repo-server-xxx                              1/1     Running   0          5m
-argocd-server-xxx                                   1/1     Running   0          5m
-```
+![Argo CD Pods Verification](img/argocd-pods-verification.png)
 
 ### Step 2: Check Ingress
 
@@ -316,15 +286,6 @@ argocd app sync guestbook
 - Check certificate status: `kubectl describe certificate argocd-tls-cert -n argocd`
 - Verify DNS is resolving correctly (Let's Encrypt requires public DNS)
 
-### OIDC Authentication Failing
-
-**Issue**: Cannot login with OIDC provider.
-
-**Solutions**:
-- Verify OIDC configuration in ConfigMap: `kubectl get configmap argocd-cm -n argocd -o yaml`
-- Check client ID and secret are correct
-- Verify issuer URL is accessible from the cluster
-- Check Argo CD server logs: `kubectl logs -n argocd deployment/argocd-server`
 
 ### High Resource Usage
 
