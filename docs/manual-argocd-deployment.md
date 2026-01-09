@@ -271,20 +271,40 @@ argocd app sync guestbook
 **Issue**: Cannot access Argo CD UI via domain.
 
 **Solutions**:
-- Verify ingress controller is running: `kubectl get pods -n ingress-nginx` # replace by your ingress controller namespace  
-- Check ingress resource: `kubectl describe ingress argocd-server -n argocd`
-- Verify DNS points to load balancer IP: `nslookup argocd.yourdomain.com`
-- Check ingress controller logs: `kubectl logs -n ingress-nginx <ingress-controller-pod>` # replace by your ingress controller namespace
+
+```bash
+# Verify ingress controller is running
+kubectl get pods -n <your-ingress-namespace>
+
+# Check ingress resource
+kubectl describe ingress argocd-server -n argocd
+
+# Verify DNS points to load balancer IP
+nslookup argocd.yourdomain.com
+
+# Check ingress controller logs
+kubectl logs -n <your-ingress-namespace> <ingress-controller-pod>
+```
 
 ### TLS Certificate Issues
 
 **Issue**: Certificate not provisioning or showing as invalid.
 
 **Solutions**:
-- Check cert-manager logs: `kubectl logs -n cert-manager deployment/cert-manager` # replace by your cert-manager namespace
-- Verify issuer is ready: `kubectl get clusterissuer letsencrypt-prod`
-- Check certificate status: `kubectl describe certificate argocd-tls-cert -n argocd`
-- Verify DNS is resolving correctly (Let's Encrypt requires public DNS)
+
+```bash
+# Check cert-manager logs
+kubectl logs -n <your-cert-manager-namespace> deployment/cert-manager
+
+# Verify issuer is ready
+kubectl get clusterissuer letsencrypt-prod
+
+# Check certificate status
+kubectl describe certificate argocd-tls-cert -n argocd
+
+# Verify DNS is resolving correctly (Let's Encrypt requires public DNS)
+# (Use 'nslookup' or 'dig' to check your domain)
+```
 
 
 ### High Resource Usage
@@ -308,13 +328,3 @@ argocd app sync guestbook
 - [Automated Argo CD Deployment](#) *(Coming soon)*
 
 ---
-
-## Next Steps
-
-After successfully deploying Argo CD, you can:
-
-1. **Create Projects**: Organize applications into logical projects
-2. **Configure Repositories**: Connect to your Git repositories
-3. **Deploy Applications**: Use Argo CD to manage your Kubernetes applications
-4. **Set Up Notifications**: Configure notifications for deployment events
-5. **Implement GitOps**: Adopt GitOps practices for your infrastructure
