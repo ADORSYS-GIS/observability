@@ -971,7 +971,8 @@ curl -X POST https://$GRAFANA_ENDPOINT/login \
 # Deploy a containerized app(our example will be using a self-hosted netbird app locally)
 # note: please if you want to use a local domain name use "localhost"
 export NETBIRD_DOMAIN=<DOMAIN_NAME>
-bash getting-started-with-zitadel.sh
+wget https://raw.githubusercontent.com/ADORSYS-GIS/netbird/main/infrastructure/scripts/zitadel-setup.sh
+bash zitadel-setup.sh
 
 # Create a .alloy file
 mkdir ~/observability-agent
