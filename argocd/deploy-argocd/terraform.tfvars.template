@@ -1,0 +1,6 @@
+keycloak_url      = "https://keycloak.18.198.59.109.sslip.io"
+keycloak_user     = "admin"
+keycloak_password = "your-strong-secret-password" # this is to authenticate to keycloak
+argocd_url        = "https://example.com"
+target_realm      = "master" # or your specific realm
+kube_context = "gke_project-id_region_cluster-name"

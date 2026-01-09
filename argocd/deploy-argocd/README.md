@@ -8,11 +8,8 @@ This Terraform module deploys **ArgoCD** into a Kubernetes cluster using the off
 
 ```text
 .
-├── modules/
-│   └── argocd/               # Core Logic (Don't touch unless modifying the blueprint)
-└── environments/
-    └── control-plane/        # Deployment configuration for your specific cluster
-        ├── main.tf
-        ├── variables.tf      # Define your cluster context and secrets here
-        ├── terraform.tfvars  # (Optional) Store non-sensitive values here
-        └── providers.tf      # Configures connection to the specific K8s cluster
+├── main.tf
+├── provider.tf
+├── README.md
+├── terraform.tfvars # Create this file to include you variables as in the terraform.tfvars.template file
+└── variables.tf
