@@ -1,52 +1,6 @@
-# Argo CD
+# Argo CD Deployment Guide
 
 Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. It automates the deployment of applications by continuously monitoring Git repositories and synchronizing the desired application state with the live state in your Kubernetes cluster.
-
-## What is Argo CD?
-
-Argo CD follows the **GitOps** pattern, using Git repositories as the source of truth for defining the desired application state. It provides:
-
-- **Automated Deployment**: Automatically sync applications from Git to Kubernetes
-- **Application Health Monitoring**: Continuously monitor application health and sync status
-- **Rollback Capabilities**: Easy rollback to previous application versions
-- **Multi-Cluster Management**: Manage deployments across multiple Kubernetes clusters
-- **SSO Integration**: Support for OIDC, SAML, LDAP, and other authentication providers
-- **RBAC**: Fine-grained role-based access control for multi-tenancy
-- **Web UI & CLI**: Both graphical and command-line interfaces for management
-
-## Key Features
-
-### GitOps Workflow
-- Declarative application definitions using Kubernetes manifests, Helm charts, or Kustomize
-- Git as the single source of truth for application configuration
-- Automated synchronization between Git repository and cluster state
-
-### High Availability
-- Support for Redis HA for session storage
-- Multiple replicas for API server and repository server
-- Horizontal pod autoscaling for handling increased load
-
-### Security
-- TLS/HTTPS support with automated certificate management
-- Integration with cert-manager for certificate provisioning
-- RBAC policies for fine-grained access control
-- SSO/OIDC authentication support
-
-### Developer Experience
-- Intuitive web UI for visualizing application topology
-- CLI for automation and CI/CD integration
-- Real-time sync status and health monitoring
-- Automated or manual sync strategies
-
-## Architecture
-
-Argo CD consists of several key components:
-
-- **API Server**: Exposes the API consumed by the Web UI, CLI, and CI/CD systems
-- **Repository Server**: Maintains a local cache of Git repositories holding application manifests
-- **Application Controller**: Monitors running applications and compares live state against desired state
-- **Redis**: Provides caching and session storage (with HA support for production)
-- **ApplicationSet Controller**: Automates the generation of Argo CD applications
 
 ## Deployment Options
 
@@ -60,7 +14,7 @@ Deploy Argo CD manually using Helm with customizable values files. This approach
 - Custom configurations not covered by automation
 - Environments where Terraform is not available
 
-**📖 [Manual Deployment Guide](../docs/manual-argocd-deployment.md)**
+**[Manual Deployment Guide](../docs/manual-argocd-deployment.md)**
 
 The manual deployment uses the production-ready values file located at [`argocd/manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml), which includes:
 
@@ -79,7 +33,7 @@ Deploy Argo CD automatically using Terraform for infrastructure-as-code manageme
 - Integration with existing Terraform infrastructure
 - Team collaboration with version-controlled infrastructure
 
-**📖 [Automated Deployment Guide](#)** *(Coming soon)*
+**[Automated Deployment Guide](#)** *(Coming soon)*
 
 The automated deployment is located in the [`argocd/terraform/`](terraform) directory and provides:
 
