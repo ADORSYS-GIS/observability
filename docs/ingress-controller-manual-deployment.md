@@ -48,3 +48,27 @@ kubectl config current-context
    kubectl get svc -n ingress-nginx # Adjust namespace if changed above
    ```
    Wait for the `EXTERNAL-IP` to be assigned.
+
+## 4. Troubleshooting
+
+### External IP Pending
+```bash
+# Check service status
+kubectl get svc -n ingress-nginx
+
+# Fix: Check Cloud Provider LoadBalancer quotas or usage
+```
+
+### 404 on Access
+```bash
+# Verify Ingress resource exists and has valid backend
+kubectl get ingress -A
+
+# Fix: Define an Ingress resource routing to your service
+```
+
+### Ingress Class Conflict
+```bash
+# Fix: Ensure controller.ingressClass is unique (default: nginx)
+helm upgrade ... --set controller.ingressClass=unique-name
+```

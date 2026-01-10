@@ -1,3 +1,17 @@
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.12"
+    }
+  }
+}
+
 resource "helm_release" "cert_manager" {
   count = var.install_cert_manager ? 1 : 0
 

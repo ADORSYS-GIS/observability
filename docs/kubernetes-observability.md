@@ -244,3 +244,26 @@ terraform destroy
 ```
 
 > **Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.
+
+## Troubleshooting
+
+### Terraform State Locks
+```bash
+# Fix: Unlock state if sure no other process is running
+terraform force-unlock <LOCK_ID>
+```
+
+### Provider Authentication Errors
+```bash
+# Fix: Re-authenticate with GCP
+gcloud auth application-default login
+```
+
+### Pods Pending (Resources)
+```bash
+# Check for InsufficientCpu/Memory events
+kubectl describe pod <pod-name>
+
+# Fix: Enable GKE Autoscaling or resize node pool
+```
+

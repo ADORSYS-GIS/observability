@@ -72,3 +72,28 @@ Check the status of the ClusterIssuer:
 kubectl get clusterissuer letsencrypt-prod -o wide
 ```
 It should say `True` in the `READY` column.
+
+## 5. Troubleshooting
+
+### Pods Not Starting
+```bash
+# Check for ImagePullBackOff or CrashLoopBackOff
+kubectl describe pod <pod-name> -n cert-manager
+
+# Fix: Verify internet access to pull images
+```
+
+### CRD Errors
+```bash
+# Fix: Ensure installCRDs=true was passed to Helm
+helm upgrade cert-manager jetstack/cert-manager -n cert-manager --set installCRDs=true
+```
+
+### Certificate Issuance Failed
+```bash
+# Check certificate lifecycle events
+kubectl describe certificate <name>
+kubectl describe challengerequest <name>
+
+# Fix: Ensure Ingress is publicly reachable for Let's Encrypt validation
+```
