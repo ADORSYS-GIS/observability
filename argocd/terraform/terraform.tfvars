@@ -1,7 +1,7 @@
 control_plane_cluster = {
   name            = "control-plane"
-  context_name    = "cluster-2"
-  kubeconfig_path = "/home/ubuntu/cluster/cluster2.yaml"
+  context_name    = "context_2"
+  kubeconfig_path = "/home/ubuntu/.kube/merged-config"
   server_address  = "argocd-cp.local"
   server_port     = 443
   tls_enabled     = true
@@ -10,8 +10,8 @@ control_plane_cluster = {
 workload_clusters = [
   {
     name              = "workload-1"
-    context_name      = "workload"
-    kubeconfig_path   = "/home/ubuntu/cluster/cluster1.yaml"
+    context_name      = "context_1"
+    kubeconfig_path   = "/home/ubuntu/.kube/merged-config"
     principal_address = "argocd-cp.local"
     principal_port    = 443
     agent_name        = "agent-1"

@@ -28,9 +28,9 @@ variable "control_plane_cluster" {
   })
   default = {
     name            = "control-plane"
-    context_name    = "cluster-2"
-    kubeconfig_path = "~/.kube/config"
-    server_address  = "argocd-control-plane.local"
+    context_name    = "context-2"
+    kubeconfig_path = "/home/ubuntu/.kube/merged-config"
+    server_address  = "argocd-cp.local"
     server_port     = 443
     tls_enabled     = true
   }
@@ -49,9 +49,9 @@ variable "workload_clusters" {
   }))
   default = [{
     name              = "workload-1"
-    context_name      = "workload"
-    kubeconfig_path   = "~/.kube/config"
-    principal_address = "argocd-control-plane.local"
+    context_name      = "context_1"
+    kubeconfig_path   = "/home/ubuntu/.kube/merged-config"
+    principal_address = "argocd-cp.local"
     principal_port    = 443
     agent_name        = "agent-1"
     tls_enabled       = true
@@ -145,4 +145,16 @@ variable "annotations_common" {
   default = {
     "terraform.io/managed" = "true"
   }
+}
+
+variable "domain_name" {
+  description = "Domain name for Argo CD server (e.g., argocd.example.com)"
+  type        = string
+  default     = "net.tail3365c9.ts.net"
+}
+
+variable "acme_email" {
+  description = "Email address for Let's Encrypt notifications"
+  type        = string
+  default     = "emmanuelodon943@gmail.com"
 }

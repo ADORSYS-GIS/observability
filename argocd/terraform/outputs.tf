@@ -33,30 +33,7 @@ output "agent_mode" {
   value       = var.agent_mode
 }
 
-output "ca_certificate_path" {
-  description = "Path to CA certificate"
-  value       = var.create_certificate_authority ? local_file.ca_cert[0].filename : null
-}
 
-output "server_certificate_path" {
-  description = "Path to server certificate"
-  value       = local_file.server_cert.filename
-}
-
-output "server_key_path" {
-  description = "Path to server key"
-  value       = local_file.server_key.filename
-}
-
-output "agent_client_certificate_path" {
-  description = "Path to agent client certificate"
-  value       = local_file.agent_client_cert.filename
-}
-
-output "agent_client_key_path" {
-  description = "Path to agent client key"
-  value       = local_file.agent_client_key.filename
-}
 
 output "connection_commands" {
   description = "Commands to verify agent connection"

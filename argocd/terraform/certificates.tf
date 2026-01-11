@@ -1,136 +1,99 @@
-locals {
-  cert_dir = "${path.module}/certs"
+# Cert-Manager Resources for Internal CA and Agent mTLS
+
+# 1. Self-Signed Issuer to bootstrap the CA
+resource "kubernetes_manifest" "selfsigned_issuer" {
+  provider = kubernetes.control_plane
+
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Issuer"
+    metadata = {
+      name      = "selfsigned-issuer"
+      namespace = var.argocd_namespace
+    }
+    spec = {
+      selfSigned = {}
+    }
+  }
 }
 
-resource "local_file" "certs_directory" {
-  filename = "${local.cert_dir}/.gitkeep"
-  content  = ""
-}
+# 2. Internal CA Certificate (Root CA for Agents)
+resource "kubernetes_manifest" "ca_certificate" {
+  provider = kubernetes.control_plane
 
-# Certificate Authority
-resource "tls_private_key" "ca" {
-  count     = var.create_certificate_authority ? 1 : 0
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "tls_self_signed_cert" "ca" {
-  count                 = var.create_certificate_authority ? 1 : 0
-  private_key_pem       = tls_private_key.ca[0].private_key_pem
-  is_ca_certificate     = true
-  validity_period_hours = var.tls_config.cert_validity_days * 24
-
-  subject {
-    common_name  = "Argo CD CA"
-    organization = "Argo CD"
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "argocd-ca"
+      namespace = var.argocd_namespace
+    }
+    spec = {
+      isCA       = true
+      commonName = "Argo CD Internal CA"
+      secretName = "argocd-ca-cert" # This secret will contain ca.crt and tls.key
+      privateKey = {
+        algorithm = "RSA"
+        size      = 4096
+      }
+      issuerRef = {
+        name = "selfsigned-issuer"
+        kind = "Issuer"
+        group = "cert-manager.io"
+      }
+    }
   }
 
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "cert_signing",
-  ]
+  depends_on = [kubernetes_manifest.selfsigned_issuer]
 }
 
-resource "local_file" "ca_cert" {
-  count    = var.create_certificate_authority ? 1 : 0
-  filename = "${local.cert_dir}/ca.crt"
-  content  = tls_self_signed_cert.ca[0].cert_pem
-}
+# 3. Internal Issuer (Uses the CA Certificate to sign other certs)
+resource "kubernetes_manifest" "internal_issuer" {
+  provider = kubernetes.control_plane
 
-resource "local_file" "ca_key" {
-  count    = var.create_certificate_authority ? 1 : 0
-  filename = "${local.cert_dir}/ca.key"
-  content  = tls_private_key.ca[0].private_key_pem
-}
-
-# Server Certificate (for ArgoCD Server)
-resource "tls_private_key" "server" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "tls_cert_request" "server" {
-  private_key_pem = tls_private_key.server.private_key_pem
-
-  subject {
-    common_name  = var.control_plane_cluster.server_address
-    organization = "Argo CD"
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Issuer"
+    metadata = {
+      name      = "argocd-internal-issuer"
+      namespace = var.argocd_namespace
+    }
+    spec = {
+      ca = {
+        secretName = "argocd-ca-cert"
+      }
+    }
   }
 
-  dns_names = [
-    var.control_plane_cluster.server_address,
-    "argocd-server",
-    "argocd-server.${var.argocd_namespace}",
-    "argocd-server.${var.argocd_namespace}.svc",
-    "argocd-server.${var.argocd_namespace}.svc.cluster.local",
-  ]
+  depends_on = [kubernetes_manifest.ca_certificate]
 }
 
-# FIXED: Removed duplicate ternary operators
-resource "tls_locally_signed_cert" "server" {
-  cert_request_pem      = tls_cert_request.server.cert_request_pem
-  ca_cert_pem           = tls_self_signed_cert.ca[0].cert_pem
-  ca_private_key_pem    = tls_private_key.ca[0].private_key_pem
-  validity_period_hours = var.tls_config.cert_validity_days * 24
+# 4. Agent Client Certificate (Signed by Internal Issuer)
+resource "kubernetes_manifest" "agent_certificate" {
+  provider = kubernetes.control_plane
 
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-    "client_auth",
-  ]
-}
-
-resource "local_file" "server_cert" {
-  filename = "${local.cert_dir}/argocd-server.crt"
-  content  = tls_locally_signed_cert.server.cert_pem
-}
-
-resource "local_file" "server_key" {
-  filename = "${local.cert_dir}/argocd-server.key"
-  content  = tls_private_key.server.private_key_pem
-}
-
-# Agent Client Certificate (for Agent to Server mTLS)
-resource "tls_private_key" "agent_client" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "tls_cert_request" "agent_client" {
-  private_key_pem = tls_private_key.agent_client.private_key_pem
-
-  subject {
-    common_name  = "argocd-agent"
-    organization = "Argo CD"
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "argocd-agent-client-cert"
+      namespace = var.argocd_namespace
+    }
+    spec = {
+      secretName = "argocd-agent-client-tls"
+      duration   = "8760h0m0s" # 1 year
+      renewBefore = "360h0m0s" # 15 days
+      commonName = var.workload_clusters[0].agent_name
+      dnsNames   = [var.workload_clusters[0].agent_name]
+      usages     = ["client auth", "digital signature", "key encipherment"]
+      issuerRef = {
+        name = "argocd-internal-issuer"
+        kind = "Issuer"
+        group = "cert-manager.io"
+      }
+    }
   }
 
-  dns_names = [
-    "argocd-agent",
-  ]
+  depends_on = [kubernetes_manifest.internal_issuer]
 }
 
-# FIXED: Removed duplicate ternary operators
-resource "tls_locally_signed_cert" "agent_client" {
-  cert_request_pem      = tls_cert_request.agent_client.cert_request_pem
-  ca_cert_pem           = tls_self_signed_cert.ca[0].cert_pem
-  ca_private_key_pem    = tls_private_key.ca[0].private_key_pem
-  validity_period_hours = var.tls_config.cert_validity_days * 24
-
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "client_auth",
-  ]
-}
-
-resource "local_file" "agent_client_cert" {
-  filename = "${local.cert_dir}/agent-client.crt"
-  content  = tls_locally_signed_cert.agent_client.cert_pem
-}
-
-resource "local_file" "agent_client_key" {
-  filename = "${local.cert_dir}/agent-client.key"
-  content  = tls_private_key.agent_client.private_key_pem
-}

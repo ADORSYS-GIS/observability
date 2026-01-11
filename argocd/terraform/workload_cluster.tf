@@ -16,56 +16,13 @@ resource "kubernetes_namespace" "argocd_workload" {
   }
 }
 
-resource "kubernetes_secret" "argocd_agent_client_tls" {
-  provider = kubernetes.workload_cluster_1
+# resource "kubernetes_secret" "argocd_agent_client_tls" {
+#   # Managed by cert-manager
+# }
 
-  metadata {
-    name      = "argocd-agent-client-tls"
-    namespace = kubernetes_namespace.argocd_workload.metadata[0].name
-
-    labels = merge(
-      var.labels_common,
-      { "component" = "agent" }
-    )
-    annotations = var.annotations_common
-  }
-
-  type = "kubernetes.io/tls"
-
-  data = {
-    "tls.crt" = tls_locally_signed_cert.agent_client.cert_pem
-    "tls.key" = tls_private_key.agent_client.private_key_pem
-  }
-
-  depends_on = [
-    local_file.agent_client_cert,
-    local_file.agent_client_key
-  ]
-}
-
-resource "kubernetes_secret" "argocd_ca_cert_workload" {
-  provider = kubernetes.workload_cluster_1
-  count    = var.create_certificate_authority ? 1 : 0
-
-  metadata {
-    name      = "argocd-ca-cert"
-    namespace = kubernetes_namespace.argocd_workload.metadata[0].name
-
-    labels = merge(
-      var.labels_common,
-      { "component" = "ca" }
-    )
-    annotations = var.annotations_common
-  }
-
-  type = "Opaque"
-
-  data = {
-    "ca.crt" = tls_self_signed_cert.ca[0].cert_pem
-  }
-
-  depends_on = [local_file.ca_cert]
-}
+# resource "kubernetes_secret" "argocd_ca_cert_workload" {
+#   # Managed by cert-manager
+# }
 
 resource "helm_release" "argocd_workload" {
   provider = helm.workload_cluster_1
@@ -564,14 +521,14 @@ resource "kubernetes_deployment" "argocd_agent" {
         volume {
           name = "agent-tls"
           secret {
-            secret_name = kubernetes_secret.argocd_agent_client_tls.metadata[0].name
+            secret_name = "argocd-agent-client-tls" # Created by cert-manager
           }
         }
 
         volume {
           name = "agent-ca"
           secret {
-            secret_name = var.create_certificate_authority ? kubernetes_secret.argocd_ca_cert_workload[0].metadata[0].name : "argocd-ca-cert"
+            secret_name = "argocd-ca-cert" # Created by cert-manager
           }
         }
 
@@ -591,7 +548,7 @@ resource "kubernetes_deployment" "argocd_agent" {
 
   depends_on = [
     kubernetes_namespace.argocd_workload,
-    kubernetes_secret.argocd_agent_client_tls,
+    # kubernetes_secret.argocd_agent_client_tls, # Managed by cert-manager
     kubernetes_config_map.argocd_agent_config,
     kubernetes_service_account.argocd_agent,
     kubernetes_cluster_role_binding.argocd_agent
