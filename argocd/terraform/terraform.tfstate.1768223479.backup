@@ -1,0 +1,370 @@
+{
+  "version": 4,
+  "terraform_version": "1.14.1",
+  "serial": 9,
+  "lineage": "7c494c91-ce95-2e90-f16d-8ab629dac962",
+  "outputs": {
+    "argocd_admin_secret": {
+      "value": "bFc7mKhoqigkOiK63g8dKlUZajP6Ji0U",
+      "type": "string",
+      "sensitive": true
+    }
+  },
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "keycloak_openid_client",
+      "name": "argocd",
+      "provider": "provider[\"registry.terraform.io/mrparkers/keycloak\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "access_token_lifespan": "",
+            "access_type": "CONFIDENTIAL",
+            "admin_url": "",
+            "authentication_flow_binding_overrides": [],
+            "authorization": [],
+            "backchannel_logout_revoke_offline_sessions": false,
+            "backchannel_logout_session_required": true,
+            "backchannel_logout_url": "",
+            "base_url": "",
+            "client_authenticator_type": "client-secret",
+            "client_id": "argocd-client",
+            "client_offline_session_idle_timeout": "",
+            "client_offline_session_max_lifespan": "",
+            "client_secret": "bFc7mKhoqigkOiK63g8dKlUZajP6Ji0U",
+            "client_session_idle_timeout": "",
+            "client_session_max_lifespan": "",
+            "consent_required": false,
+            "consent_screen_text": "",
+            "description": "",
+            "direct_access_grants_enabled": true,
+            "display_on_consent_screen": false,
+            "enabled": true,
+            "exclude_session_state_from_auth_response": null,
+            "extra_config": null,
+            "frontchannel_logout_enabled": false,
+            "frontchannel_logout_url": "",
+            "full_scope_allowed": true,
+            "id": "4c2be9ef-878f-484a-8674-0fed256181ae",
+            "implicit_flow_enabled": false,
+            "import": false,
+            "login_theme": "",
+            "name": "ArgoCD",
+            "oauth2_device_authorization_grant_enabled": false,
+            "oauth2_device_code_lifespan": "",
+            "oauth2_device_polling_interval": "",
+            "pkce_code_challenge_method": null,
+            "realm_id": "argocd",
+            "resource_server_id": null,
+            "root_url": "",
+            "service_account_user_id": "",
+            "service_accounts_enabled": false,
+            "standard_flow_enabled": true,
+            "use_refresh_tokens": true,
+            "use_refresh_tokens_client_credentials": false,
+            "valid_post_logout_redirect_uris": [],
+            "valid_redirect_uris": [
+              "https://34.40.30.86/*",
+              "https://34.40.30.86/auth/callback"
+            ],
+            "web_origins": []
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "client_secret"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "keycloak_openid_client_default_scopes",
+      "name": "client_default_scopes",
+      "provider": "provider[\"registry.terraform.io/mrparkers/keycloak\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "client_id": "4c2be9ef-878f-484a-8674-0fed256181ae",
+            "default_scopes": [
+              "email",
+              "openid",
+              "profile",
+              "roles"
+            ],
+            "id": "argocd/4c2be9ef-878f-484a-8674-0fed256181ae",
+            "realm_id": "argocd"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "keycloak_openid_client.argocd"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "keycloak_openid_group_membership_protocol_mapper",
+      "name": "groups",
+      "provider": "provider[\"registry.terraform.io/mrparkers/keycloak\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "add_to_access_token": true,
+            "add_to_id_token": true,
+            "add_to_userinfo": true,
+            "claim_name": "groups",
+            "client_id": "4c2be9ef-878f-484a-8674-0fed256181ae",
+            "client_scope_id": null,
+            "full_path": false,
+            "id": "14685a4b-4e80-484d-9d9d-779c89893011",
+            "name": "group-mapper",
+            "realm_id": "argocd"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "keycloak_openid_client.argocd"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "module.cert_manager",
+      "mode": "managed",
+      "type": "helm_release",
+      "name": "cert_manager",
+      "provider": "provider[\"registry.terraform.io/hashicorp/helm\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "atomic": false,
+            "chart": "cert-manager",
+            "cleanup_on_fail": false,
+            "create_namespace": false,
+            "dependency_update": false,
+            "description": "Install complete",
+            "devel": null,
+            "disable_crd_hooks": false,
+            "disable_openapi_validation": false,
+            "disable_webhooks": false,
+            "force_update": false,
+            "id": "cert-manager",
+            "keyring": null,
+            "lint": false,
+            "manifest": null,
+            "max_history": 0,
+            "metadata": [
+              {
+                "app_version": "v1.16.2",
+                "chart": "cert-manager",
+                "first_deployed": 1765189391,
+                "last_deployed": 1765189391,
+                "name": "cert-manager",
+                "namespace": "mstack-cert-manager",
+                "notes": "\ncert-manager v1.16.2 has been deployed successfully!\n\nIn order to begin issuing certificates, you will need to set up a ClusterIssuer\nor Issuer resource (for example, by creating a 'letsencrypt-staging' issuer).\n\nMore information on the different types of issuers and how to configure them\ncan be found in our documentation:\n\nhttps://cert-manager.io/docs/configuration/\n\nFor information on how to configure cert-manager to automatically provision\nCertificates for Ingress resources, take a look at the `ingress-shim`\ndocumentation:\n\nhttps://cert-manager.io/docs/usage/ingress/\n",
+                "revision": 1,
+                "values": "{\"crds\":{\"enabled\":false},\"global\":{\"leaderElection\":{\"namespace\":\"mstack-cert-manager\"}}}",
+                "version": "v1.16.2"
+              }
+            ],
+            "name": "cert-manager",
+            "namespace": "mstack-cert-manager",
+            "pass_credentials": false,
+            "postrender": [],
+            "recreate_pods": false,
+            "render_subchart_notes": true,
+            "replace": false,
+            "repository": null,
+            "repository_ca_file": null,
+            "repository_cert_file": null,
+            "repository_key_file": null,
+            "repository_password": null,
+            "repository_username": null,
+            "reset_values": false,
+            "reuse_values": false,
+            "set": [
+              {
+                "name": "installCRDs",
+                "type": "",
+                "value": "true"
+              }
+            ],
+            "set_list": [],
+            "set_sensitive": [],
+            "skip_crds": false,
+            "status": "deployed",
+            "timeout": 300,
+            "upgrade_install": null,
+            "values": null,
+            "verify": false,
+            "version": "v1.16.2",
+            "wait": true,
+            "wait_for_jobs": false
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "repository_password"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "eyJzY2hlbWFfdmVyc2lvbiI6IjEifQ=="
+        }
+      ]
+    },
+    {
+      "module": "module.ingress_nginx",
+      "mode": "managed",
+      "type": "helm_release",
+      "name": "nginx_ingress",
+      "provider": "provider[\"registry.terraform.io/hashicorp/helm\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "atomic": false,
+            "chart": "ingress-nginx",
+            "cleanup_on_fail": false,
+            "create_namespace": false,
+            "dependency_update": false,
+            "description": "Install complete",
+            "devel": null,
+            "disable_crd_hooks": false,
+            "disable_openapi_validation": false,
+            "disable_webhooks": false,
+            "force_update": false,
+            "id": "ingress-nginx",
+            "keyring": null,
+            "lint": false,
+            "manifest": null,
+            "max_history": 0,
+            "metadata": [
+              {
+                "app_version": "1.14.1",
+                "chart": "ingress-nginx",
+                "first_deployed": 1765187584,
+                "last_deployed": 1765187584,
+                "name": "ingress-nginx",
+                "namespace": "mstack-ingress-nginx",
+                "notes": "The ingress-nginx controller has been installed.\nIt may take a few minutes for the load balancer IP to be available.\nYou can watch the status by running 'kubectl get service --namespace mstack-ingress-nginx ingress-nginx-controller --output wide --watch'\n\nAn example Ingress that makes use of the controller:\n  apiVersion: networking.k8s.io/v1\n  kind: Ingress\n  metadata:\n    name: example\n    namespace: foo\n  spec:\n    ingressClassName: nginx\n    rules:\n      - host: www.example.com\n        http:\n          paths:\n            - pathType: Prefix\n              backend:\n                service:\n                  name: exampleService\n                  port:\n                    number: 80\n              path: /\n    # This section is only required if TLS is to be enabled for the Ingress\n    tls:\n      - hosts:\n        - www.example.com\n        secretName: example-tls\n\nIf TLS is enabled for the Ingress, a Secret containing the certificate and key must also be provided:\n\n  apiVersion: v1\n  kind: Secret\n  metadata:\n    name: example-tls\n    namespace: foo\n  data:\n    tls.crt: \u003cbase64 encoded cert\u003e\n    tls.key: \u003cbase64 encoded key\u003e\n  type: kubernetes.io/tls\n",
+                "revision": 1,
+                "values": "{\"controller\":{\"metrics\":{\"enabled\":true},\"podAnnotations\":{\"prometheus.io/port\":10254,\"prometheus.io/scrape\":true},\"service\":{\"type\":\"LoadBalancer\"}}}",
+                "version": "4.14.1"
+              }
+            ],
+            "name": "ingress-nginx",
+            "namespace": "mstack-ingress-nginx",
+            "pass_credentials": false,
+            "postrender": [],
+            "recreate_pods": false,
+            "render_subchart_notes": true,
+            "replace": false,
+            "repository": null,
+            "repository_ca_file": null,
+            "repository_cert_file": null,
+            "repository_key_file": null,
+            "repository_password": null,
+            "repository_username": null,
+            "reset_values": false,
+            "reuse_values": false,
+            "set": [
+              {
+                "name": "controller.ingressClass",
+                "type": "",
+                "value": "nginx"
+              },
+              {
+                "name": "controller.ingressClassByName",
+                "type": "",
+                "value": "true"
+              },
+              {
+                "name": "controller.ingressClassResource.controllerValue",
+                "type": "",
+                "value": "k8s.io/nginx"
+              },
+              {
+                "name": "controller.ingressClassResource.enabled",
+                "type": "",
+                "value": "true"
+              },
+              {
+                "name": "controller.ingressClassResource.name",
+                "type": "",
+                "value": "nginx"
+              },
+              {
+                "name": "controller.replicaCount",
+                "type": "",
+                "value": "1"
+              }
+            ],
+            "set_list": [],
+            "set_sensitive": [],
+            "skip_crds": false,
+            "status": "deployed",
+            "timeout": 300,
+            "upgrade_install": null,
+            "values": null,
+            "verify": false,
+            "version": "4.14.1",
+            "wait": true,
+            "wait_for_jobs": false
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "repository_password"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "eyJzY2hlbWFfdmVyc2lvbiI6IjEifQ=="
+        }
+      ]
+    }
+  ],
+  "check_results": [
+    {
+      "object_kind": "var",
+      "config_addr": "module.cert_manager.var.cert_issuer_kind",
+      "status": "pass",
+      "objects": [
+        {
+          "object_addr": "module.cert_manager.var.cert_issuer_kind",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "object_kind": "var",
+      "config_addr": "var.cert_issuer_kind",
+      "status": "pass",
+      "objects": [
+        {
+          "object_addr": "var.cert_issuer_kind",
+          "status": "pass"
+        }
+      ]
+    }
+  ]
+}
