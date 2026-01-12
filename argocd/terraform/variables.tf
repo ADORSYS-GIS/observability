@@ -31,3 +31,84 @@ variable "kube_context" {
   type        = string
   default     = "" # If empty, uses current context
 }
+
+variable "install_nginx_ingress" {
+  description = "Whether to install NGINX Ingress Controller"
+  type        = bool
+  default     = false
+}
+
+variable "nginx_ingress_version" {
+  description = "Version of ingress-nginx chart"
+  type        = string
+  default     = "4.10.1"
+}
+
+variable "nginx_ingress_release_name" {
+  description = "Helm release name for NGINX Ingress"
+  type        = string
+  default     = "nginx-monitoring"
+}
+
+variable "nginx_ingress_namespace" {
+  description = "Namespace where NGINX Ingress is installed"
+  type        = string
+  default     = "ingress-nginx"
+}
+
+variable "ingress_class_name" {
+  description = "Ingress class to use for all ingress resources (e.g., nginx, traefik, kong). Must match an existing IngressClass in the cluster."
+  type        = string
+  default     = "nginx"
+}
+
+variable "install_cert_manager" {
+  description = "Whether to install cert-manager"
+  type        = bool
+  default     = false
+}
+
+variable "cert_manager_version" {
+  description = "Version of cert-manager chart"
+  type        = string
+  default     = "v1.15.0"
+}
+
+variable "namespace" {
+  description = "Namespace to install cert-manager into"
+  type        = string
+  default     = "cert-manager"
+}
+
+variable "letsencrypt_email" {
+  description = "Email address for Let's Encrypt certificate notifications"
+  type        = string
+}
+
+variable "cert_issuer_name" {
+  description = "Name of the ClusterIssuer or Issuer to create"
+  type        = string
+  default     = "letsencrypt-prod"
+}
+
+variable "cert_issuer_kind" {
+  description = "Kind of Issuer to create (ClusterIssuer or Issuer)"
+  type        = string
+  default     = "ClusterIssuer"
+  validation {
+    condition     = contains(["ClusterIssuer", "Issuer"], var.cert_issuer_kind)
+    error_message = "cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
+  }
+}
+
+variable "cert_manager_release_name" {
+  description = "Helm release name for Cert-Manager"
+  type        = string
+  default     = "cert-manager"
+}
+
+variable "cert_manager_namespace" {
+  description = "Namespace where Cert-Manager is installed"
+  type        = string
+  default     = "cert-manager"
+}

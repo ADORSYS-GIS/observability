@@ -34,7 +34,7 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes = {
+  kubernetes {
     host                   = "https://${data.google_container_cluster.primary.endpoint}"
     token                  = data.google_client_config.default.access_token
     cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
@@ -155,6 +155,11 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
 
 # Cert-Manager Module
 module "cert_manager" {
+  providers = {
+    kubernetes = kubernetes
+    helm       = helm
+  }
+
   source = "../../cert-manager/terraform"
 
   install_cert_manager = var.install_cert_manager

@@ -1,0 +1,13 @@
+keycloak_url      = "https://keycloak_domain_name"
+keycloak_user     = "admin"
+keycloak_password = "your-strong-secret-password" # this is to authenticate to keycloak
+argocd_url        = "https://example.com"
+target_realm      = "master" # or your specific realm
+kube_context = "gke_project-id_region_cluster-name"
+
+# For For Setting Up Nginx Loadbalancer
+
+install_nginx_ingress      = false
+nginx_ingress_release_name = "nginx-monitoring"
+nginx_ingress_namespace    = "ingress-nginx"
+ingress_class_name         = "nginx"

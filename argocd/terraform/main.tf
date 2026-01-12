@@ -79,14 +79,50 @@ resource "helm_release" "argocd-test" {
           "policy.csv" = "g, /ArgoCDAdmins, role:admin"
         }
       }
-      server = {
-        service = {
-          type = "LoadBalancer"
-        }
-      }
     })
   ]
 }
+
+
+# Managing certificate signing and creation
+# Cert-Manager Module
+module "cert_manager" {
+  providers = {
+    kubernetes = kubernetes
+    helm       = helm
+  }
+
+  source = "../../cert-manager/terraform"
+
+  install_cert_manager = var.install_cert_manager
+  cert_manager_version = var.cert_manager_version
+  release_name         = var.cert_manager_release_name
+  namespace            = var.cert_manager_namespace
+
+  letsencrypt_email = var.letsencrypt_email
+  cert_issuer_name  = var.cert_issuer_name
+  cert_issuer_kind  = var.cert_issuer_kind
+  # If Kind is Issuer, it must be in the observability namespace to be used by the ingress in that namespace.
+  # If Kind is ClusterIssuer, this variable is ignored by the module logic.
+  issuer_namespace   = var.namespace
+  ingress_class_name = var.ingress_class_name
+
+  # Ensure namespace exists before issuer creation (handled inside module)
+}
+
+# Setting Up An Ingress Controller
+# Ingress Controller Module
+module "ingress_nginx" {
+  source = "../../ingress-controller/terraform"
+
+  install_nginx_ingress = var.install_nginx_ingress
+  nginx_ingress_version = var.nginx_ingress_version
+  release_name          = var.nginx_ingress_release_name
+  namespace             = var.nginx_ingress_namespace
+  ingress_class_name    = var.ingress_class_name
+}
+
+
 
 # =============================================================================
 # OUTPUTS
