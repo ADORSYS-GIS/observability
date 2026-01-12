@@ -17,7 +17,11 @@ Infrastructure provisioning and application deployment are fully automated using
 
 ## Architecture
 
-The system uses a centralized ingress controller to route traffic to specific services. Workload Identity is configured to securely authenticate Kubernetes Service Accounts with Google Cloud APIs, eliminating the need for static service account keys.
+The system is composed of modular components:
+
+1.  **Core Stack (LGTM)**: The main observability components.
+2.  **Cert-Manager**: Manages TLS certificates (Modular, can be deployed standalone).
+3.  **Ingress Controller**: Manages external access (Modular, can be deployed standalone).
 
 ```mermaid
 graph TD
@@ -59,34 +63,92 @@ Before deploying the stack, ensure the following requirements are met:
 
 ## Configuration
 
-The deployment is configured via Terraform variables. Create a `terraform.tfvars` file in `lgtm-stack/terraform` to define your environment-specific values.
+The deployment is configured via Terraform variables. Copy the template to creating your configuration file:
+
+```bash
+cp terraform.tfvars.template terraform.tfvars
+```
+
+Edit `terraform.tfvars` to define your environment-specific values.
 
 | Variable | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
 | `project_id` | Google Cloud Project ID. | Yes | - |
 | `cluster_name` | Name of the target GKE cluster. | Yes | - |
 | `region` | GCP Region for resources (e.g., `europe-west3`). | No | `us-central1` |
+| `cluster_location` | Location of the GKE cluster. | Yes | - |
+| `environment` | Environment label (e.g., `prod`). | No | `production` |
+| `namespace` | K8s Namespace for stack. | No | `observability` |
 | `monitoring_domain` | Base domain for endpoints (e.g., `obs.example.com`). | Yes | - |
-| `ingress_class_name` | Ingress Class Name (e.g., `nginx`, `traefik`). | No | `nginx` |
-| `cert_issuer_name` | Name of the Cert-Manager Issuer (e.g., `letsencrypt-prod`). | No | `letsencrypt-prod` |
+| `letsencrypt_email` | Email for ACME registration. | Yes | - |
 | `grafana_admin_password` | Initial admin password for Grafana. | Yes | - |
+| `k8s_service_account_name` | K8s Service Account Name. | No | `observability-sa` |
+| `gcp_service_account_name` | GCP Service Account Name. | No | `gke-observability-sa` |
+| `ingress_class_name` | Ingress Class Name (e.g., `nginx`). | No | `nginx` |
+| `cert_issuer_name` | Name of the Cert-Manager Issuer. | No | `letsencrypt-prod` |
+| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer`). | No | `ClusterIssuer` |
 
-### Ingress Compatibility
+### Modular Component Variables
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `install_cert_manager` | Install Cert-Manager via Helm. | `false` |
+| `cert_manager_version` | Cert-Manager chart version. | `v1.15.0` |
+| `cert_manager_release_name` | Cert-Manager release name. | `cert-manager` |
+| `cert_manager_namespace` | Namespace for Cert-Manager. | `cert-manager` |
+| `install_nginx_ingress` | Install NGINX Ingress via Helm. | `false` |
+| `nginx_ingress_version` | Ingress Controller chart version. | `4.10.1` |
+| `nginx_ingress_release_name` | Ingress Controller release name. | `nginx-monitoring` |
+| `nginx_ingress_namespace` | Namespace for Ingress Controller. | `ingress-nginx` |
 
-This module is agnostic to the Ingress Controller and Certificate Issuer. By default, it assumes `nginx` and `letsencrypt-prod`. To use a different configuration (e.g., Traefik or a custom ClusterIssuer), update the `ingress_class_name` and `cert_issuer_name` variables in `terraform.tfvars`.
+### Version Overrides
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `loki_version` | Loki Helm chart version. | `6.6.4` |
+| `mimir_version` | Mimir Helm chart version. | `5.5.0` |
+| `tempo_version` | Tempo Helm chart version. | `1.57.0` |
+| `prometheus_version` | Prometheus Helm chart version. | `25.27.0` |
+| `grafana_version` | Grafana Helm chart version. | `10.3.0` |
+| `loki_schema_from_date` | Date for Loki schema start (YYYY-MM-DD). | `2024-01-01` |
+
+### Modular Components
+The stack automatically provisions **Cert-Manager** and **NGINX Ingress Controller** by default using the internal modules. You can control this via:
+
+- `install_cert_manager` (default: `false` - Must be enabled if Cert-Manager is not already present)
+- `install_nginx_ingress` (default: `false` - Must be enabled if Ingress Controller is not already present)
+
+> **Important**: Set these to `true` in your `terraform.tfvars` if you are doing a fresh install of the entire stack and need these components.
+
+If you prefer to deploy them standalone or manually, refer to their respective documentation:
+- [Cert-Manager Documentation](../cert-manager/README.md) - *See [Terraform Deployment Guide](../docs/cert-manager-terraform-deployment.md#variables) for full configuration options.*
+- [Ingress Controller Documentation](../ingress-controller/README.md) - *See [Terraform Deployment Guide](../docs/ingress-controller-terraform-deployment.md#variables) for full configuration options.*
 
 ## Installation
 
-1. **Initialize Terraform**
+1. **Verify Context**
+   Make sure you are context-switched to the correct cluster.
+   ```bash
+   kubectl config current-context
+   ```
+
+2. **Clone the Repository**
+
+    If you haven't already, clone the project repository to your local machine.
+
+    ```bash
+    git clone https://github.com/Adorsys-gis/observability.git
+    cd observability
+    ```
+
+3. **Initialize Terraform**
 
     Navigate to the Terraform directory and initialize the project to download required providers and modules.
 
     ```bash
-    cd ../lgtm-stack/terraform
+    cd lgtm-stack/terraform
     terraform init
     ```
 
-2. **Plan Deployment**
+4. **Plan Deployment**
 
     Generate an execution plan to verify the resources that will be created.
 
@@ -94,7 +156,7 @@ This module is agnostic to the Ingress Controller and Certificate Issuer. By def
     terraform plan
     ```
 
-3. **Apply Configuration**
+5. **Apply Configuration**
 
     Execute the plan to provision infrastructure and deploy the application stack.
 
@@ -112,7 +174,7 @@ Verify that all pods are running successfully in the `<NAMESPACE>` (default: `ob
 kubectl get pods -n <NAMESPACE>
 ```
 
-![Kubectl Get Pods](img/kubectl-get-pods.png)
+![Kubectl Get Pods](../lgtm-stack/manual/img/kubectl-get-pods.png)
 
 ### Public Endpoints
 
@@ -163,7 +225,7 @@ Access the Grafana dashboard using the domain configured in `monitoring_domain`.
 - **Username**: `admin`
 - **Password**: *<grafana_admin_password>*
 
-![Grafana Dashboard](img/grafana-dashboard.png)
+![Grafana Dashboard](../lgtm-stack/manual/img/grafana-dashboard.png)
 
 ## Maintenance
 
@@ -171,7 +233,7 @@ Access the Grafana dashboard using the domain configured in `monitoring_domain`.
 
 To upgrade components, update the version variables in `terraform.tfvars` or `variables.tf` and re-run `terraform apply`.
 
-**Note**: The current stack uses **Loki v6.20.0**. Major version upgrades should be tested in a staging environment first to ensure compatibility with the storage schema.
+> **Note**: The current stack uses **Loki v6.20.0**. Major version upgrades should be tested in a staging environment first to ensure compatibility with the storage schema.
 
 ### Uninstallation
 
@@ -181,4 +243,27 @@ To remove all resources created by this module:
 terraform destroy
 ```
 
-**Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.
+> **Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.
+
+## Troubleshooting
+
+### Terraform State Locks
+```bash
+# Fix: Unlock state if sure no other process is running
+terraform force-unlock <LOCK_ID>
+```
+
+### Provider Authentication Errors
+```bash
+# Fix: Re-authenticate with GCP
+gcloud auth application-default login
+```
+
+### Pods Pending (Resources)
+```bash
+# Check for InsufficientCpu/Memory events
+kubectl describe pod <pod-name>
+
+# Fix: Enable GKE Autoscaling or resize node pool
+```
+

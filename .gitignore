@@ -92,11 +92,25 @@ sw.*
 # yarn.lock
 yarn.lock
 
-.terraform
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform/
 .terraform.lock.hcl
+
 
 
 */charts
 
-*.out
-*.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Exclude .terraform directory
+.terraform/
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc

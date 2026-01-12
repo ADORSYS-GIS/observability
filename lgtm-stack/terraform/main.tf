@@ -153,95 +153,35 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }
 
-# Cert-Manager Issuer
-resource "kubernetes_manifest" "letsencrypt_issuer" {
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Issuer"
-    metadata = {
-      name      = var.cert_issuer_name
-      namespace = var.namespace
-    }
-    spec = {
-      acme = {
-        server = "https://acme-v02.api.letsencrypt.org/directory"
-        email  = var.letsencrypt_email
-        privateKeySecretRef = {
-          name = "${var.cert_issuer_name}-key"
-        }
-        solvers = [
-          {
-            http01 = {
-              ingress = {
-                class = var.ingress_class_name
-              }
-            }
-          }
-        ]
-      }
-    }
-  }
+# Cert-Manager Module
+module "cert_manager" {
+  source = "../../cert-manager/terraform"
 
-  depends_on = [kubernetes_namespace.observability]
+  install_cert_manager = var.install_cert_manager
+  cert_manager_version = var.cert_manager_version
+  release_name         = var.cert_manager_release_name
+  namespace            = var.cert_manager_namespace
+
+  letsencrypt_email = var.letsencrypt_email
+  cert_issuer_name  = var.cert_issuer_name
+  cert_issuer_kind  = var.cert_issuer_kind
+  # If Kind is Issuer, it must be in the observability namespace to be used by the ingress in that namespace.
+  # If Kind is ClusterIssuer, this variable is ignored by the module logic.
+  issuer_namespace   = var.namespace
+  ingress_class_name = var.ingress_class_name
+
+  # Ensure namespace exists before issuer creation (handled inside module)
 }
 
-# Add Helm Repositories
-resource "helm_release" "cert_manager" {
-  count = var.install_cert_manager ? 1 : 0
+# Ingress Controller Module
+module "ingress_nginx" {
+  source = "../../ingress-controller/terraform"
 
-  name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
-  chart            = "cert-manager"
-  namespace        = "cert-manager"
-  create_namespace = true
-  version          = var.cert_manager_version
-
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
-
-  wait    = true
-  timeout = 600
-}
-
-resource "helm_release" "nginx_ingress" {
-  count = var.install_nginx_ingress ? 1 : 0
-
-  name             = "nginx-monitoring"
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
-  namespace        = "ingress-nginx"
-  create_namespace = true
-  version          = var.nginx_ingress_version
-
-  set {
-    name  = "controller.ingressClassResource.name"
-    value = var.ingress_class_name
-  }
-
-  set {
-    name  = "controller.ingressClass"
-    value = var.ingress_class_name
-  }
-
-  set {
-    name  = "controller.ingressClassResource.controllerValue"
-    value = "k8s.io/ingress-nginx"
-  }
-
-  set {
-    name  = "controller.ingressClassResource.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "controller.ingressClassByName"
-    value = "true"
-  }
-
-  wait    = true
-  timeout = 600
+  install_nginx_ingress = var.install_nginx_ingress
+  nginx_ingress_version = var.nginx_ingress_version
+  release_name          = var.nginx_ingress_release_name
+  namespace             = var.nginx_ingress_namespace
+  ingress_class_name    = var.ingress_class_name
 }
 
 # Loki
@@ -533,7 +473,7 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
 
   depends_on = [
     helm_release.grafana,
-    kubernetes_manifest.letsencrypt_issuer
+    module.cert_manager
   ]
 }
 
@@ -579,6 +519,6 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
 
   depends_on = [
     helm_release.tempo,
-    kubernetes_manifest.letsencrypt_issuer
+    module.cert_manager
   ]
 }

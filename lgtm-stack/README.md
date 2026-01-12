@@ -14,7 +14,7 @@ The **LGTM** stack is a comprehensive open-source observability platform powered
 This repository provides two guides to help you deploy the stack:
 
 ### 1. Automated Deployment
-For a fully automated deployment using this stack, please follow the [Kubernetes Observability Guide](../docs/kubernetes-observability.md).
+For a fully automated deployment using this stack, please refer to the [observability guide](../docs/kubernetes-observability.md).
 
 ### 2. Manual Deployment
 If you prefer to configure and deploy components manually, or need to understand the individual steps, please refer to the [Manual LGTM Deployment Guide](../docs/manual-lgtm-deployment.md).

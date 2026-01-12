@@ -1,0 +1,36 @@
+# ------------------------------------------------------------------------------
+# Cert-Manager Configuration
+# ------------------------------------------------------------------------------
+
+# Enable installation (Set to true to install or adopt)
+install_cert_manager = false
+
+# Release Name
+# - If adopting: Must match your existing Helm release name.
+# - Default: "cert-manager"
+release_name = "cert-manager"
+
+# Namespace
+# Default: "cert-manager"
+namespace = "cert-manager"
+
+# Chart Version
+cert_manager_version = "v1.16.2"
+
+# ------------------------------------------------------------------------------
+# Certificate Issuer Configuration
+# ------------------------------------------------------------------------------
+
+# Email for Let's Encrypt usage
+letsencrypt_email = "admin@example.com"
+
+# Issuer Kind: "ClusterIssuer" (global) or "Issuer" (namespaced)
+cert_issuer_kind = "ClusterIssuer"
+
+# Issuer Name
+# - If adopting: Must match your existing ClusterIssuer name.
+cert_issuer_name = "letsencrypt-prod"
+
+# Namespace where the Issuer resource will be created
+# (Only used if cert_issuer_kind is "Issuer")
+issuer_namespace = cert-manager
