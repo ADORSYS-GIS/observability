@@ -106,7 +106,7 @@ If you see planned changes to the Helm release itself, **STOP** and review your 
 
 ## Common Issues
 
-### ❌ Error: "Configuration for import target does not exist"
+### Error: Error: "Configuration for import target does not exist"
 
 **Cause**: `install_cert_manager = false` in your `tfvars`.
 
@@ -119,7 +119,7 @@ terraform import 'helm_release.cert_manager[0]' cert-manager/cert-manager
 
 ---
 
-### ❌ Error: "CRD namespace annotation mismatch"
+### Error: Error: "CRD namespace annotation mismatch"
 
 **Cause**: CRDs were installed in a different namespace (e.g., `cert-manager` vs `mstack-cert-manager`).
 
@@ -148,7 +148,7 @@ kubectl annotate crd certificaterequests.cert-manager.io \
 
 ---
 
-### ❌ Error: "Issuer already exists"
+### Error: Error: "Issuer already exists"
 
 **Cause**: Terraform is trying to create an Issuer/ClusterIssuer that already exists.
 

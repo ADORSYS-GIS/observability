@@ -161,7 +161,7 @@ terraform plan
 
 ## Common Issues
 
-### ❌ Error: "ClusterRole exists and cannot be imported"
+### Error: Error: "ClusterRole exists and cannot be imported"
 
 **Symptoms**:
 ```
@@ -177,7 +177,7 @@ current value is "argocd"
 
 ---
 
-### ❌ Error: "CRDs cannot be imported"
+### Error: Error: "CRDs cannot be imported"
 
 **Symptoms**:
 ```
@@ -200,7 +200,7 @@ kubectl delete crd appprojects.argoproj.io
 
 ---
 
-### ❌ Keycloak OIDC Login Fails
+### Error: Keycloak OIDC Login Fails
 
 **Symptoms**: After adoption, ArgoCD login redirects to Keycloak but fails with "invalid redirect URI".
 

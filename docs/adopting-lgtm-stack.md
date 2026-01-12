@@ -224,7 +224,7 @@ terraform plan
 
 ## Common Issues
 
-### ❌ Error: "Bucket already exists"
+### Error: Error: "Bucket already exists"
 
 **Cause**: Bucket names must be globally unique. Terraform is trying to create a bucket that already exists.
 
@@ -239,7 +239,7 @@ gcloud storage buckets list --project=YOUR_PROJECT_ID
 
 ---
 
-### ❌ Error: "Service Account already exists"
+### Error: Error: "Service Account already exists"
 
 **Cause**: The GCP Service Account already exists but isn't imported.
 
@@ -247,7 +247,7 @@ gcloud storage buckets list --project=YOUR_PROJECT_ID
 
 ---
 
-### ❌ Helm Release Version Mismatch
+### Error: Helm Release Version Mismatch
 
 **Symptoms**: Terraform wants to upgrade/downgrade Helm releases.
 
@@ -262,7 +262,7 @@ loki_version = "6.20.0"  # Must match helm list output
 
 ---
 
-### ❌ Workload Identity Not Working
+### Error: Workload Identity Not Working
 
 **Symptoms**: Pods can't access GCS buckets after adoption.
 
@@ -316,7 +316,7 @@ echo "Importing Ingress Resources..."
 terraform import 'kubernetes_ingress_v1.monitoring_stack' "${NAMESPACE}/monitoring-stack-ingress"
 terraform import 'kubernetes_ingress_v1.tempo_grpc' "${NAMESPACE}/monitoring-stack-ingress-grpc"
 
-echo "✅ Import complete! Run 'terraform plan' to verify."
+echo "Success: Import complete! Run 'terraform plan' to verify."
 ```
 
 ---

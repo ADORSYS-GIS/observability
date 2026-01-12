@@ -107,7 +107,7 @@ terraform plan
 
 ## Common Issues
 
-### ❌ Error: "Configuration for import target does not exist"
+### Error: Error: "Configuration for import target does not exist"
 
 **Cause**: `install_nginx_ingress = false` in your `tfvars`.
 
@@ -120,7 +120,7 @@ terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/ingress-nginx
 
 ---
 
-### ❌ Error: "IngressClass field is immutable"
+### Error: Error: "IngressClass field is immutable"
 
 **Symptoms**:
 ```
@@ -153,7 +153,7 @@ kubectl get ingressclass nginx -o jsonpath='{.spec.controller}'
 
 ---
 
-### ❌ LoadBalancer IP Changes
+### Error: LoadBalancer IP Changes
 
 **Cause**: Terraform may try to recreate the LoadBalancer service, changing the external IP.
 
