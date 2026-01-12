@@ -26,8 +26,8 @@ Before deploying Argo CD, ensure you have the following:
 ### Required Infrastructure
 
 > [!IMPORTANT]
-> **Ingress Controller Required**: This deployment assumes you already have an Nginx Ingress Controller installed in your cluster. If you don't have one set up yet, please refer to the [Ingress Controller Setup Guide](./ingress-controller-setup.md) before proceeding.
-> **Cert-Manager**: For automated TLS certificate management (recommended). If not installed, see [Cert-Manager Setup Guide](./cert-manager-setup.md).
+> **Ingress Controller Required**: This deployment assumes you already have an Nginx Ingress Controller installed in your cluster. If you don't have one set up yet, please refer to the [Ingress Controller Setup Guide](ingress-controller-manual-deployment.md) before proceeding.
+> **Cert-Manager**: For automated TLS certificate management (recommended). If not installed, see [Cert-Manager Setup Guide](cert-manager-manual-deployment.md).
 
 - **DNS Configuration**: A domain name pointing to your ingress controller's load balancer IP
 - **OIDC Provider** (optional): For SSO authentication (e.g., Keycloak, Okta, Google)
@@ -323,8 +323,8 @@ kubectl describe certificate argocd-tls-cert -n argocd
 
 - [Argo CD Official Documentation](https://argo-cd.readthedocs.io/)
 - [Argo CD Helm Chart](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
-- [Ingress Controller Setup Guide](./ingress-controller-setup.md)
-- [Cert-Manager Setup Guide](./cert-manager-setup.md)
+- [Ingress Controller Setup Guide](ingress-controller-manual-deployment.md)
+- [Cert-Manager Setup Guide](cert-manager-manual-deployment.md)
 - [Automated Argo CD Deployment](#) *(Coming soon)*
 
 ---
