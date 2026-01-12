@@ -149,7 +149,7 @@ kubectl get ingressclass nginx -o jsonpath='{.spec.controller}'
 
 **Workaround**: If the controller value doesn't match, you may need to:
 1. Delete the IngressClass manually: `kubectl delete ingressclass nginx`
-2. Let Terraform recreate it (⚠️ **WARNING**: This will briefly disrupt ingress routing)
+2. Let Terraform recreate it (WARNING: This will briefly disrupt ingress routing)
 
 ---
 
