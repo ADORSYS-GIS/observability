@@ -1,6 +1,6 @@
 control_plane_cluster = {
   name            = "control-plane"
-  context_name    = "context_2"
+  context_name    = "context-2"
   kubeconfig_path = "/home/ubuntu/.kube/merged-config"
   server_address  = "argocd-cp.local"
   server_port     = 443
@@ -26,7 +26,7 @@ tls_config = {
 }
 
 argocd_version         = "7.0.0"
-argocd_agent_version   = "1.1.0"
+argocd_agent_version   = "v0.5.3"
 enable_server_ui       = true
 server_service_type    = "LoadBalancer"
 controller_replicas    = 1

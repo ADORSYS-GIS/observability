@@ -11,9 +11,9 @@ variable "argocd_version" {
 }
 
 variable "argocd_agent_version" {
-  description = "Argo CD Agent Helm chart version"
+  description = "Argo CD Agent image version"
   type        = string
-  default     = "1.1.0"
+  default     = "v0.5.3"
 }
 
 variable "control_plane_cluster" {

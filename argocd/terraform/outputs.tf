@@ -69,7 +69,6 @@ output "helm_release_status" {
   description = "Helm release information"
   value = {
     control_plane_release = helm_release.argocd_control_plane.metadata[0].values
-    workload_release      = helm_release.argocd_workload.metadata[0].values
   }
   sensitive = true
 }
