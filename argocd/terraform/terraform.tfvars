@@ -26,6 +26,7 @@ tls_config = {
 }
 
 argocd_version         = "7.0.0"
+argocd_image_version = "v2.11.2"
 argocd_agent_version   = "v0.5.3"
 enable_server_ui       = true
 server_service_type    = "LoadBalancer"

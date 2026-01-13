@@ -10,6 +10,12 @@ variable "argocd_version" {
   default     = "7.0.0"
 }
 
+variable "argocd_image_version" {
+  description = "Argo CD container image version"
+  type        = string
+  default     = "v2.11.2"
+}
+
 variable "argocd_agent_version" {
   description = "Argo CD Agent image version"
   type        = string
