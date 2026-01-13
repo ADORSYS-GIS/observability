@@ -1,21 +1,28 @@
 # Kubernetes Observability & Operations
 
-Infrastructure-as-code repository for deploying production-grade observability and operations platforms on Kubernetes.
+Production-ready infrastructure-as-code for deploying enterprise observability and operational tooling on Google Kubernetes Engine (GKE). This repository provides modular, production-grade deployments where each component can be installed independently or as part of a complete observability and operations stack.
 
-## Platforms
+## Requirements
 
-### [Observability Stack (LGTM)](lgtm-stack/README.md)
-Unified monitoring, logging, and tracing powered by Grafana, Loki, Tempo, and Mimir.
+- [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine/docs/quickstart) cluster
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) configured with cluster admin access
+- [Helm 3.8+](https://helm.sh/docs/intro/install/) (for manual deployments)
+- [Terraform 1.3+](https://developer.hashicorp.com/terraform/install) (for automated deployments)
 
-### [GitOps Delivery (ArgoCD)](argocd/README.md)
-Declarative continuous delivery for cluster workloads and configurations.
+## Architecture
 
-### [Certificate Management (cert-manager)](cert-manager/README.md)
-Automated TLS certificate provisioning and renewal via Let's Encrypt.
+This repository follows a modular architecture where components maintain operational independence while integrating seamlessly. Deploy individual components as needed or provision the complete stack for full observability coverage.
 
-### [Ingress Controller (NGINX)](ingress-controller/README.md)
-External traffic routing and load balancing for cluster services.
+## Components
 
-## Deployment
+### [LGTM Observability Stack](lgtm-stack/README.md)
+Comprehensive monitoring, logging, and distributed tracing platform built on Grafana Labs' open-source stack (Loki, Grafana, Tempo, Mimir).
 
-Each platform supports both automated (Terraform) and manual (Helm) deployment. See individual component READMEs for detailed instructions.
+### [ArgoCD GitOps Engine](argocd/README.md)
+Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
+
+### [cert-manager Certificate Authority](cert-manager/README.md)
+Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
+
+### [NGINX Ingress Controller](ingress-controller/README.md)
+Layer 7 load balancer and reverse proxy for routing external HTTP/HTTPS traffic to cluster services.
