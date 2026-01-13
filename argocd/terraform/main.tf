@@ -50,13 +50,13 @@ resource "keycloak_openid_group_membership_protocol_mapper" "groups" {
 # Deploy ArgoCD to GKE and inject the secrets from Section 1
 # =============================================================================
 
-resource "helm_release" "argocd-test" {
+resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-cd"
-  namespace        = "argocd-test"
+  namespace        = var.namespace
   create_namespace = true
-  version          = "5.51.0"
+  version          = var.argocd_version
   skip_crds        = false
 
   # Using values (YAML) instead of set avoids comma parsing errors entirely
@@ -128,7 +128,7 @@ module "ingress_nginx" {
 # OUTPUTS
 # =============================================================================
 
-output "argocd_admin_secret" {
+output "keycloak_client_secret" {
   value     = keycloak_openid_client.argocd.client_secret
   sensitive = true
 }

@@ -1,16 +1,16 @@
 # ==============================================================================
-# NGINX Ingress Controller Configuration
+# NGINX Ingress Controller Terraform Configuration
 # ==============================================================================
 # See: docs/adopting-ingress-controller.md | docs/troubleshooting-ingress-controller.md
 
 # Installation Control
-install_nginx_ingress = false  # Set to true to install or adopt
+install_nginx_ingress = false
 
-# Helm Release (must match existing if adopting)
-release_name          = "ingress-nginx"
+# Helm Release
+release_name          = "nginx-monitoring"
 namespace             = "ingress-nginx"
 nginx_ingress_version = "4.14.1"
 
 # Controller Configuration
 replica_count      = 1
-ingress_class_name = "nginx"  # WARNING: Immutable after creation
+ingress_class_name = "nginx"

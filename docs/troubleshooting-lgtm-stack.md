@@ -382,8 +382,3 @@ kubectl port-forward -n lgtm svc/monitoring-grafana 3000:80
 
 ---
 
-## See Also
-
-- [Kubernetes Observability Guide](kubernetes-observability.md)
-- [Adopting LGTM Stack](adopting-lgtm-stack.md)
-- [Manual LGTM Deployment](manual-lgtm-deployment.md)

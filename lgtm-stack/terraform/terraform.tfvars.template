@@ -1,36 +1,36 @@
 # ==============================================================================
-# LGTM Stack Configuration
+# LGTM Stack Terraform Configuration
 # ==============================================================================
 # See: docs/adopting-lgtm-stack.md | docs/troubleshooting-lgtm-stack.md
 
-# GCP & Cluster
+# GCP and Cluster Configuration
 project_id       = "your-gcp-project-id"
 region           = "us-central1"
 cluster_name     = "your-cluster-name"
 cluster_location = "us-central1"
 
-# Environment & Domain
+# Environment Configuration
 environment       = "production"
 monitoring_domain = "monitoring.example.com"
 letsencrypt_email = "admin@example.com"
 
-# Kubernetes
+# Kubernetes Configuration
 namespace                = "lgtm"
 k8s_service_account_name = "observability-sa"
 gcp_service_account_name = "gke-observability-sa"
 
-# Shared Infrastructure (set to false if managed elsewhere)
+# Shared Infrastructure
 install_cert_manager  = false
 install_nginx_ingress = false
 
-# Cert-Manager (only used if install_cert_manager = true)
+# Cert-Manager Configuration
 cert_manager_version      = "v1.16.2"
 cert_manager_release_name = "cert-manager"
 cert_manager_namespace    = "cert-manager"
 cert_issuer_name          = "letsencrypt-prod"
 cert_issuer_kind          = "ClusterIssuer"
 
-# Ingress Controller (only used if install_nginx_ingress = true)
+# NGINX Ingress Configuration
 nginx_ingress_version      = "4.14.1"
 nginx_ingress_release_name = "ingress-nginx"
 nginx_ingress_namespace    = "ingress-nginx"
@@ -38,9 +38,9 @@ ingress_class_name         = "nginx"
 
 # Application Configuration
 grafana_admin_password = "change-this-secure-password"
-loki_schema_from_date  = "2024-01-01"  # Must be in the past
+loki_schema_from_date  = "2024-01-01"
 
-# Component Versions (Helm chart versions)
+# Component Versions
 loki_version       = "6.20.0"
 mimir_version      = "5.5.0"
 tempo_version      = "1.57.0"

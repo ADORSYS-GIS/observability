@@ -1,7 +1,8 @@
-# Manual Argo CD Deployment Guide
+# Manual ArgoCD Deployment
 
-This guide walks you through manually deploying Argo CD to your Kubernetes cluster using Helm, with production-ready configurations including high availability, HTTPS ingress, and OIDC authentication.
+Guide for manually deploying ArgoCD to Kubernetes using Helm with production-ready configurations including high availability, HTTPS ingress, and OIDC authentication.
 
+<<<<<<< HEAD
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
@@ -33,22 +34,42 @@ Before deploying Argo CD, ensure you have the following:
 - **OIDC Provider** (optional): For SSO authentication (e.g., Keycloak, Okta, Google)
 
 ---
+=======
+**Official Documentation**: [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/)  
+**GitHub Repository**: [argoproj/argo-cd](https://github.com/argoproj/argo-cd)
+>>>>>>> 527f307c2f2174f321c632dd1ca42e273f95967c
 
 ## Overview
 
-This deployment uses the official Argo CD Helm chart with a production-ready values file that includes:
+This deployment uses the official ArgoCD Helm chart with production-ready configurations:
 
-- **High Availability**: Redis HA, multiple replicas for controller, repo-server, and API server
-- **Autoscaling**: Horizontal Pod Autoscaling for repo-server and API server
-- **HTTPS Ingress**: Automatic TLS certificate provisioning via cert-manager
-- **OIDC Authentication**: Integration with Keycloak or other OIDC providers
-- **RBAC**: Role-based access control for multi-tenancy
+- **High Availability**: Redis HA, multiple replicas for critical components
+- **Horizontal Autoscaling**: Dynamic scaling for repo-server and API server
+- **HTTPS Ingress**: Automated TLS via cert-manager
+- **OIDC Authentication**: Keycloak integration for SSO and RBAC
 
 **Reference Configuration**: [`argocd/manual/argocd-prod-values.yaml`](../argocd/manual/argocd-prod-values.yaml)
 
----
+## Prerequisites
 
-## Deployment Steps
+### Required Tools
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **kubectl** | ≥ 1.24 | Kubernetes CLI |
+| **Helm** | ≥ 3.12 | Package manager |
+| **Kubernetes Cluster** | ≥ 1.24 | Target platform |
+
+### Required Infrastructure
+
+> **Critical Dependencies**: These must be deployed before ArgoCD installation.
+
+- **NGINX Ingress Controller**: [Setup Guide](ingress-controller-manual-deployment.md)
+- **Cert-Manager**: For TLS certificates - [Setup Guide](cert-manager-manual-deployment.md)
+- **DNS Configuration**: Domain pointing to ingress load balancer IP
+- **Keycloak** (Optional): For OIDC/SSO - [Setup Guide](https://www.keycloak.org/guides#getting-started)
+
+## Deployment
 
 ### Step 1: Create Namespace
 
@@ -259,72 +280,154 @@ argocd app sync guestbook
 
 ### Pods Not Starting
 
-**Issue**: Pods stuck in `Pending` or `CrashLoopBackOff` state.
+**Check pod events**:
+```bash
+kubectl describe pod <pod-name> -n argocd
+```
 
-**Solutions**:
-- Check resource availability: `kubectl describe pod <pod-name> -n argocd`
-- Verify node resources: `kubectl top nodes`
-- Check pod logs: `kubectl logs <pod-name> -n argocd`
+**Common causes**:
+- Insufficient resources: `kubectl top nodes`
+- Image pull errors: Check pod logs
+- PVC binding issues: `kubectl get pvc -n argocd`
 
 ### Ingress Not Working
 
-**Issue**: Cannot access Argo CD UI via domain.
-
-**Solutions**:
-
+**Verify ingress controller**:
 ```bash
-# Verify ingress controller is running
-kubectl get pods -n <your-ingress-namespace>
+kubectl get pods -n ingress-nginx
+```
 
-# Check ingress resource
+**Check ingress resource**:
+```bash
 kubectl describe ingress argocd-server -n argocd
-
-# Verify DNS points to load balancer IP
-nslookup argocd.yourdomain.com
-
-# Check ingress controller logs
-kubectl logs -n <your-ingress-namespace> <ingress-controller-pod>
 ```
 
-### TLS Certificate Issues
-
-**Issue**: Certificate not provisioning or showing as invalid.
-
-**Solutions**:
-
+**Verify DNS**:
 ```bash
-# Check cert-manager logs
-kubectl logs -n <your-cert-manager-namespace> deployment/cert-manager
-
-# Verify issuer is ready
-kubectl get clusterissuer letsencrypt-prod
-
-# Check certificate status
-kubectl describe certificate argocd-tls-cert -n argocd
-
-# Verify DNS is resolving correctly (Let's Encrypt requires public DNS)
-# (Use 'nslookup' or 'dig' to check your domain)
+nslookup argocd.YOUR_DOMAIN.com
 ```
 
+**Check ingress controller logs**:
+```bash
+kubectl logs -n ingress-nginx <ingress-controller-pod>
+```
+
+### TLS Certificate Not Provisioning
+
+**Check cert-manager logs**:
+```bash
+kubectl logs -n cert-manager deployment/cert-manager
+```
+
+**Verify issuer status**:
+```bash
+kubectl get clusterissuer letsencrypt-prod
+```
+
+**Check certificate status**:
+```bash
+kubectl describe certificate argocd-tls-cert -n argocd
+```
+
+**Verify DNS for Let's Encrypt**:
+```bash
+dig argocd.YOUR_DOMAIN.com
+```
+
+Let's Encrypt requires publicly resolvable DNS.
+
+### OIDC Login Failures
+
+**Check redirect URIs in Keycloak**:
+- Ensure both browser and CLI callback URIs are configured
+- URIs must match exactly (no trailing slashes if not in config)
+
+**Test Keycloak connectivity from ArgoCD pod**:
+```bash
+kubectl exec -n argocd <argocd-server-pod> -- \
+  curl -v https://keycloak.YOUR_DOMAIN.com/realms/argocd/.well-known/openid-configuration
+```
+
+**Check ArgoCD OIDC configuration**:
+```bash
+kubectl get configmap argocd-cm -n argocd -o yaml
+```
 
 ### High Resource Usage
 
-**Issue**: Argo CD consuming too many resources.
+**Check resource consumption**:
+```bash
+kubectl top pods -n argocd
+```
 
-**Solutions**:
-- Reduce replica counts for development environments
-- Disable Redis HA if not needed
-- Adjust resource limits in values file
-- Disable autoscaling or adjust min/max replicas
+**Reduce for development environments**:
+- Decrease replica counts in values file
+- Disable Redis HA
+- Lower resource requests/limits
 
----
+## Upgrade
+
+### Check Current Version
+
+```bash
+helm list -n argocd
+```
+
+### Upgrade to New Version
+
+```bash
+# Update repo
+helm repo update
+
+# Upgrade release
+helm upgrade argocd argo/argo-cd \
+  --namespace argocd \
+  --values argocd-prod-values.yaml \
+  --version 7.8.0
+```
+
+## Uninstall
+
+```bash
+helm uninstall argocd -n argocd
+```
+
+**Note**: CRDs are retained by default. To remove them:
+
+```bash
+kubectl delete crd applications.argoproj.io
+kubectl delete crd applicationsets.argoproj.io
+kubectl delete crd appprojects.argoproj.io
+```
+
+> **Warning**: Deleting CRDs removes all Application and AppProject resources!
+
+## Management
+
+### View Logs
+
+```bash
+# Server logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-server --tail=100
+
+# Application controller logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail=100
+
+# Repo server logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-repo-server --tail=100
+```
+
+### Port Forward for Local Access
+
+```bash
+kubectl port-forward -n argocd svc/argocd-server 8080:443
+```
+
+Access at `https://localhost:8080`
 
 ## Additional Resources
 
-- [Argo CD Official Documentation](https://argo-cd.readthedocs.io/)
-- [Argo CD Helm Chart](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
-- [Ingress Controller Setup Guide](ingress-controller-manual-deployment.md)
-- [Cert-Manager Setup Guide](cert-manager-manual-deployment.md)
-- [Automated Argo CD Deployment](#) *(Coming soon)*
-
----
+- [Adoption Guide](adopting-argocd.md)
+- [Troubleshooting Guide](troubleshooting-argocd.md)
+- [Official ArgoCD Documentation](https://argo-cd.readthedocs.io/)
+- [ArgoCD Best Practices](https://argo-cd.readthedocs.io/en/stable/user-guide/best_practices/)

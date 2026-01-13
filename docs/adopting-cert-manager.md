@@ -42,6 +42,12 @@ kubectl get clusterissuers,issuers -A
 
 ## Step 2: Configure `terraform.tfvars`
 
+Navigate to the Terraform directory:
+
+```bash
+cd cert-manager/terraform
+```
+
 > [!IMPORTANT]
 > **Critical**: You MUST set `install_cert_manager = true` to create the Terraform resource configuration before importing.
 
@@ -67,7 +73,6 @@ cert_issuer_kind  = "ClusterIssuer"                 # Or "Issuer"
 ## Step 3: Initialize Terraform
 
 ```bash
-cd cert-manager/terraform
 terraform init
 ```
 
@@ -106,7 +111,7 @@ If you see planned changes to the Helm release itself, **STOP** and review your 
 
 ## Common Issues
 
-### ❌ Error: "Configuration for import target does not exist"
+### Error: Error: "Configuration for import target does not exist"
 
 **Cause**: `install_cert_manager = false` in your `tfvars`.
 
@@ -119,7 +124,7 @@ terraform import 'helm_release.cert_manager[0]' cert-manager/cert-manager
 
 ---
 
-### ❌ Error: "CRD namespace annotation mismatch"
+### Error: Error: "CRD namespace annotation mismatch"
 
 **Cause**: CRDs were installed in a different namespace (e.g., `cert-manager` vs `mstack-cert-manager`).
 
@@ -148,7 +153,7 @@ kubectl annotate crd certificaterequests.cert-manager.io \
 
 ---
 
-### ❌ Error: "Issuer already exists"
+### Error: Error: "Issuer already exists"
 
 **Cause**: Terraform is trying to create an Issuer/ClusterIssuer that already exists.
 
@@ -173,9 +178,3 @@ After successful adoption:
 2. **Document**: Update your team's runbook with the adopted configuration
 3. **Backup**: Commit your `terraform.tfstate` to secure remote storage
 
----
-
-## See Also
-
-- [Cert-Manager Terraform Deployment Guide](cert-manager-terraform-deployment.md)
-- [Troubleshooting Cert-Manager](troubleshooting-cert-manager.md)

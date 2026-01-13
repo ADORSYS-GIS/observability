@@ -314,8 +314,3 @@ kubectl port-forward -n argocd-test svc/argocd-server 8080:443
 
 ---
 
-## See Also
-
-- [ArgoCD Official Troubleshooting](https://argo-cd.readthedocs.io/en/stable/operator-manual/troubleshooting/)
-- [Adopting ArgoCD](adopting-argocd.md)
-- [Manual ArgoCD Deployment](manual-argocd-deployment.md)

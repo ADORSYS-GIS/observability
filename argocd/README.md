@@ -1,29 +1,35 @@
-# ArgoCD Deployment
+# ArgoCD GitOps Platform
 
-This directory contains infrastructure-as-code and configuration for deploying **ArgoCD** to enable GitOps continuous delivery for the Kubernetes cluster.
+Declarative GitOps continuous delivery for Kubernetes applications and configurations.
 
-ArgoCD provides:
-*   **GitOps Workflow**: Declarative application deployment from Git repositories.
-*   **Automated Sync**: Continuously monitors and synchronizes desired state with live cluster state.
-*   **Multi-Cluster Support**: Manage applications across multiple Kubernetes clusters.
-*   **OIDC Integration**: Keycloak-based authentication and RBAC.
+**Official Documentation**: [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/)  
+**GitHub Repository**: [argoproj/argo-cd](https://github.com/argoproj/argo-cd)
 
-## Deployment Options
+## Features
 
-### 1. Automated Deployment (Terraform)
-This method uses the Terraform configuration located in the `terraform/` directory. It is the recommended approach for automation.
+- **GitOps Workflow**: Application deployment from Git as single source of truth
+- **Automated Sync**: Continuous reconciliation of desired state with cluster state
+- **Multi-Cluster Management**: Deploy and manage applications across multiple clusters
+- **RBAC & SSO**: Keycloak integration for authentication and role-based access control
+- **Application Health**: Real-time monitoring of deployment status and resource health
 
-For detailed instructions, see the [Terraform deployment guide](terraform/) or the `terraform.tfvars.template`.
+## Deployment
 
-### 2. Manual (Helm)
-If you prefer to deploy manually using Helm, you can follow the [manual deployment guide](../docs/manual-argocd-deployment.md).
+### Automated (Terraform)
+Recommended approach with infrastructure-as-code management.
 
-The manual deployment uses the production-ready values file located at [`argocd/manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml).
+See [Terraform deployment guide](../docs/argocd-terraform-deployment.md)
 
-## Adoption & Troubleshooting
+### Manual (Helm)
+Uses production-ready values at [`manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml)
 
-### Adopting Existing Installation
-If you have an existing ArgoCD installation and want to manage it with Terraform, see the [Adoption Guide](../docs/adopting-argocd.md).
+See [Manual deployment guide](../docs/manual-argocd-deployment.md)
 
-### Troubleshooting
-For common issues and their solutions, see the [Troubleshooting Guide](../docs/troubleshooting-argocd.md).
+## Operations
+
+- **Adopting Existing Installation**: [Adoption guide](../docs/adopting-argocd.md)
+- **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-argocd.md)
+
+## Access
+
+After deployment, ArgoCD UI is available at the configured ingress hostname with SSO authentication via Keycloak.

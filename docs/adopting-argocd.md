@@ -10,85 +10,68 @@ This guide walks you through adopting an existing ArgoCD installation into Terra
 - `kubectl` configured for your cluster
 - `helm` CLI installed
 
+---
+
 ## Step 1: Discover Existing Installation
 
-Run these commands to gather information about your current ArgoCD setup:
+Run these commands to gather information about your current ArgoCD setup.
+
+### 1. Helm Release Status
 
 ```bash
-# 1. Find the Helm release
+# List all ArgoCD releases
 helm list -A | grep argocd
 
-# Expected output format:
-# RELEASE_NAME  NAMESPACE     REVISION  UPDATED                   STATUS    CHART           APP_VERSION
-# argocd        argocd-test   1         2026-01-12 14:15:22...    deployed  argo-cd-5.51.0  v2.9.3
+# Expected Output:
+# NAME      NAMESPACE    REVISION  STATUS    CHART           APP_VERSION
+# argocd    argocd-test  1         deployed  argo-cd-5.51.0  v2.9.3
+```
 
-# 2. Check for ArgoCD namespaces
+### 2. Kubernetes Resources
+
+```bash
+# Check Namespace
 kubectl get ns | grep argocd
 
-# 3. Check for ClusterRoles (these are cluster-wide)
-kubectl get clusterrole | grep argocd
+# Check ClusterRoles (Cluster-wide resources)
+kubectl get clusterrole | grep argocd-server
 
-# 4. Check for CRDs
-kubectl get crd | grep argoproj
-
-# 5. Check Keycloak client (if using Keycloak)
-# Access Keycloak admin console and note:
-# - Realm name
-# - Client ID
-# - Redirect URIs
+# Check CRDs
+kubectl get crd | grep "argoproj.io"
 ```
+
+### 3. Keycloak Configuration
+
+Access your Keycloak Admin Console and identify:
+- **Realm**: The realm where ArgoCD is registered (e.g., `argocd`).
+- **Client UUID**: The internal ID of the client (URL format: `.../clients/<UUID>/settings`).
+- **Client ID**: The public client ID (e.g., `argocd-client`).
 
 **Record these values**:
-- Release name (e.g., `argocd`)
+- Release Name (e.g., `argocd`)
 - Namespace (e.g., `argocd-test`)
-- Chart version (e.g., `5.51.0`)
-- Keycloak realm (e.g., `argocd`)
-- Keycloak client ID (e.g., `argocd-client`)
+- Keycloak Client UUID (for import)
 
 ---
 
-## Step 2: Clean Up Conflicting Resources
+## Step 2: Configure `terraform.tfvars`
 
-> [!CAUTION]
-> **Critical**: If you're adopting an ArgoCD installation in a **different namespace** than the original, you MUST clean up old cluster-wide resources first.
-
-### Check for Conflicts
+Navigate to the Terraform directory:
 
 ```bash
-# List all ArgoCD ClusterRoles
-kubectl get clusterrole | grep argocd
-
-# List all ArgoCD ClusterRoleBindings
-kubectl get clusterrolebinding | grep argocd
-
-# List ArgoCD CRDs
-kubectl get crd | grep argoproj
+cd argocd/terraform
 ```
 
-### Clean Up Old Resources (if namespace changed)
+> [!IMPORTANT]
+> **Critical**: Ensure `install_cert_manager` and `install_nginx_ingress` are set to `false` if they are managed by other stacks, to avoid conflicts.
+
+Copy the template:
 
 ```bash
-# Delete old ClusterRoles
-kubectl delete clusterrole argocd-server
-kubectl delete clusterrole argocd-application-controller
-kubectl delete clusterrole argocd-notifications-controller
-
-# Delete old ClusterRoleBindings
-kubectl delete clusterrolebinding argocd-server
-kubectl delete clusterrolebinding argocd-application-controller
-kubectl delete clusterrolebinding argocd-notifications-controller
-
-# Delete CRDs (only if reinstalling fresh)
-kubectl delete crd applications.argoproj.io
-kubectl delete crd applicationsets.argoproj.io
-kubectl delete crd appprojects.argoproj.io
+cp terraform.tfvars.template terraform.tfvars
 ```
 
----
-
-## Step 3: Configure `terraform.tfvars`
-
-Create or update `terraform.tfvars` with values matching your setup:
+Update `terraform.tfvars` with your discovery values:
 
 ```hcl
 # Keycloak Settings
@@ -100,16 +83,16 @@ target_realm      = "argocd"
 # ArgoCD Settings
 argocd_url   = "https://argocd.example.com"
 kube_context = "gke_project_region_cluster"
+namespace    = "argocd-test" # MUST match existing namespace
 
-# Infrastructure (if managing cert-manager/ingress)
-install_nginx_ingress = false  # Set to true only if you want Terraform to manage it
-install_cert_manager  = false  # Set to true only if you want Terraform to manage it
+# Shared Infrastructure (Set to false if adopting only ArgoCD)
+install_nginx_ingress = false
+install_cert_manager  = false
 
-# Reference existing infrastructure
+# Infrastructure References
 nginx_ingress_namespace = "ingress-nginx"
 ingress_class_name      = "nginx"
 cert_manager_namespace  = "cert-manager"
-namespace               = "argocd-test"
 letsencrypt_email       = "admin@example.com"
 cert_issuer_name        = "letsencrypt-prod"
 cert_issuer_kind        = "ClusterIssuer"
@@ -117,35 +100,57 @@ cert_issuer_kind        = "ClusterIssuer"
 
 ---
 
-## Step 4: Initialize Terraform
+## Step 3: Initialize Terraform
 
 ```bash
-cd argocd/terraform
 terraform init
+```
+
+---
+
+## Step 4: Clean Up Conflicting Resources
+
+> [!CAUTION]
+> If you are adopting ArgoCD into a **different namespace** than where it currently exists, you MUST clean up old cluster-wide resources first.
+
+If keeping the same namespace, skip this step.
+
+```bash
+# Delete old ClusterRoles
+kubectl delete clusterrole argocd-server
+kubectl delete clusterrole argocd-application-controller
+kubectl delete clusterrole argocd-notifications-controller
+
+# Delete old ClusterRoleBindings
+kubectl delete clusterrolebinding argocd-server
+kubectl delete clusterrolebinding argocd-application-controller
+kubectl delete clusterrolebinding argocd-notifications-controller
 ```
 
 ---
 
 ## Step 5: Import Resources
 
-### Import ArgoCD Helm Release
+You must import the existing resources into the Terraform state.
+
+### 1. Import ArgoCD Helm Release
+
+Format: `<namespace>/<release_name>`
 
 ```bash
-# Format: terraform import <resource_address> <namespace>/<release_name>
 terraform import 'helm_release.argocd-test' argocd-test/argocd
 ```
 
-### Import Keycloak Resources (if already configured)
+### 2. Import Keycloak Client
+
+Format: `<realm_id>/<client_uuid>`
 
 ```bash
-# Import the OIDC client
-terraform import 'keycloak_openid_client.argocd' <realm>/<client-id>
-
 # Example:
-terraform import 'keycloak_openid_client.argocd' argocd/4c2be9ef-878f-484a-8674-0fed256181ae
+terraform import 'keycloak_openid_client.argocd' argocd/12345678-abcd-efgh-ijkl-1234567890ab
 ```
 
-**Note**: You can find the client ID in Keycloak Admin Console → Clients → argocd-client → Settings (it's the UUID in the URL).
+> **Note**: You do not need to import the Default Scopes or Group Mapper; Terraform will manage or recreate them if they don't exactly match the state ID.
 
 ---
 
@@ -155,79 +160,24 @@ terraform import 'keycloak_openid_client.argocd' argocd/4c2be9ef-878f-484a-8674-
 terraform plan
 ```
 
-**Expected output**: Should show **no changes** or only minor metadata updates.
+**Expected output**:
+- **No changes** to the Helm Release (if versions match).
+- **Modifications** to Keycloak Client (adding terraform-managed attributes).
+- **Creation** of Group Mappers (if they didn't exist in a way Terraform recognized).
 
 ---
 
 ## Common Issues
 
-### ❌ Error: "ClusterRole exists and cannot be imported"
+### Error: "ClusterRole exists and cannot be imported"
+**Fix**: Delete the conflicting ClusterRole manually (`kubectl delete clusterrole ...`) and let Terraform recreate it.
 
-**Symptoms**:
-```
-Error: Unable to continue with install: ClusterRole "argocd-server" in namespace "" exists 
-and cannot be imported into the current release: invalid ownership metadata; 
-annotation validation error: key "meta.helm.sh/release-namespace" must equal "argocd-test": 
-current value is "argocd"
-```
-
-**Cause**: Old ArgoCD installation left cluster-wide resources with different namespace annotations.
-
-**Fix**: Delete the conflicting ClusterRoles (see Step 2 above).
-
----
-
-### ❌ Error: "CRDs cannot be imported"
-
-**Symptoms**:
-```
-Warning: Helm uninstall returned an information message
-
-These resources were kept due to the resource policy:
-[CustomResourceDefinition] applications.argoproj.io
-[CustomResourceDefinition] applicationsets.argoproj.io
-[CustomResourceDefinition] appprojects.argoproj.io
-```
-
-**Cause**: ArgoCD CRDs are retained by default when uninstalling.
-
-**Fix**: Manually delete them if you want a clean reinstall:
-```bash
-kubectl delete crd applications.argoproj.io
-kubectl delete crd applicationsets.argoproj.io
-kubectl delete crd appprojects.argoproj.io
-```
-
----
-
-### ❌ Keycloak OIDC Login Fails
-
-**Symptoms**: After adoption, ArgoCD login redirects to Keycloak but fails with "invalid redirect URI".
-
-**Fix**: Verify the redirect URIs in Keycloak match your `argocd_url`:
-
-```bash
-# In Keycloak Admin Console:
-# Clients → argocd-client → Settings → Valid Redirect URIs
-
-# Should include:
-https://argocd.example.com/auth/callback
-https://argocd.example.com/*
-```
+### Error: "Keycloak Client not found"
+**Fix**: Ensure you are using the **UUID** from the URL, not the "Client ID" string.
 
 ---
 
 ## Next Steps
 
-After successful adoption:
-
-1. **Test Login**: Verify Keycloak OIDC authentication works
-2. **Test GitOps**: Deploy a test application to verify ArgoCD functionality
-3. **Document**: Update your team's runbook with the adopted configuration
-
----
-
-## See Also
-
-- [Manual ArgoCD Deployment Guide](manual-argocd-deployment.md)
-- [Troubleshooting ArgoCD](troubleshooting-argocd.md)
+1. **Test Login**: Verify you can log in via Keycloak.
+2. **Check RBAC**: Verify "Groups" are working (Admins have access).

@@ -85,7 +85,7 @@ variable "install_nginx_ingress" {
 variable "cert_manager_version" {
   description = "Version of cert-manager chart"
   type        = string
-  default     = "v1.15.0"
+  default     = "v1.16.2"
 }
 
 variable "cert_manager_release_name" {
@@ -103,7 +103,7 @@ variable "cert_manager_namespace" {
 variable "nginx_ingress_version" {
   description = "Version of ingress-nginx chart"
   type        = string
-  default     = "4.10.1"
+  default     = "4.14.1"
 }
 
 variable "nginx_ingress_release_name" {
@@ -121,7 +121,7 @@ variable "nginx_ingress_namespace" {
 variable "loki_version" {
   description = "Version of Loki chart"
   type        = string
-  default     = "6.6.4"
+  default     = "6.20.0"
 }
 
 variable "mimir_version" {

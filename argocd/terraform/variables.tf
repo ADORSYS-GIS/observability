@@ -75,9 +75,9 @@ variable "cert_manager_version" {
 }
 
 variable "namespace" {
-  description = "Namespace to install cert-manager into"
+  description = "Namespace to install ArgoCD into"
   type        = string
-  default     = "cert-manager"
+  default     = "argocd"
 }
 
 variable "letsencrypt_email" {
@@ -111,4 +111,10 @@ variable "cert_manager_namespace" {
   description = "Namespace where Cert-Manager is installed"
   type        = string
   default     = "cert-manager"
+}
+
+variable "argocd_version" {
+  description = "Version of ArgoCD Helm chart"
+  type        = string
+  default     = "7.7.12"
 }

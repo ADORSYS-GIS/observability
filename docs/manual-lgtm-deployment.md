@@ -1,108 +1,296 @@
 # Manual LGTM Stack Deployment
 
-This guide explains how to manually deploy an observability stack.
+Guide for manually deploying the observability stack using Docker Compose for local development or testing environments.
 
-## 1. Deployment Constraints
+## Overview
 
-This deployment expects an external Docker network named `netbird_netbird` to exist. This is typically created by the NetBird management stack.
+This deployment runs the LGTM stack in Docker containers with minimal external dependencies. Suitable for:
 
-> **Note**: If you do not have NetBird running, you must create this network manually to avoid errors:
+- Local development and testing
+- Proof-of-concept deployments
+- Learning the stack architecture
+- NetBird network integration scenarios
+
+**Not recommended for production use.** For production, use the [Terraform Kubernetes deployment](kubernetes-observability.md).
+
+## Prerequisites
+
+- Docker Engine ≥ 20.10
+- Docker Compose ≥ 2.0
+- 4GB available RAM minimum
+- 10GB available disk space
+
+## Network Dependency
+
+This deployment expects an external Docker network named `netbird_netbird` (typically created by NetBird management stack).
+
+### Create Network (if NetBird not present)
 
 ```bash
 docker network create netbird_netbird
 ```
 
-## 2. Deploying the Stack
+## Deployment
 
-1. Navigate to the manual configuration directory:
+### Step 1: Navigate to Configuration Directory
 
-    ```bash
-    cd ../lgtm-stack/manual
-    ```
+```bash
+cd lgtm-stack/manual
+```
 
-2. Start the services in detached mode:
+### Step 2: Start Services
 
-    ```bash
-    docker compose up -d
-    ```
+```bash
+docker compose up -d
+```
 
-This will spin up the following containers:
+### Deployed Components
 
-* `loki` (Logs)
-* `prometheus` (Metrics)
-* `grafana` (Visualization)
-* `alloy` (Collector)
-* `node-exporter` & `container-metrics` (Host monitoring)
+| Service | Purpose | Port |
+|---------|---------|------|
+| **Grafana** | Visualization dashboard | 3000 |
+| **Loki** | Log aggregation | 3100 |
+| **Prometheus** | Metrics collection | 9090 |
+| **Alloy** | Telemetry collector | 12345 |
+| **Node Exporter** | Host metrics | 9100 |
+| **cAdvisor** | Container metrics | 8080 |
 
-## 3. Verifying the Deployment ("Pods")
+## Verification
 
-To check the status of your containers (often referred to as pods in Kubernetes contexts), run:
+### Check Service Status
 
 ```bash
 docker compose ps
 ```
 
-You should see all services with a status of `Up` (and `healthy` where applicable).
+Expected output: All services with status `Up` and health `healthy` (where applicable).
 
-![Sample monitoring stack](img/monitor-netbird-stack-ps.png)
+![Docker Compose Status](img/monitor-netbird-stack-ps.png)
 
-## 4. Accessing Grafana
+### View Logs
 
-* **URL**: `http://localhost:3000` (or your server's IP address)
-* **Default Credentials**:
-  * User: `admin`
-  * Password: `admin`
+```bash
+# All services
+docker compose logs
 
-## 5. Verifying Data Sources
+# Specific service
+docker compose logs grafana
 
-Once logged into Grafana, you should verify that it can connect to Prometheus and Loki.
+# Follow logs
+docker compose logs -f
+```
 
-### 5.1 Verify Prometheus
+## Access & Configuration
 
-1. Navigate to **Connections** > **Data Sources**.
-2. Click on **Prometheus**.
-3. Scroll to the bottom and click **Save & test**.
-4. You should see a green message: *“Successfully queried the Prometheus API.”*
+### Grafana Access
 
-![Grafana Prometheus data source](img/grafana-datasource-prometheus.png)
+**URL**: `http://localhost:3000`
 
-### 5.2 Verify Loki
+**Default Credentials**:
+- Username: `admin`
+- Password: `admin`
 
-1. Navigate to **Connections** > **Data Sources**.
-2. Click on **Loki**.
-3. Scroll to the bottom and click **Save & test**.
-4. You should see a green message indicating the data source is connected.
+You'll be prompted to change the password on first login.
 
-![Grafana Loki data source](img/grafana-datasource-loki.png)
+### Verify Datasources
 
-## 6. Cleanup
+#### Prometheus Datasource
 
-To stop and remove the stack:
+1. Navigate to **Connections** > **Data Sources**
+2. Click **Prometheus**
+3. Scroll down and click **Save & test**
+4. Verify success message: *"Successfully queried the Prometheus API"*
+
+![Prometheus Datasource](img/grafana-datasource-prometheus.png)
+
+#### Loki Datasource
+
+1. Navigate to **Connections** > **Data Sources**
+2. Click **Loki**
+3. Scroll down and click **Save & test**
+4. Verify success message confirming connection
+
+![Loki Datasource](img/grafana-datasource-loki.png)
+
+## Testing Data Ingestion
+
+### Send Test Logs to Loki
+
+```bash
+TIMESTAMP=$(date +%s)000000000
+curl -H "Content-Type: application/json" \
+  -XPOST http://localhost:3100/loki/api/v1/push \
+  --data-raw "{\"streams\":[{\"stream\":{\"job\":\"test\"},\"values\":[[\"$TIMESTAMP\",\"test log message\"]]}]}"
+```
+
+Verify in Grafana Explore > Loki > Query: `{job="test"}`
+
+### Query Prometheus Metrics
+
+```bash
+curl -G http://localhost:9090/api/v1/query \
+  --data-urlencode 'query=up'
+```
+
+## Management
+
+### Stop Services
+
+```bash
+docker compose stop
+```
+
+### Restart Services
+
+```bash
+docker compose restart
+```
+
+### Remove Stack
 
 ```bash
 docker compose down
 ```
 
-## 7. Troubleshooting
+To also remove volumes (deletes all data):
+
+```bash
+docker compose down -v
+```
+
+## Troubleshooting
 
 ### Network Not Found Error
+
+**Symptoms**:
+```
+Error: network netbird_netbird not found
+```
+
+**Fix**:
 ```bash
-# Fix: Create missing network
 docker network create netbird_netbird
 ```
 
 ### Port Conflicts
-```bash
-# Check what is using port 3000
-lsof -i :3000
 
-# Fix: Stop conflicting service or change port mapping in docker-compose.yml
+**Symptoms**:
+```
+Error: bind: address already in use
+```
+
+**Diagnosis**:
+```bash
+# Check what's using the port
+lsof -i :3000
+# or
+netstat -tulpn | grep 3000
+```
+
+**Fix**: Stop conflicting service or modify port mapping in `docker-compose.yml`:
+
+```yaml
+services:
+  grafana:
+    ports:
+      - "3001:3000"  # Change host port
 ```
 
 ### Container Exits Immediately
-```bash
-# Check crash logs
-docker compose logs <service_name>
 
-# Fix: Common issue is permission on mounted volumes (chown -R 10001:10001)
+**Diagnosis**:
+```bash
+docker compose logs <service_name>
 ```
+
+**Common causes**:
+- Permission issues on mounted volumes
+- Configuration file syntax errors
+- Memory constraints
+
+**Fix for permission issues**:
+```bash
+# Adjust ownership of data directories
+sudo chown -R 10001:10001 ./data/loki
+sudo chown -R 472:472 ./data/grafana
+```
+
+### Grafana Not Loading
+
+**Check container status**:
+```bash
+docker compose ps grafana
+docker compose logs grafana
+```
+
+**Common fixes**:
+- Wait 30-60 seconds for initialization
+- Clear browser cache
+- Check for port conflicts
+- Verify container has sufficient memory
+
+### Datasource Connection Failures
+
+**Diagnosis**:
+```bash
+# Test from Grafana container
+docker compose exec grafana curl -v http://loki:3100/ready
+docker compose exec grafana curl -v http://prometheus:9090/-/ready
+```
+
+**Fix**: Verify service names in datasource configuration match `docker-compose.yml` service names.
+
+## Configuration Files
+
+### Key Files
+
+- `docker-compose.yml` - Service definitions
+- `alloy-config.yaml` - Telemetry collector configuration
+- `prometheus.yml` - Prometheus scrape configuration
+- `loki-config.yaml` - Loki configuration
+
+### Customize Retention
+
+Edit service-specific configuration files to adjust data retention:
+
+**Loki** (`loki-config.yaml`):
+```yaml
+limits_config:
+  retention_period: 168h  # 7 days
+```
+
+**Prometheus** (`prometheus.yml`):
+```yaml
+global:
+  retention: 15d
+```
+
+## Resource Requirements
+
+### Minimum
+
+- CPU: 2 cores
+- RAM: 4GB
+- Disk: 10GB
+
+### Recommended
+
+- CPU: 4 cores
+- RAM: 8GB
+- Disk: 50GB (for longer retention)
+
+## Limitations
+
+- **Not production-ready**: No high availability or persistence guarantees
+- **Local storage only**: No object storage backend
+- **Single node**: Cannot scale horizontally
+- **No authentication**: Services exposed without access control
+
+For production deployments, use the [Terraform Kubernetes deployment](kubernetes-observability.md).
+
+## Next Steps
+
+- Explore Grafana dashboards at `http://localhost:3000`
+- Send application logs and metrics to Loki/Prometheus
+- Configure Alloy collector for custom telemetry pipelines
+- Review [Alloy Configuration Guide](alloy-config.md)

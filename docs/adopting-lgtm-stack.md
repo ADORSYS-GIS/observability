@@ -69,6 +69,12 @@ gcloud iam service-accounts get-iam-policy \
 
 ## Step 2: Configure `terraform.tfvars`
 
+Navigate to the Terraform directory:
+
+```bash
+cd lgtm-stack/terraform
+```
+
 > [!IMPORTANT]
 > **Critical**: All component toggles must be set correctly before importing.
 
@@ -115,7 +121,6 @@ grafana_version    = "10.3.0"
 ## Step 3: Initialize Terraform
 
 ```bash
-cd lgtm-stack/terraform
 terraform init
 ```
 
@@ -224,7 +229,7 @@ terraform plan
 
 ## Common Issues
 
-### ❌ Error: "Bucket already exists"
+### Error: Error: "Bucket already exists"
 
 **Cause**: Bucket names must be globally unique. Terraform is trying to create a bucket that already exists.
 
@@ -239,7 +244,7 @@ gcloud storage buckets list --project=YOUR_PROJECT_ID
 
 ---
 
-### ❌ Error: "Service Account already exists"
+### Error: Error: "Service Account already exists"
 
 **Cause**: The GCP Service Account already exists but isn't imported.
 
@@ -247,7 +252,7 @@ gcloud storage buckets list --project=YOUR_PROJECT_ID
 
 ---
 
-### ❌ Helm Release Version Mismatch
+### Error: Helm Release Version Mismatch
 
 **Symptoms**: Terraform wants to upgrade/downgrade Helm releases.
 
@@ -262,7 +267,7 @@ loki_version = "6.20.0"  # Must match helm list output
 
 ---
 
-### ❌ Workload Identity Not Working
+### Error: Workload Identity Not Working
 
 **Symptoms**: Pods can't access GCS buckets after adoption.
 
@@ -316,7 +321,7 @@ echo "Importing Ingress Resources..."
 terraform import 'kubernetes_ingress_v1.monitoring_stack' "${NAMESPACE}/monitoring-stack-ingress"
 terraform import 'kubernetes_ingress_v1.tempo_grpc' "${NAMESPACE}/monitoring-stack-ingress-grpc"
 
-echo "✅ Import complete! Run 'terraform plan' to verify."
+echo "Success: Import complete! Run 'terraform plan' to verify."
 ```
 
 ---
@@ -329,10 +334,3 @@ After successful adoption:
 2. **Monitor**: Check that metrics, logs, and traces are still being ingested
 3. **Document**: Update your team's runbook with the adopted configuration
 4. **Backup**: Commit your `terraform.tfstate` to secure remote storage
-
----
-
-## See Also
-
-- [Kubernetes Observability Guide](kubernetes-observability.md)
-- [Troubleshooting LGTM Stack](troubleshooting-lgtm-stack.md)

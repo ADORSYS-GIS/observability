@@ -1,6 +1,8 @@
 # Grafana Observability Stack Testing Documentation
 
-## Project: <PROJECT_ID> - GKE Deployment
+# Grafana Observability Stack Testing Documentation
+
+## GKE Deployment Testing
 
 ## Table of Contents
 
@@ -18,7 +20,7 @@
 
 ### 1.1 Purpose
 
-This documentation provides comprehensive testing procedures for the Grafana observability stack deployed on GKE cluster `<PROJECT_ID>`. The testing ensures all components are functioning correctly.
+This documentation provides comprehensive testing procedures for the Grafana observability stack deployed on GKE. The testing ensures all components are functioning correctly.
 
 ### 1.2 Stack Components
 

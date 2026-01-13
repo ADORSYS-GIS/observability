@@ -258,8 +258,3 @@ kubectl logs -n cert-manager -l app=cert-manager --tail=100
 
 ---
 
-## See Also
-
-- [Cert-Manager Official Troubleshooting](https://cert-manager.io/docs/troubleshooting/)
-- [Adopting Cert-Manager](adopting-cert-manager.md)
-- [Cert-Manager Terraform Deployment](cert-manager-terraform-deployment.md)

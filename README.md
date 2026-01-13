@@ -1,35 +1,21 @@
-# Kubernetes Observability & Operations Platform
+# Kubernetes Observability & Operations
 
-This repository provisions a comprehensive, production-grade observability and operations platform on **Google Kubernetes Engine (GKE)**. It integrates distinct, modular components to handle **deployment**, **monitoring**, **logging**, **tracing**, and **certificate management**.
+Infrastructure-as-code repository for deploying production-grade observability and operations platforms on Kubernetes.
 
-## Core Components
+## Platforms
 
-*   **Observability (LGTM Stack)**:
-    *   **Loki**: Distributed logging.
-    *   **Grafana**: Visualization and dashboards.
-    *   **Tempo**: Distributed tracing.
-    *   **Mimir**: Scalable metrics (Prometheus storage).
-*   **GitOps (ArgoCD)**:
-    *   **ArgoCD**: Continuous delivery and declarative GitOps workflows.
-*   **Infrastructure Essentials**:
-    *   **Cert-Manager**: Automated TLS certificate issuance (Let's Encrypt).
-    *   **Ingress Controller**: NGINX Ingress for external traffic management.
+### [Observability Stack (LGTM)](lgtm-stack/README.md)
+Unified monitoring, logging, and tracing powered by Grafana, Loki, Tempo, and Mimir.
 
-## Project Structure
+### [GitOps Delivery (ArgoCD)](argocd/README.md)
+Declarative continuous delivery for cluster workloads and configurations.
 
-This project is built with **Terraform** and **Helm**, designed for modularity. You can deploy the entire stack or individual components as needed.
+### [Certificate Management (cert-manager)](cert-manager/README.md)
+Automated TLS certificate provisioning and renewal via Let's Encrypt.
 
-> **Architecture Note**: This repository contains multiple deployable stacks (LGTM, ArgoCD) that share core infrastructure (Cert-Manager, Ingress). To prevent conflicts, ensure only **one** stack manages these shared resources, or use `terraform import` to adopt them into the correct state. See the [Shared Infrastructure Guide](docs/kubernetes-observability.md#modular-components--shared-infrastructure) for details.
+### [Ingress Controller (NGINX)](ingress-controller/README.md)
+External traffic routing and load balancing for cluster services.
 
-*   **[`lgtm-stack/`](lgtm-stack/README.md)**: The core internal monitoring platform.
-*   **[`argocd/`](argocd/README.md)**: The GitOps delivery engine.
-*   **[`cert-manager/`](cert-manager/README.md)**: Certificate management infrastructure.
-*   **[`ingress-controller/`](ingress-controller/README.md)**: Ingress routing infrastructure.
+## Deployment
 
-## Documentation
-
-*   **[Kubernetes Observability Guide](docs/kubernetes-observability.md)**: Deployment and architecture of the LGTM stack.
-*   **[Cert-Manager Deployment](docs/cert-manager-terraform-deployment.md)**: Terraform guide for Cert-Manager.
-*   **[Ingress Controller Deployment](docs/ingress-controller-terraform-deployment.md)**: Terraform guide for NGINX Ingress.
-*   **[ArgoCD Documentation](argocd/README.md)**: Setup and configuration for GitOps.
-
+Each platform supports both automated (Terraform) and manual (Helm) deployment. See individual component READMEs for detailed instructions.
