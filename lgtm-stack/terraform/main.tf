@@ -13,6 +13,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
 
   # Production Best Practice: Store state remotely
@@ -25,6 +29,10 @@ terraform {
 provider "google" {
   project = var.project_id != "" ? var.project_id : null
   region  = var.region
+}
+
+provider "aws" {
+  region = var.aws_region
 }
 
 # The kubernetes and helm providers will use the KUBECONFIG/current-context 
