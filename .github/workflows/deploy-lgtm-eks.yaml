@@ -1,4 +1,4 @@
-name: Deploy LGTM Stack (GKE)
+name: Deploy LGTM Stack (EKS)
 
 on:
   workflow_dispatch:
@@ -14,56 +14,52 @@ on:
   push:
     branches:
       - main
-      - 25-setup-pipeline-for-deploying-terraform-scripts
     paths:
       - 'lgtm-stack/terraform/**'
-      - '.github/workflows/deploy-lgtm-gke.yaml'
+      - '.github/workflows/deploy-lgtm-eks.yaml'
   pull_request:
     paths:
       - 'lgtm-stack/terraform/**'
-      - '.github/workflows/deploy-lgtm-gke.yaml'
+      - '.github/workflows/deploy-lgtm-eks.yaml'
 
 env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'lgtm-stack/terraform'
-  CLOUD_PROVIDER: 'gke'
+  CLOUD_PROVIDER: 'eks'
 
 jobs:
   setup-environment:
-    name: Setup GKE Environment
+    name: Setup EKS Environment
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Setup kubectl and get GKE credentials
+      - name: Setup kubectl and get EKS credentials
         run: |
           # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
-          # Install gke-gcloud-auth-plugin
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
-          
-          # Get cluster credentials using gcloud (authenticated via google-github-actions/auth)
-          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
-            --region=${{ secrets.CLUSTER_LOCATION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }}
+          # Get EKS cluster credentials
+          aws eks update-kubeconfig \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }}
           
           # Test cluster connectivity
           kubectl cluster-info
           kubectl get nodes
-          echo "✅ Connected to GKE cluster"
+          echo "✅ Connected to EKS cluster"
 
   import-existing-resources:
     name: Import Existing Resources
@@ -74,22 +70,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
@@ -97,6 +95,7 @@ jobs:
           bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
@@ -125,6 +124,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -135,12 +141,7 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
@@ -148,6 +149,7 @@ jobs:
           bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
@@ -162,10 +164,9 @@ jobs:
         run: |
           cat > terraform.tfvars <<EOF
           cloud_provider         = "${{ env.CLOUD_PROVIDER }}"
-          project_id             = "${{ secrets.GCP_PROJECT_ID }}"
           cluster_name           = "${{ secrets.CLUSTER_NAME }}"
-          cluster_location       = "${{ secrets.CLUSTER_LOCATION }}"
-          region                 = "${{ secrets.REGION }}"
+          aws_region             = "${{ secrets.AWS_REGION }}"
+          eks_oidc_provider_arn  = "${{ secrets.EKS_OIDC_PROVIDER_ARN }}"
           environment            = "production"
           monitoring_domain      = "${{ secrets.MONITORING_DOMAIN }}"
           letsencrypt_email      = "${{ secrets.LETSENCRYPT_EMAIL }}"
@@ -178,8 +179,6 @@ jobs:
         run: |
           terraform plan -out=tfplan -detailed-exitcode || export exitcode=$?
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
-          
-          # Also save plan as text for PR comments
           terraform show tfplan > plan.txt
           exit 0
 
@@ -192,28 +191,12 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
-      - name: Comment PR with plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan.txt', 'utf8');
-            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '\n\n... (truncated)' : plan;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## Terraform Plan (GKE)\n\`\`\`\n${truncatedPlan}\n\`\`\``
-            })
-
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-plan]
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/25-setup-pipeline-for-deploying-terraform-scripts')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
     environment:
       name: production
@@ -221,6 +204,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -232,16 +222,7 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Get GKE credentials
-          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
-            --region=${{ secrets.CLUSTER_LOCATION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
@@ -249,6 +230,7 @@ jobs:
           bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
@@ -263,10 +245,6 @@ jobs:
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
-
-      - name: Output deployment info
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform output -json > terraform-outputs.json
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
@@ -284,16 +262,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Get GKE credentials
-          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
-            --region=${{ secrets.CLUSTER_LOCATION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }}
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Run deployment verification
         run: bash .github/scripts/verify-deployment.sh

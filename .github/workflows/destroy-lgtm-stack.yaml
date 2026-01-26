@@ -62,7 +62,11 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          
+          # Get GKE credentials
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region=${{ secrets.CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
 
       - name: Setup Cloud Credentials - GKE
         if: inputs.cloud_provider == 'gke'
@@ -143,7 +147,6 @@ jobs:
 
       - name: Verify cleanup
         run: |
-          export KUBECONFIG=/tmp/kubeconfig
           echo "📊 Remaining resources in observability namespace:"
           kubectl get all -n observability || echo "Namespace not found (expected)"
           echo "✅ Destroy complete"
