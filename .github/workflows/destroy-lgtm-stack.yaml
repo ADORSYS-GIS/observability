@@ -57,22 +57,15 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Setup kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          
-          # Get GKE credentials
-          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
-            --region=${{ secrets.CLUSTER_LOCATION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }}
-
       - name: Setup Cloud Credentials - GKE
         if: inputs.cloud_provider == 'gke'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Compute Environment - GKE
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Setup Cloud Credentials - EKS
         if: inputs.cloud_provider == 'eks'
@@ -87,6 +80,19 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          # Get GKE credentials
+          if [ "${{ inputs.cloud_provider }}" == "gke" ]; then
+            gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+              --region=${{ secrets.CLUSTER_LOCATION }} \
+              --project=${{ secrets.GCP_PROJECT_ID }}
+          fi
 
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
