@@ -160,7 +160,7 @@ jobs:
           cluster_name           = "${{ secrets.CLUSTER_NAME }}"
           cluster_location       = "${{ secrets.CLUSTER_LOCATION }}"
           region                 = "${{ secrets.REGION }}"
-          environment            = "${{ secrets.ENVIRONMENT }}"
+          environment            = "production"
           monitoring_domain      = "${{ secrets.MONITORING_DOMAIN }}"
           letsencrypt_email      = "${{ secrets.LETSENCRYPT_EMAIL }}"
           grafana_admin_password = "${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
