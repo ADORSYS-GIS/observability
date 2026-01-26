@@ -40,9 +40,8 @@ module "cloud_gke" {
 
   project_id               = var.project_id
   region                   = var.region
-  cluster_name             = var.cluster_name
-  gcp_service_account_name = var.gcp_service_account_name
-  namespace                = var.namespace
+  service_account_name     = var.gcp_service_account_name
+  k8s_namespace            = var.namespace
   k8s_service_account_name = var.k8s_service_account_name
   environment              = var.environment
 }
@@ -52,8 +51,9 @@ module "cloud_eks" {
   source = "./modules/cloud-eks"
 
   bucket_prefix            = var.cluster_name
+  cluster_name             = var.cluster_name
   eks_oidc_provider_arn    = var.eks_oidc_provider_arn
-  namespace                = var.namespace
+  k8s_namespace            = var.namespace
   k8s_service_account_name = var.k8s_service_account_name
 }
 
@@ -61,7 +61,7 @@ module "cloud_generic" {
   count  = var.cloud_provider == "generic" ? 1 : 0
   source = "./modules/cloud-generic"
 
-  storage_size = "10Gi"
+  k8s_namespace = var.namespace
 }
 
 # Local variables for unified access to cloud resources
@@ -187,21 +187,26 @@ resource "helm_release" "mimir" {
 
   values = [
     templatefile("values/mimir-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      mimir_blocks_bucket       = google_storage_bucket.observability_buckets["mimir-blocks"].name
-      mimir_ruler_bucket        = google_storage_bucket.observability_buckets["mimir-ruler"].name
-      mimir_alertmanager_bucket = google_storage_bucket.observability_buckets["mimir-ruler"].name
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      mimir_blocks_bucket       = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-blocks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-blocks"] : "")
+      mimir_ruler_bucket        = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
+      mimir_alertmanager_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
+
+      monitoring_domain  = var.monitoring_domain
+      ingress_class_name = var.ingress_class_name
+      cert_issuer_name   = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.cloud_eks
   ]
 }
 
@@ -215,19 +220,24 @@ resource "helm_release" "tempo" {
 
   values = [
     templatefile("values/tempo-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      tempo_traces_bucket       = google_storage_bucket.observability_buckets["tempo-traces"].name
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      tempo_traces_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["tempo-traces"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["tempo-traces"] : "")
+
+      monitoring_domain  = var.monitoring_domain
+      ingress_class_name = var.ingress_class_name
+      cert_issuer_name   = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.cloud_eks
   ]
 }
 
@@ -241,7 +251,9 @@ resource "helm_release" "prometheus" {
 
   values = [
     templatefile("values/prometheus-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
       monitoring_domain         = var.monitoring_domain
       cluster_name              = var.cluster_name
@@ -271,7 +283,9 @@ resource "helm_release" "grafana" {
 
   values = [
     templatefile("values/grafana-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
       monitoring_domain         = var.monitoring_domain
       grafana_admin_password    = var.grafana_admin_password

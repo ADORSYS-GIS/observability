@@ -3,7 +3,8 @@ serviceAccount:
   create: false
   name: ${k8s_service_account_name}
   annotations:
-    iam.gke.io/gcp-service-account: ${gcp_service_account_email}
+    %{ if cloud_provider == "gke" }iam.gke.io/gcp-service-account: ${gcp_service_account_email}%{ endif }
+    %{ if cloud_provider == "eks" }eks.amazonaws.com/role-arn: ${aws_role_arn}%{ endif }
 
 # Global Overrides
 global_overrides:
@@ -12,13 +13,19 @@ global_overrides:
     metrics_generator:
       processors: [service-graphs, span-metrics]
 
-# Storage (GCS)
+# Storage
 storage:
   trace:
-    backend: gcs
+    backend: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+    %{ if cloud_provider == "gke" }
     gcs:
       bucket_name: ${tempo_traces_bucket}
       chunk_buffer_size: 10485760
+    %{ else }
+    s3:
+      bucket: ${tempo_traces_bucket}
+      region: ${aws_region}
+    %{ endif }
   wal:
     path: /var/tempo/wal
 
