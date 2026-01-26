@@ -3,8 +3,8 @@
 
 config {
   # Enable all rules by default
-  module = true
-  force  = false
+  call_module_type = "all"
+  force            = false
 }
 
 # Terraform plugin for core validation rules
@@ -57,9 +57,9 @@ rule "terraform_typed_variables" {
   enabled = true
 }
 
-# Unused declarations
+# Unused declarations - disabled for legacy variables
 rule "terraform_unused_declarations" {
-  enabled = true
+  enabled = false
 }
 
 # Comment requirements

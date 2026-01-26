@@ -138,48 +138,4 @@ jobs:
           working_directory: ${{ matrix.component }}/terraform
           soft_fail: true
 
-  summary:
-    name: Report Summary
-    runs-on: ubuntu-latest
-    needs: [terraform-fmt, terraform-validate, tflint, tfsec]
-    if: github.event_name == 'pull_request'
 
-    steps:
-      - name: Comment PR
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const components = ['argocd-agent', 'argocd', 'cert-manager', 'ingress-controller', 'lgtm-stack'];
-            const jobResults = {
-              fmt: '${{ needs.terraform-fmt.result }}',
-              validate: '${{ needs.terraform-validate.result }}',
-              tflint: '${{ needs.tflint.result }}',
-              tfsec: '${{ needs.tfsec.result }}'
-            };
-            
-            const statusIcon = (result) => {
-              if (result === 'success') return '✅';
-              if (result === 'failure') return '❌';
-              return '⚠️';
-            };
-            
-            const output = `### Terraform CI Results
-            
-            | Check | Status |
-            |-------|--------|
-            | Format | ${statusIcon(jobResults.fmt)} \`${jobResults.fmt}\` |
-            | Validate | ${statusIcon(jobResults.validate)} \`${jobResults.validate}\` |
-            | TFLint | ${statusIcon(jobResults.tflint)} \`${jobResults.tflint}\` |
-            | Security Scan | ${statusIcon(jobResults.tfsec)} \`${jobResults.tfsec}\` |
-            
-            **Components checked:** ${components.join(', ')}
-            
-            *Workflow run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            });
