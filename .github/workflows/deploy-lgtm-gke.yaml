@@ -43,15 +43,22 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Setup kubectl
+      - name: Setup kubectl and get GKE credentials
         run: |
+          # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
-          # Decode and setup kubeconfig
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
+          # Install gke-gcloud-auth-plugin
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+          
+          # Get cluster credentials using gcloud (authenticated via google-github-actions/auth)
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region=${{ secrets.CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
           
           # Test cluster connectivity
           kubectl cluster-info
@@ -97,9 +104,7 @@ jobs:
 
       - name: Import existing resources
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          export KUBECONFIG=/tmp/kubeconfig
-          bash ../../.github/scripts/import-existing-resources.sh
+        run: bash ../../.github/scripts/import-existing-resources.sh
         continue-on-error: true
 
       - name: Upload import report
@@ -227,7 +232,11 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          
+          # Get GKE credentials
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region=${{ secrets.CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
 
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
@@ -280,19 +289,19 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          
+          # Get GKE credentials
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region=${{ secrets.CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
 
       - name: Run deployment verification
-        run: |
-          export KUBECONFIG=/tmp/kubeconfig
-          bash .github/scripts/verify-deployment.sh
+        run: bash .github/scripts/verify-deployment.sh
         env:
           MONITORING_DOMAIN: ${{ secrets.MONITORING_DOMAIN }}
 
       - name: Run smoke tests
-        run: |
-          export KUBECONFIG=/tmp/kubeconfig
-          bash .github/scripts/smoke-tests.sh
+        run: bash .github/scripts/smoke-tests.sh
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           MONITORING_DOMAIN: ${{ secrets.MONITORING_DOMAIN }}
