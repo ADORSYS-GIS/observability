@@ -185,8 +185,17 @@ jobs:
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          terraform plan -out=tfplan -detailed-exitcode || export exitcode=$?
-          echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
           
           # Also save plan as text for PR comments
           terraform show tfplan > plan.txt
