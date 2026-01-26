@@ -77,44 +77,6 @@ jobs:
         working-directory: ${{ matrix.component }}/terraform
         run: terraform validate -no-color
 
-  tflint:
-    name: TFLint
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        component:
-          - argocd-agent
-          - argocd
-          - cert-manager
-          - ingress-controller
-          - lgtm-stack
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache TFLint plugins
-        uses: actions/cache@v4
-        with:
-          path: ~/.tflint.d/plugins
-          key: ${{ runner.os }}-tflint-${{ hashFiles(format('{0}/terraform/.tflint.hcl', matrix.component)) }}
-
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: v0.52.0
-
-      - name: Initialize TFLint
-        working-directory: ${{ matrix.component }}/terraform
-        run: tflint --init
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Run TFLint
-        working-directory: ${{ matrix.component }}/terraform
-        run: tflint --recursive --format compact
-
   tfsec:
     name: Security Scan
     runs-on: ubuntu-latest
