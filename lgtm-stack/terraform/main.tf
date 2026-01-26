@@ -79,11 +79,11 @@ locals {
 
     # GKE values
     gcp_sa_email = var.cloud_provider == "gke" ? module.cloud_gke[0].service_account_email : ""
-    buckets      = var.cloud_provider == "gke" ? module.cloud_gke[0].bucket_names : {}
+    buckets      = var.cloud_provider == "gke" ? module.cloud_gke[0].storage_buckets : {}
 
     # EKS values
-    aws_role_arn = var.cloud_provider == "eks" ? module.cloud_eks[0].iam_role_arn : ""
-    s3_buckets   = var.cloud_provider == "eks" ? module.cloud_eks[0].bucket_names : {}
+    aws_role_arn = var.cloud_provider == "eks" ? module.cloud_eks[0].irsa_role_arn : ""
+    s3_buckets   = var.cloud_provider == "eks" ? module.cloud_eks[0].storage_buckets : {}
   }
 }
 
