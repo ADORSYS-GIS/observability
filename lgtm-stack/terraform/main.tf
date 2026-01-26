@@ -23,99 +23,60 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
+  project = var.project_id != "" ? var.project_id : null
   region  = var.region
 }
 
-provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.primary.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+# The kubernetes and helm providers will use the KUBECONFIG/current-context 
+# established by gcloud/aws/kubectl in the workflow.
+provider "kubernetes" {}
+
+provider "helm" {}
+
+# Modular Cloud Resources
+module "cloud_gke" {
+  count  = var.cloud_provider == "gke" ? 1 : 0
+  source = "./modules/cloud-gke"
+
+  project_id               = var.project_id
+  region                   = var.region
+  cluster_name             = var.cluster_name
+  gcp_service_account_name = var.gcp_service_account_name
+  namespace                = var.namespace
+  k8s_service_account_name = var.k8s_service_account_name
+  environment              = var.environment
 }
 
-provider "helm" {
-  kubernetes {
-    host                   = "https://${data.google_container_cluster.primary.endpoint}"
-    token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
-  }
+module "cloud_eks" {
+  count  = var.cloud_provider == "eks" ? 1 : 0
+  source = "./modules/cloud-eks"
+
+  bucket_prefix            = var.cluster_name
+  eks_oidc_provider_arn    = var.eks_oidc_provider_arn
+  namespace                = var.namespace
+  k8s_service_account_name = var.k8s_service_account_name
 }
 
-# Data sources
-data "google_client_config" "default" {}
+module "cloud_generic" {
+  count  = var.cloud_provider == "generic" ? 1 : 0
+  source = "./modules/cloud-generic"
 
-data "google_container_cluster" "primary" {
-  name     = var.cluster_name
-  location = var.cluster_location
+  storage_size = "10Gi"
 }
 
-# GCS Buckets
+# Local variables for unified access to cloud resources
 locals {
-  buckets = [
-    "loki-chunks",
-    "loki-ruler",
-    "mimir-blocks",
-    "mimir-ruler",
-    "tempo-traces",
-  ]
+  storage_config = {
+    type = var.cloud_provider
 
-  bucket_prefix         = var.project_id
-  loki_schema_from_date = var.loki_schema_from_date
-}
+    # GKE values
+    gcp_sa_email = var.cloud_provider == "gke" ? module.cloud_gke[0].service_account_email : ""
+    buckets      = var.cloud_provider == "gke" ? module.cloud_gke[0].bucket_names : {}
 
-
-resource "google_storage_bucket" "observability_buckets" {
-  for_each = toset(local.buckets)
-
-  name          = "${local.bucket_prefix}-${each.key}"
-  location      = var.region
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
+    # EKS values
+    aws_role_arn = var.cloud_provider == "eks" ? module.cloud_eks[0].iam_role_arn : ""
+    s3_buckets   = var.cloud_provider == "eks" ? module.cloud_eks[0].bucket_names : {}
   }
-
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  labels = {
-    environment = var.environment
-    managed-by  = "terraform"
-    component   = "observability"
-  }
-}
-
-# GCP Service Account
-resource "google_service_account" "observability_sa" {
-  account_id   = var.gcp_service_account_name
-  display_name = "GKE Observability Service Account"
-  description  = "Service account for Loki, Tempo, Grafana, Mimir, and Prometheus in GKE"
-}
-
-# Grant Storage Object Admin role on all buckets
-resource "google_storage_bucket_iam_member" "bucket_object_admin" {
-  for_each = toset(local.buckets)
-
-  bucket = google_storage_bucket.observability_buckets[each.key].name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.observability_sa.email}"
-}
-
-# Grant Legacy Bucket Writer role on all buckets
-resource "google_storage_bucket_iam_member" "bucket_legacy_writer" {
-  for_each = toset(local.buckets)
-
-  bucket = google_storage_bucket.observability_buckets[each.key].name
-  role   = "roles/storage.legacyBucketWriter"
-  member = "serviceAccount:${google_service_account.observability_sa.email}"
 }
 
 # Kubernetes Namespace
@@ -136,21 +97,15 @@ resource "kubernetes_service_account" "observability_sa" {
     name      = var.k8s_service_account_name
     namespace = kubernetes_namespace.observability.metadata[0].name
 
-    annotations = {
-      "iam.gke.io/gcp-service-account" = google_service_account.observability_sa.email
-    }
+    annotations = merge(
+      var.cloud_provider == "gke" ? { "iam.gke.io/gcp-service-account" = local.storage_config.gcp_sa_email } : {},
+      var.cloud_provider == "eks" ? { "eks.amazonaws.com/role-arn" = local.storage_config.aws_role_arn } : {}
+    )
 
     labels = {
       managed-by = "terraform"
     }
   }
-}
-
-# Workload Identity Binding
-resource "google_service_account_iam_member" "workload_identity_binding" {
-  service_account_id = google_service_account.observability_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }
 
 # Cert-Manager Module
@@ -199,22 +154,26 @@ resource "helm_release" "loki" {
 
   values = [
     templatefile("values/loki-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      loki_chunks_bucket        = google_storage_bucket.observability_buckets["loki-chunks"].name
-      loki_ruler_bucket         = google_storage_bucket.observability_buckets["loki-ruler"].name
-      loki_admin_bucket         = google_storage_bucket.observability_buckets["loki-chunks"].name
-      loki_schema_from_date     = local.loki_schema_from_date
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      loki_chunks_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-chunks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-chunks"] : "")
+      loki_ruler_bucket  = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-ruler"] : "")
+
+      loki_schema_from_date = var.loki_schema_from_date
+      monitoring_domain     = var.monitoring_domain
+      ingress_class_name    = var.ingress_class_name
+      cert_issuer_name      = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.cloud_eks
   ]
 }
 
