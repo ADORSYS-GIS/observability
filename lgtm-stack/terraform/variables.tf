@@ -1,6 +1,17 @@
-variable "project_id" {
-  description = "GCP Project ID"
+variable "cloud_provider" {
+  description = "Cloud provider (gke, eks, aks, or generic)"
   type        = string
+  default     = "gke"
+  validation {
+    condition     = contains(["gke", "eks", "aks", "generic"], var.cloud_provider)
+    error_message = "Cloud provider must be one of: gke, eks, aks, generic"
+  }
+}
+
+variable "project_id" {
+  description = "GCP Project ID (required for GKE)"
+  type        = string
+  default     = ""
 }
 
 variable "region" {
@@ -15,8 +26,22 @@ variable "cluster_name" {
 }
 
 variable "cluster_location" {
-  description = "GKE Cluster Location"
+  description = "GKE Cluster Location (for GKE)"
   type        = string
+  default     = ""
+}
+
+# AWS-specific variables
+variable "eks_oidc_provider_arn" {
+  description = "EKS OIDC Provider ARN (required for EKS)"
+  type        = string
+  default     = ""
+}
+
+variable "aws_region" {
+  description = "AWS Region (for EKS)"
+  type        = string
+  default     = "us-east-1"
 }
 
 variable "namespace" {

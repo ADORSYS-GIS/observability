@@ -1,0 +1,149 @@
+name: Destroy LGTM Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud Provider'
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+          - aks
+          - generic
+        default: 'gke'
+      destroy_storage:
+        description: 'Delete storage buckets/volumes'
+        required: true
+        type: boolean
+        default: false
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm'
+        required: true
+        type: string
+
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  WORKING_DIR: 'lgtm-stack/terraform'
+
+jobs:
+  validate-confirmation:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation input
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "❌ Destroy confirmation failed. You must type 'DESTROY' to proceed."
+            exit 1
+          fi
+          echo "✅ Destroy confirmation validated"
+
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    needs: validate-confirmation
+    environment:
+      name: ${{ secrets.ENVIRONMENT }}_destroy
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+
+      - name: Setup Cloud Credentials - GKE
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud Credentials - EKS
+        if: inputs.cloud_provider == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Cloud Credentials - AKS
+        if: inputs.cloud_provider == 'aks'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ inputs.cloud_provider }}"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="cloud_provider=${{ inputs.cloud_provider }}" \
+            -var="environment=${{ secrets.ENVIRONMENT }}" \
+            -var="monitoring_domain=${{ secrets.MONITORING_DOMAIN }}" \
+            -var="letsencrypt_email=${{ secrets.LETSENCRYPT_EMAIL }}" \
+            -var="grafana_admin_password=${{ secrets.GRAFANA_ADMIN_PASSWORD }}" \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="cluster_name=${{ secrets.CLUSTER_NAME }}" \
+            -var="cluster_location=${{ secrets.CLUSTER_LOCATION }}" \
+            -var="region=${{ secrets.REGION }}"
+
+      - name: Clean up storage buckets - GKE
+        if: inputs.cloud_provider == 'gke' && inputs.destroy_storage == true
+        run: |
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
+            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            echo "🗑️ Deleting bucket: $BUCKET_NAME"
+            gsutil -m rm -r "gs://${BUCKET_NAME}" || true
+          done
+
+      - name: Clean up storage buckets - EKS
+        if: inputs.cloud_provider == 'eks' && inputs.destroy_storage == true
+        run: |
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
+            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            echo "🗑️ Deleting S3 bucket: $BUCKET_NAME"
+            aws s3 rb "s3://${BUCKET_NAME}" --force || true
+          done
+
+      - name: Clean up storage - AKS
+        if: inputs.cloud_provider == 'aks' && inputs.destroy_storage == true
+        run: |
+          STORAGE_ACCOUNT="${{ secrets.AZURE_STORAGE_ACCOUNT }}"
+          for container in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
+            echo "🗑️ Deleting container: $container"
+            az storage container delete --account-name "$STORAGE_ACCOUNT" --name "$container" || true
+          done
+
+      - name: Verify cleanup
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          echo "📊 Remaining resources in observability namespace:"
+          kubectl get all -n observability || echo "Namespace not found (expected)"
+          echo "✅ Destroy complete"
