@@ -61,4 +61,19 @@ resource "helm_release" "nginx_ingress" {
   timeout = 600
 }
 
-# NOTE: Namespace cleanup removed - Helm manages namespace lifecycle via create_namespace=true
+# Explicit namespace cleanup on destroy
+resource "null_resource" "namespace_cleanup" {
+  count = var.install_nginx_ingress ? 1 : 0
+
+  triggers = {
+    namespace = var.namespace
+  }
+
+  provisioner "local-exec" {
+    when       = destroy
+    command    = "kubectl delete namespace ${self.triggers.namespace} --ignore-not-found=true --timeout=60s || true"
+    on_failure = continue
+  }
+
+  depends_on = [helm_release.nginx_ingress]
+}

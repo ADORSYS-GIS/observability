@@ -151,6 +151,41 @@ resource "null_resource" "hub_argocd_apps_any_namespace" {
   depends_on = [null_resource.hub_argocd_base_install]
 }
 
+# 1.3.1 Configure Resource Health Checks
+# Customizes health assessment to handle Ingress resources without LoadBalancer
+# Prevents applications from stuck in "Progressing" state due to missing ingress IPs
+resource "null_resource" "hub_argocd_resource_health_config" {
+
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      set -o pipefail
+      
+      LOG_FILE="/tmp/argocd-config-resource-health-$$(date +%Y%m%d-%H%M%S).log"
+      
+      echo "Configuring ArgoCD resource health customizations..." | tee -a "$LOG_FILE"
+      
+      # Configure argocd-cm with resource health check overrides
+      if ! kubectl patch configmap argocd-cm -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} \
+        --type='merge' \
+        --patch '{"data":{
+          "resource.customizations.health.networking.k8s.io_Ingress": "hs = {}\nhs.status = \"Healthy\"\nreturn hs\n"
+        }}' 2>&1 | tee -a "$LOG_FILE"; then
+        echo "✗ ERROR: Failed to patch argocd-cm ConfigMap" | tee -a "$LOG_FILE"
+        exit 1
+      fi
+      
+      echo "✓ Resource health customizations configured (Ingress always healthy)" | tee -a "$LOG_FILE"
+      echo "Configuration logs saved to: $LOG_FILE"
+    EOT
+  }
+
+  depends_on = [null_resource.hub_argocd_apps_any_namespace]
+}
+
 # Configure ArgoCD server to run in insecure mode (HTTP) behind ingress/TLS termination
 # Required for OIDC callbacks to work correctly when behind reverse proxy
 resource "null_resource" "hub_argocd_server_insecure" {
@@ -177,7 +212,10 @@ resource "null_resource" "hub_argocd_server_insecure" {
     EOT
   }
 
-  depends_on = [null_resource.hub_argocd_apps_any_namespace]
+  depends_on = [
+    null_resource.hub_argocd_apps_any_namespace,
+    null_resource.hub_argocd_resource_health_config
+  ]
 }
 
 # NOTE: Reconciliation timeout configuration removed from hub cluster

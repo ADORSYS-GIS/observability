@@ -135,5 +135,19 @@ EOF
   depends_on = [helm_release.cert_manager]
 }
 
-# NOTE: Namespace cleanup removed - Helm manages namespace lifecycle via create_namespace=true
-# The CRD cleanup in helm_release destroy provisioner is sufficient
+# Explicit namespace cleanup on destroy
+resource "null_resource" "namespace_cleanup" {
+  count = var.install_cert_manager ? 1 : 0
+
+  triggers = {
+    namespace = var.namespace
+  }
+
+  provisioner "local-exec" {
+    when       = destroy
+    command    = "kubectl delete namespace ${self.triggers.namespace} --ignore-not-found=true --timeout=60s || true"
+    on_failure = continue
+  }
+
+  depends_on = [helm_release.cert_manager]
+}
