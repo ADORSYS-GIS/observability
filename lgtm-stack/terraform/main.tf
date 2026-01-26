@@ -27,6 +27,15 @@ provider "google" {
   region  = var.region
 }
 
+# AWS provider - required by EKS module even when not used (count=0)
+# Skip validation to avoid credential errors when deploying to GKE
+provider "aws" {
+  region                      = var.aws_region
+  skip_credentials_validation = true
+  skip_requesting_account_id  = true
+  skip_metadata_api_check     = true
+}
+
 # The kubernetes and helm providers will use the KUBECONFIG/current-context 
 # established by gcloud/aws/kubectl in the workflow.
 provider "kubernetes" {}
