@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-confirmation
     environment:
-      name: ${{ secrets.ENVIRONMENT }}_destroy
+      name: production
     
     steps:
       - name: Checkout code
