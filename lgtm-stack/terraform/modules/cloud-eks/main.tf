@@ -45,6 +45,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "observability_buckets" {
     id     = "expire-old-data"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = var.retention_days
     }
