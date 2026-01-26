@@ -47,7 +47,7 @@ variable "cert_issuer_kind" {
   default     = "ClusterIssuer"
   validation {
     condition     = contains(["ClusterIssuer", "Issuer"], var.cert_issuer_kind)
-    error_message = "cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
+    error_message = "The cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
   }
 }
 

@@ -62,7 +62,7 @@ variable "ui_expose_method" {
 
   validation {
     condition     = contains(["loadbalancer", "ingress"], var.ui_expose_method)
-    error_message = "ui_expose_method must be either 'loadbalancer' or 'ingress'."
+    error_message = "The ui_expose_method must be either 'loadbalancer' or 'ingress'."
   }
 }
 
@@ -73,7 +73,7 @@ variable "principal_expose_method" {
 
   validation {
     condition     = contains(["loadbalancer", "ingress", "nodeport"], var.principal_expose_method)
-    error_message = "principal_expose_method must be one of 'loadbalancer', 'ingress', or 'nodeport'."
+    error_message = "The principal_expose_method must be one of 'loadbalancer', 'ingress', or 'nodeport'."
   }
 }
 
@@ -116,7 +116,7 @@ variable "keycloak_url" {
 
   validation {
     condition     = var.enable_keycloak ? var.keycloak_url != "" : true
-    error_message = "keycloak_url is required when enable_keycloak is true"
+    error_message = "The keycloak_url is required when enable_keycloak is true."
   }
 }
 
@@ -134,7 +134,7 @@ variable "keycloak_password" {
 
   validation {
     condition     = var.enable_keycloak ? var.keycloak_password != "" : true
-    error_message = "keycloak_password is required when enable_keycloak is true"
+    error_message = "The keycloak_password is required when enable_keycloak is true."
   }
 }
 
@@ -151,7 +151,7 @@ variable "argocd_url" {
 
   validation {
     condition     = var.enable_keycloak ? var.argocd_url != "" : true
-    error_message = "argocd_url is required when enable_keycloak is true"
+    error_message = "The argocd_url is required when enable_keycloak is true."
   }
 }
 
@@ -168,7 +168,7 @@ variable "keycloak_enable_pkce" {
 
   validation {
     condition     = var.keycloak_enable_pkce == true || var.keycloak_enable_pkce == false
-    error_message = "keycloak_enable_pkce must be either true or false."
+    error_message = "The keycloak_enable_pkce must be either true or false."
   }
 }
 
@@ -350,7 +350,7 @@ variable "principal_replicas" {
 
   validation {
     condition     = var.principal_replicas >= 1 && var.principal_replicas <= 5
-    error_message = "principal_replicas must be between 1 and 5."
+    error_message = "The principal_replicas must be between 1 and 5."
   }
 }
 
@@ -365,7 +365,7 @@ variable "kubectl_timeout" {
 
   validation {
     condition     = can(regex("^[0-9]+[smh]$", var.kubectl_timeout))
-    error_message = "kubectl_timeout must be a valid duration (e.g., 300s, 5m, 1h)."
+    error_message = "The kubectl_timeout must be a valid duration (e.g., 300s, 5m, 1h)."
   }
 }
 
@@ -376,7 +376,7 @@ variable "namespace_delete_timeout" {
 
   validation {
     condition     = can(regex("^[0-9]+[smh]$", var.namespace_delete_timeout))
-    error_message = "namespace_delete_timeout must be a valid duration (e.g., 120s, 2m)."
+    error_message = "The namespace_delete_timeout must be a valid duration (e.g., 120s, 2m)."
   }
 }
 
@@ -387,7 +387,7 @@ variable "argocd_install_retry_attempts" {
 
   validation {
     condition     = var.argocd_install_retry_attempts >= 1 && var.argocd_install_retry_attempts <= 10
-    error_message = "argocd_install_retry_attempts must be between 1 and 10."
+    error_message = "The argocd_install_retry_attempts must be between 1 and 10."
   }
 }
 
@@ -398,7 +398,7 @@ variable "argocd_install_retry_delay" {
 
   validation {
     condition     = var.argocd_install_retry_delay >= 5 && var.argocd_install_retry_delay <= 60
-    error_message = "argocd_install_retry_delay must be between 5 and 60 seconds."
+    error_message = "The argocd_install_retry_delay must be between 5 and 60 seconds."
   }
 }
 
@@ -409,7 +409,7 @@ variable "principal_loadbalancer_wait_timeout" {
 
   validation {
     condition     = var.principal_loadbalancer_wait_timeout >= 60 && var.principal_loadbalancer_wait_timeout <= 600
-    error_message = "principal_loadbalancer_wait_timeout must be between 60 and 600 seconds."
+    error_message = "The principal_loadbalancer_wait_timeout must be between 60 and 600 seconds."
   }
 }
 
@@ -442,7 +442,7 @@ variable "resource_proxy_port" {
 
   validation {
     condition     = var.resource_proxy_port > 0 && var.resource_proxy_port <= 65535
-    error_message = "resource_proxy_port must be a valid port number (1-65535)."
+    error_message = "The resource_proxy_port must be a valid port number (1-65535)."
   }
 }
 

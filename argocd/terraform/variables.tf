@@ -17,6 +17,7 @@ variable "keycloak_password" {
 
 variable "target_realm" {
   description = "The Keycloak Realm where ArgoCD will be registered"
+  type        = string
   default     = "argocd" # Change if using a specific realm
 }
 
@@ -97,7 +98,7 @@ variable "cert_issuer_kind" {
   default     = "ClusterIssuer"
   validation {
     condition     = contains(["ClusterIssuer", "Issuer"], var.cert_issuer_kind)
-    error_message = "cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
+    error_message = "The cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
   }
 }
 
