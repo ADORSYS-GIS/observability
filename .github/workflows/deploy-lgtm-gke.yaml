@@ -210,7 +210,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
     environment:
-      name: ${{ secrets.ENVIRONMENT }}
+      name: production
     
     steps:
       - name: Checkout code
