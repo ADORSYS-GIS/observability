@@ -145,3 +145,65 @@ If the plan looks good:
 3. **Review Plan:**
    - Check `plan.txt` artifact
    - Review import report for conflicts
+
+
+## This is for creating the service accout 
+
+```sh
+# Set your project ID (you already have this)
+export PROJECT_ID="observe-472521"
+
+# Set service account name
+export SA_NAME="github-actions-lgtm"
+export SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# 1. Create the service account
+gcloud iam service-accounts create $SA_NAME \
+  --display-name="GitHub Actions - LGTM Stack" \
+  --description="Service account for deploying LGTM stack via GitHub Actions" \
+  --project=$PROJECT_ID
+
+# 2. Grant required roles
+echo "Granting permissions..."
+
+# For GKE cluster access
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/container.admin"
+
+# For GCS bucket management (state + LGTM storage)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.admin"
+
+# For managing service accounts (Workload Identity)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountAdmin"
+
+# For Workload Identity binding
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser"
+
+# For IAM policy management
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/resourcemanager.projectIamAdmin"
+
+# 3. Create and download the key
+gcloud iam service-accounts keys create ~/github-actions-key.json \
+  --iam-account=$SA_EMAIL \
+  --project=$PROJECT_ID
+
+echo "✅ Service account created: ${SA_EMAIL}"
+echo "🔑 Key saved to: ~/github-actions-key.json"
+```
+
+```sh
+# List all roles granted
+gcloud projects get-iam-policy $PROJECT_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:serviceAccount:${SA_EMAIL}" \
+  --format="table(bindings.role)"
+  ```
