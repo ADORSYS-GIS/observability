@@ -338,14 +338,3 @@ nslookup argocd.example.com
 ```
 
 For detailed troubleshooting, see [Troubleshooting Guide](troubleshooting-argocd.md).
-
-## API Documentation
-
-- **ArgoCD API**: [argo-cd.readthedocs.io/en/stable/developer-guide/api-docs](https://argo-cd.readthedocs.io/en/stable/developer-guide/api-docs/)
-- **ArgoCD CLI**: [argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd/)
-- **Keycloak Admin API**: [www.keycloak.org/docs-api](https://www.keycloak.org/docs-api/latest/rest-api/index.html)
-
-## Additional Resources
-
-- [Troubleshooting Guide](troubleshooting-argocd.md)
-- [Official ArgoCD Documentation](https://argo-cd.readthedocs.io/)

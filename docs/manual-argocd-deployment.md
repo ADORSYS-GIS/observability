@@ -33,8 +33,6 @@ Before deploying Argo CD, ensure you have the following:
 - **OIDC Provider** (optional): For SSO authentication (e.g., Keycloak, Okta, Google)
 
 ---
-**Official Documentation**: [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/)  
-**GitHub Repository**: [argoproj/argo-cd](https://github.com/argoproj/argo-cd)
 
 ## Overview
 

@@ -244,6 +244,5 @@ echo "Bundle: $BUNDLE.tar.gz"
 
 ## Getting Help
 
-- **Issues**: https://github.com/argoproj-labs/argocd-agent/issues
-- **Slack**: `#argo-cd-agent-plugin` on [CNCF Slack](https://cloud-native.slack.com)
-- **Docs**: https://argocd-agent.readthedocs.io/
+- [Report Issues](https://github.com/argoproj-labs/argocd-agent/issues)
+- [CNCF Slack #argo-cd-agent-plugin](https://cloud-native.slack.com)

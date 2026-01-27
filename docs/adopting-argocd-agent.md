@@ -317,5 +317,4 @@ terraform apply -target=null_resource.hub_apps_any_namespace -target=null_resour
 
 - [Architecture](argocd-agent-architecture.md)
 - [Terraform Deployment](argocd-agent-terraform-deployment.md)
-- [Operations Guide](argocd-agent-operations.md) - Certificate management, scaling, teardown
 - [Troubleshooting](argocd-agent-troubleshooting.md)
