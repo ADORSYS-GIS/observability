@@ -23,6 +23,11 @@ on:
       - 'lgtm-stack/terraform/**'
       - '.github/workflows/deploy-lgtm-gke.yaml'
 
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
 env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
