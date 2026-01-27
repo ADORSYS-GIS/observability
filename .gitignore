@@ -101,6 +101,8 @@ yarn.lock
 !*.tfvars.template
 .terraform/
 .terraform.lock.hcl
+backend-config.tf
+backend.tf
 
 # Crash logs
 crash.log
