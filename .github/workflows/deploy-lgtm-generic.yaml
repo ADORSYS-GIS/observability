@@ -17,10 +17,6 @@ on:
     paths:
       - 'lgtm-stack/terraform/**'
       - '.github/workflows/deploy-lgtm-generic.yaml'
-  pull_request:
-    paths:
-      - 'lgtm-stack/terraform/**'
-      - '.github/workflows/deploy-lgtm-generic.yaml'
 
 permissions:
   contents: read
