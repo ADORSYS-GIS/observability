@@ -171,8 +171,8 @@ resource "helm_release" "loki" {
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
 
       # Storage buckets
-      loki_chunks_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-chunk"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-chunk"] : "")
-      loki_ruler_bucket  = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-rulers"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-rulers"] : "")
+      loki_chunks_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-chunks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-chunks"] : "")
+      loki_ruler_bucket  = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-ruler"] : "")
 
       aws_region            = var.aws_region
       loki_schema_from_date = var.loki_schema_from_date
@@ -205,9 +205,9 @@ resource "helm_release" "mimir" {
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
 
       # Storage buckets
-      mimir_blocks_bucket       = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-block"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-block"] : "")
-      mimir_ruler_bucket        = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-rulers"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-rulers"] : "")
-      mimir_alertmanager_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-rulers"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-rulers"] : "")
+      mimir_blocks_bucket       = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-blocks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-blocks"] : "")
+      mimir_ruler_bucket        = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
+      mimir_alertmanager_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
 
       aws_region         = var.aws_region
       monitoring_domain  = var.monitoring_domain
@@ -239,7 +239,7 @@ resource "helm_release" "tempo" {
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
 
       # Storage buckets
-      tempo_traces_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["tempo-trace"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["tempo-trace"] : "")
+      tempo_traces_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["tempo-traces"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["tempo-traces"] : "")
 
       aws_region         = var.aws_region
       monitoring_domain  = var.monitoring_domain
