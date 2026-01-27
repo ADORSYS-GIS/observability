@@ -253,7 +253,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-environment, import-existing-resources, terraform-plan]
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/25-setup-pipeline-for-deploying-terraform-scripts')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
     environment:
       name: production
