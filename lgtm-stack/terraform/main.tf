@@ -76,6 +76,7 @@ module "cloud_gke" {
   k8s_namespace            = var.namespace
   k8s_service_account_name = var.k8s_service_account_name
   environment              = var.environment
+  bucket_suffix            = var.bucket_suffix
 }
 
 module "cloud_eks" {
@@ -87,6 +88,7 @@ module "cloud_eks" {
   eks_oidc_provider_arn    = var.eks_oidc_provider_arn
   k8s_namespace            = var.namespace
   k8s_service_account_name = var.k8s_service_account_name
+  bucket_suffix            = var.bucket_suffix
 }
 
 module "cloud_generic" {

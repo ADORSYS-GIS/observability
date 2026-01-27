@@ -31,6 +31,12 @@ variable "cluster_location" {
   default     = ""
 }
 
+variable "bucket_suffix" {
+  description = "Suffix to append to bucket names to avoid conflicts"
+  type        = string
+  default     = "v1"
+}
+
 # AWS-specific variables
 variable "eks_oidc_provider_arn" {
   description = "EKS OIDC Provider ARN (required for EKS)"

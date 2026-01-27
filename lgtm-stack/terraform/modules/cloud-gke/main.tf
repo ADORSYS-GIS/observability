@@ -13,7 +13,7 @@ terraform {
 resource "google_storage_bucket" "observability_buckets" {
   for_each = toset(var.bucket_names)
 
-  name          = "${var.project_id}-${each.key}"
+  name          = var.bucket_suffix != "" ? "${var.project_id}-${each.key}-${var.bucket_suffix}" : "${var.project_id}-${each.key}"
   location      = var.region
   force_destroy = var.force_destroy_buckets
 

@@ -97,22 +97,6 @@ if kubectl get serviceaccount -n "$NAMESPACE" observability-sa &>/dev/null; then
     "Kubernetes Service Account"
 fi
 
-# Check for existing GCS buckets (GKE only)
-if [[ "${CLOUD_PROVIDER:-}" == "gke" ]] && [[ -n "${GCP_PROJECT_ID:-}" ]]; then
-  echo "🪣 Checking for existing GCS buckets..."
-  BUCKETS=("loki-chunks" "loki-ruler" "mimir-blocks" "mimir-ruler" "tempo-traces")
-  for bucket in "${BUCKETS[@]}"; do
-    BUCKET_NAME="${GCP_PROJECT_ID}-${bucket}"
-    if gsutil ls -b "gs://${BUCKET_NAME}" &>/dev/null; then
-      echo "  📦 Found existing bucket: ${BUCKET_NAME}"
-      import_resource \
-        "module.cloud_gke[0].google_storage_bucket.observability_buckets[\"${bucket}\"]" \
-        "${BUCKET_NAME}" \
-        "GCS Bucket: ${BUCKET_NAME}"
-    fi
-  done
-fi
-
 # Summary
 echo ""
 echo "📊 Import Summary:"

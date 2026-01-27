@@ -68,6 +68,8 @@ jobs:
           kubectl get nodes
           echo "✅ Connected to GKE cluster"
 
+
+
   import-existing-resources:
     name: Import Existing Resources
     runs-on: ubuntu-latest
@@ -135,7 +137,7 @@ jobs:
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: [setup-environment, import-existing-resources]
+    needs: [setup-environment]
     outputs:
       plan_exitcode: ${{ steps.plan.outputs.exitcode }}
     
@@ -249,7 +251,7 @@ jobs:
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-plan]
+    needs: [setup-environment, import-existing-resources, terraform-plan]
     if: |
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/25-setup-pipeline-for-deploying-terraform-scripts')) ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
@@ -304,20 +306,6 @@ jobs:
         with:
           name: tfplan
           path: ${{ env.WORKING_DIR }}
-
-      # - name: Import existing GCS buckets if they exist
-      #   working-directory: ${{ env.WORKING_DIR }}
-      #   run: |
-      #     # Import existing buckets to avoid conflicts
-      #     BUCKETS=("loki-chunks" "loki-ruler" "mimir-blocks" "mimir-ruler" "tempo-traces")
-      #     for bucket in "${BUCKETS[@]}"; do
-      #       BUCKET_NAME="${{ secrets.GCP_PROJECT_ID }}-${bucket}"
-      #       if gsutil ls "gs://${BUCKET_NAME}" &>/dev/null; then
-      #         echo "Importing existing bucket: ${BUCKET_NAME}"
-      #         terraform import "module.cloud_gke[0].google_storage_bucket.observability_buckets[\"${bucket}\"]" "${BUCKET_NAME}" || true
-      #       fi
-      #     done
-      #   continue-on-error: true
 
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}

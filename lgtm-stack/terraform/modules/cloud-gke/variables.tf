@@ -3,6 +3,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "bucket_suffix" {
+  description = "Suffix for bucket names"
+  type        = string
+  default     = ""
+}
+
 variable "region" {
   description = "GCP Region for resources"
   type        = string

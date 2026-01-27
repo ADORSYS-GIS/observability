@@ -3,6 +3,12 @@ variable "bucket_prefix" {
   type        = string
 }
 
+variable "bucket_suffix" {
+  description = "Suffix for bucket names"
+  type        = string
+  default     = ""
+}
+
 variable "aws_region" {
   description = "AWS Region"
   type        = string

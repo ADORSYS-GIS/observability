@@ -13,7 +13,7 @@ terraform {
 resource "aws_s3_bucket" "observability_buckets" {
   for_each = toset(var.bucket_names)
 
-  bucket        = "${var.bucket_prefix}-${each.key}"
+  bucket        = var.bucket_suffix != "" ? "${var.bucket_prefix}-${each.key}-${var.bucket_suffix}" : "${var.bucket_prefix}-${each.key}"
   force_destroy = var.force_destroy_buckets
 
   tags = {
