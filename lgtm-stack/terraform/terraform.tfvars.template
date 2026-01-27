@@ -36,7 +36,7 @@ nginx_ingress_release_name = "ingress-nginx"
 nginx_ingress_namespace    = "ingress-nginx"
 ingress_class_name         = "nginx"
 
-# Application Configuration
+# Application Configuration,
 grafana_admin_password = "change-this-secure-password"
 loki_schema_from_date  = "2024-01-01"
 
