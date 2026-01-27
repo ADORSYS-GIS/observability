@@ -119,6 +119,10 @@ jobs:
       - name: Import existing resources
         working-directory: ${{ env.WORKING_DIR }}
         run: bash ../../.github/scripts/import-existing-resources.sh
+        env:
+          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          NAMESPACE: "observability"
         continue-on-error: true
 
       - name: Upload import report
