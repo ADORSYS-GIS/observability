@@ -28,7 +28,6 @@ provider "google" {
 }
 
 # AWS provider - required by EKS module even when not used (count=0)
-# Skip validation to avoid credential errors when deploying to GKE
 provider "aws" {
   region                      = var.aws_region
   skip_credentials_validation = true
@@ -38,32 +37,11 @@ provider "aws" {
   secret_key                  = "mock_secret_key"
 }
 
-# Data sources for GKE cluster authentication
-data "google_client_config" "default" {
-  count = var.cloud_provider == "gke" ? 1 : 0
-}
+# The kubernetes and helm providers will use the configuration established
+# by gcloud/kubectl in the workflow (via ~/.kube/config).
+provider "kubernetes" {}
 
-data "google_container_cluster" "monitoring" {
-  count    = var.cloud_provider == "gke" ? 1 : 0
-  name     = var.cluster_name
-  location = var.cluster_location != "" ? var.cluster_location : var.region
-}
-
-# The kubernetes and helm providers will use explicit credentials for GKE
-# to avoid connection errors in CI environments.
-provider "kubernetes" {
-  host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.monitoring[0].endpoint}" : null
-  token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
-  cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.monitoring[0].master_auth[0].cluster_ca_certificate) : null
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.monitoring[0].endpoint}" : null
-    token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
-    cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.monitoring[0].master_auth[0].cluster_ca_certificate) : null
-  }
-}
+provider "helm" {}
 
 # Modular Cloud Resources
 module "cloud_gke" {
