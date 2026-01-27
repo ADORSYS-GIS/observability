@@ -281,19 +281,19 @@ jobs:
           name: tfplan
           path: ${{ env.WORKING_DIR }}
 
-      - name: Import existing GCS buckets if they exist
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          # Import existing buckets to avoid conflicts
-          BUCKETS=("loki-chunks" "loki-ruler" "mimir-blocks" "mimir-ruler" "tempo-traces")
-          for bucket in "${BUCKETS[@]}"; do
-            BUCKET_NAME="${{ secrets.GCP_PROJECT_ID }}-${bucket}"
-            if gsutil ls "gs://${BUCKET_NAME}" &>/dev/null; then
-              echo "Importing existing bucket: ${BUCKET_NAME}"
-              terraform import "module.cloud_gke[0].google_storage_bucket.observability_buckets[\"${bucket}\"]" "${BUCKET_NAME}" || true
-            fi
-          done
-        continue-on-error: true
+      # - name: Import existing GCS buckets if they exist
+      #   working-directory: ${{ env.WORKING_DIR }}
+      #   run: |
+      #     # Import existing buckets to avoid conflicts
+      #     BUCKETS=("loki-chunks" "loki-ruler" "mimir-blocks" "mimir-ruler" "tempo-traces")
+      #     for bucket in "${BUCKETS[@]}"; do
+      #       BUCKET_NAME="${{ secrets.GCP_PROJECT_ID }}-${bucket}"
+      #       if gsutil ls "gs://${BUCKET_NAME}" &>/dev/null; then
+      #         echo "Importing existing bucket: ${BUCKET_NAME}"
+      #         terraform import "module.cloud_gke[0].google_storage_bucket.observability_buckets[\"${bucket}\"]" "${BUCKET_NAME}" || true
+      #       fi
+      #     done
+      #   continue-on-error: true
 
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
