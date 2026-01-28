@@ -19,6 +19,29 @@ cat > "$REPORT_FILE" <<EOF
 }
 EOF
 
+echo "🧹 Cleaning up conflicting cluster-scoped resources..."
+# Loki creates ClusterRoles that are not namespaced and can conflict if 
+# previously installed in a different namespace (e.g. 'lgtm')
+for cr in monitoring-loki-clusterrole; do
+  if kubectl get clusterrole "$cr" &>/dev/null; then
+    NS_OWNER=$(kubectl get clusterrole "$cr" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
+    if [ -n "$NS_OWNER" ] && [ "$NS_OWNER" != "$NAMESPACE" ]; then
+      echo "  ⚠️  Deleting conflicting ClusterRole $cr (owned by namespace: $NS_OWNER)"
+      kubectl delete clusterrole "$cr" --ignore-not-found
+    fi
+  fi
+done
+
+for crb in monitoring-loki-clusterrolebinding; do
+  if kubectl get clusterrolebinding "$crb" &>/dev/null; then
+    NS_OWNER=$(kubectl get clusterrolebinding "$crb" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
+    if [ -n "$NS_OWNER" ] && [ "$NS_OWNER" != "$NAMESPACE" ]; then
+      echo "  ⚠️  Deleting conflicting ClusterRoleBinding $crb (owned by namespace: $NS_OWNER)"
+      kubectl delete clusterrolebinding "$crb" --ignore-not-found
+    fi
+  fi
+done
+
 # Helper function to attempt terraform import
 import_resource() {
   local tf_address="$1"
