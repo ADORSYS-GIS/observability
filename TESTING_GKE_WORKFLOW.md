@@ -98,6 +98,23 @@ After workflow completes:
 
 The workflow runs these jobs in order:
 
+## Troubleshooting
+
+### 1. ClusterRole Ownership Conflicts
+If you see an error like `invalid ownership metadata; annotation validation error: key "meta.helm.sh/release-namespace" must equal "observability": current value is "lgtm"`, it means residue from a previous installation is blocking the new one.
+
+**Solution**:
+The deployment pipeline now includes an automated **Deep Scan** step. It will automatically detect and delete these conflicting global resources if they are owned by a namespace other than `observability`. Simply re-run the `Deploy LGTM Stack (GKE)` workflow.
+
+### 2. Terraform State Lock
+If you see `Error: Error acquiring the state lock`, a previous run was interrupted.
+
+**Solution**:
+Run the following command in the `lgtm-stack/terraform` directory (replace `<ID>` with the ID from the error message):
+```bash
+terraform force-unlock <ID>
+```
+
 1. **setup-environment** - Validates GKE access
 2. **import-existing-resources** - Imports existing K8s resources
 3. **terraform-plan** - Generates Terraform plan

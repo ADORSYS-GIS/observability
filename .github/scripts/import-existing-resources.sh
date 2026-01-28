@@ -20,27 +20,51 @@ cat > "$REPORT_FILE" <<EOF
 EOF
 
 echo "🧹 Cleaning up conflicting cluster-scoped resources..."
-# Loki creates ClusterRoles that are not namespaced and can conflict if 
-# previously installed in a different namespace (e.g. 'lgtm')
-for cr in monitoring-loki-clusterrole; do
-  if kubectl get clusterrole "$cr" &>/dev/null; then
-    NS_OWNER=$(kubectl get clusterrole "$cr" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
-    if [ -n "$NS_OWNER" ] && [ "$NS_OWNER" != "$NAMESPACE" ]; then
-      echo "  ⚠️  Deleting conflicting ClusterRole $cr (owned by namespace: $NS_OWNER)"
-      kubectl delete clusterrole "$cr" --ignore-not-found
-    fi
-  fi
-done
 
-for crb in monitoring-loki-clusterrolebinding; do
-  if kubectl get clusterrolebinding "$crb" &>/dev/null; then
-    NS_OWNER=$(kubectl get clusterrolebinding "$crb" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
-    if [ -n "$NS_OWNER" ] && [ "$NS_OWNER" != "$NAMESPACE" ]; then
-      echo "  ⚠️  Deleting conflicting ClusterRoleBinding $crb (owned by namespace: $NS_OWNER)"
-      kubectl delete clusterrolebinding "$crb" --ignore-not-found
+# Function to clean up cluster-scoped resources owned by other namespaces
+cleanup_conflicting_resources() {
+  local resource_type="$1"
+  local keywords="$2" # comma-separated keywords
+  
+  echo "  🔍 Scanning $resource_type..."
+  
+  # Get all resources of this type that match any of the keywords
+  # We use grep -E for OR matching
+  local pattern=$(echo "$keywords" | sed 's/,/|/g')
+  local resources=$(kubectl get "$resource_type" -o name | grep -E "$pattern" || true)
+  
+  for res in $resources; do
+    local res_name=$(echo "$res" | cut -d'/' -f2)
+    
+    # Check if Helm owns this resource
+    local ns_owner=$(kubectl get "$res" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
+    
+    if [ -n "$ns_owner" ]; then
+      if [ "$ns_owner" != "$NAMESPACE" ]; then
+        echo "    ⚠️  Deleting $res (owned by conflicting namespace: $ns_owner)"
+        kubectl delete "$res" --ignore-not-found
+        
+        # Add to report
+        jq --arg addr "$res" --arg reason "conflicting_namespace_cleanup" \
+          '.skipped += [{"address": $addr, "reason": $reason, "details": "Deleted conflicting resource owned by \($ns_owner)"}]' \
+          "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
+      else
+        echo "    ✅ $res is already managed by or intended for $NAMESPACE"
+      fi
+    else
+      # If not owned by Helm, we might still want to check if it's one of ours
+      # to avoid "resource already exists" errors during initial install
+      echo "    ℹ️  $res exists but has no Helm ownership metadata (skipping to avoid data loss)"
     fi
-  fi
-done
+  done
+}
+
+# Deep Scan for all LGTM related cluster-scoped components
+KEYWORDS="loki,mimir,tempo,prometheus,grafana,monitoring"
+cleanup_conflicting_resources "clusterrole" "$KEYWORDS"
+cleanup_conflicting_resources "clusterrolebinding" "$KEYWORDS"
+cleanup_conflicting_resources "validatingwebhookconfigurations" "$KEYWORDS"
+cleanup_conflicting_resources "mutatingwebhookconfigurations" "$KEYWORDS"
 
 # Helper function to attempt terraform import
 import_resource() {
