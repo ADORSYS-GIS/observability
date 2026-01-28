@@ -197,6 +197,18 @@ variable "cert_issuer_kind" {
   default     = "ClusterIssuer"
 }
 
+variable "gke_endpoint" {
+  description = "GKE Cluster Endpoint"
+  type        = string
+  default     = ""
+}
+
+variable "gke_ca_certificate" {
+  description = "GKE Cluster CA Certificate"
+  type        = string
+  default     = ""
+}
+
 variable "force_destroy" {
   description = "Whether to force destroy storage buckets even if they contain data"
   type        = bool

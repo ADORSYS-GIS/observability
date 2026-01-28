@@ -39,24 +39,19 @@ provider "aws" {
 
 # The kubernetes and helm providers will use the configuration established
 # by gcloud/kubectl in the workflow (via ~/.kube/config), but for GKE
-# we explicitly configure them to avoid connection issues in GitHub Actions.
-data "google_container_cluster" "gke" {
-  count    = var.cloud_provider == "gke" ? 1 : 0
-  name     = var.cluster_name
-  location = var.cluster_location != "" ? var.cluster_location : var.region
-}
-
+# we explicitly configure them using values passed from the workflow
+# to ensure zero-config connectivity in CI.
 provider "kubernetes" {
-  host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.gke[0].endpoint}" : null
+  host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
   token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
-  cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.gke[0].master_auth[0].cluster_ca_certificate) : null
+  cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
 }
 
 provider "helm" {
   kubernetes {
-    host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.gke[0].endpoint}" : null
+    host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
     token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
-    cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.gke[0].master_auth[0].cluster_ca_certificate) : null
+    cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
   }
 }
 

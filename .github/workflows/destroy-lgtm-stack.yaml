@@ -108,6 +108,15 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      - name: Get GKE Cluster Info
+        if: inputs.cloud_provider == 'gke'
+        id: cluster_info
+        run: |
+          ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --region=${{ secrets.CLUSTER_LOCATION }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(endpoint)')
+          CA_CERT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --region=${{ secrets.CLUSTER_LOCATION }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(masterAuth.clusterCaCertificate)')
+          echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
+          echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
+
       - name: Terraform Destroy
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -121,7 +130,10 @@ jobs:
             -var="cluster_name=${{ secrets.CLUSTER_NAME }}" \
             -var="cluster_location=${{ secrets.CLUSTER_LOCATION }}" \
             -var="region=${{ secrets.REGION }}" \
-            -var="force_destroy=${{ inputs.destroy_storage }}"
+            -var="force_destroy=${{ inputs.destroy_storage }}" \
+            -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
+            -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}"
+
 
       - name: Clean up storage buckets - GKE
         if: inputs.cloud_provider == 'gke' && inputs.destroy_storage == true
