@@ -34,41 +34,30 @@ cleanup_conflicting_resources() {
   local resources=$(kubectl get "$resource_type" -o name | grep -E "$pattern" || true)
   
   for res in $resources; do
-    # Get owner using multiple methods for robustness
+    # Get owner using multiple methods
     local ns_owner=""
-    
-    # Try jsonpath with different escape styles if first fails
     ns_owner=$(kubectl get "$res" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
     
     if [ -z "$ns_owner" ]; then
-      # Fallback to json + jq which is often more reliable for dotted keys
       ns_owner=$(kubectl get "$res" -o json 2>/dev/null | jq -r '.metadata.annotations["meta.helm.sh/release-namespace"] // ""' 2>/dev/null || echo "")
     fi
     
     if [ -n "$ns_owner" ] && [ "$ns_owner" != "$NAMESPACE" ]; then
-      echo "    ⚠️  CONFLICT FOUND: $res is owned by namespace '$ns_owner'"
-      echo "    ❌ Deleting $res to allow takeover by $NAMESPACE..."
-      
-      if kubectl delete "$res" --ignore-not-found --timeout=30s; then
-        echo "    ✅ Successfully deleted $res"
+      echo "    ⚠️  CONFLICT: $res owned by '$ns_owner'. Deleting..."
+      kubectl delete "$res" --ignore-not-found --timeout=30s
+      deleted_any=true
+    elif [ -z "$ns_owner" ]; then
+      # Special case: Resource exists but no Helm owner. 
+      # If it matches our exact release names, it's a "zombie" resource from a failed/partial manual install
+      if [[ "$res" =~ monitoring-loki|monitoring-mimir|monitoring-tempo|monitoring-grafana|monitoring-prometheus ]]; then
+        echo "    ⚠️  ZOMBIE RESOURCE: $res has no owner but matches stack pattern. Deleting to ensure clean install..."
+        kubectl delete "$res" --ignore-not-found --timeout=30s
         deleted_any=true
-        
-        # Add to report
-        jq --arg addr "$res" --arg ns "$ns_owner" \
-          '.skipped += [{"address": $addr, "reason": "conflict_cleanup", "details": "Deleted conflicting resource owned by \($ns)"}]' \
-          "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
-      else
-        echo "    ❌ FAILED to delete $res"
       fi
-    elif [ -n "$ns_owner" ]; then
-      echo "    ✅ $res is correctly owned by $NAMESPACE"
     fi
   done
   
-  if [ "$deleted_any" = true ]; then
-    echo "  ⏳ Waiting 5s for deletion propagation..."
-    sleep 5
-  fi
+  [ "$deleted_any" = true ] && sleep 5
 }
 
 # Deep Scan for all LGTM related cluster-scoped components
