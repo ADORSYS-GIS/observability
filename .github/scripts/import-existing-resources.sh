@@ -25,38 +25,50 @@ echo "🧹 Cleaning up conflicting cluster-scoped resources..."
 cleanup_conflicting_resources() {
   local resource_type="$1"
   local keywords="$2" # comma-separated keywords
+  local deleted_any=false
   
   echo "  🔍 Scanning $resource_type..."
   
   # Get all resources of this type that match any of the keywords
-  # We use grep -E for OR matching
   local pattern=$(echo "$keywords" | sed 's/,/|/g')
   local resources=$(kubectl get "$resource_type" -o name | grep -E "$pattern" || true)
   
   for res in $resources; do
-    local res_name=$(echo "$res" | cut -d'/' -f2)
+    # Get owner using multiple methods for robustness
+    local ns_owner=""
     
-    # Check if Helm owns this resource
-    local ns_owner=$(kubectl get "$res" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
+    # Try jsonpath with different escape styles if first fails
+    ns_owner=$(kubectl get "$res" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
     
-    if [ -n "$ns_owner" ]; then
-      if [ "$ns_owner" != "$NAMESPACE" ]; then
-        echo "    ⚠️  Deleting $res (owned by conflicting namespace: $ns_owner)"
-        kubectl delete "$res" --ignore-not-found
+    if [ -z "$ns_owner" ]; then
+      # Fallback to json + jq which is often more reliable for dotted keys
+      ns_owner=$(kubectl get "$res" -o json 2>/dev/null | jq -r '.metadata.annotations["meta.helm.sh/release-namespace"] // ""' 2>/dev/null || echo "")
+    fi
+    
+    if [ -n "$ns_owner" ] && [ "$ns_owner" != "$NAMESPACE" ]; then
+      echo "    ⚠️  CONFLICT FOUND: $res is owned by namespace '$ns_owner'"
+      echo "    ❌ Deleting $res to allow takeover by $NAMESPACE..."
+      
+      if kubectl delete "$res" --ignore-not-found --timeout=30s; then
+        echo "    ✅ Successfully deleted $res"
+        deleted_any=true
         
         # Add to report
-        jq --arg addr "$res" --arg reason "conflicting_namespace_cleanup" \
-          '.skipped += [{"address": $addr, "reason": $reason, "details": "Deleted conflicting resource owned by \($ns_owner)"}]' \
+        jq --arg addr "$res" --arg ns "$ns_owner" \
+          '.skipped += [{"address": $addr, "reason": "conflict_cleanup", "details": "Deleted conflicting resource owned by \($ns)"}]' \
           "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
       else
-        echo "    ✅ $res is already managed by or intended for $NAMESPACE"
+        echo "    ❌ FAILED to delete $res"
       fi
-    else
-      # If not owned by Helm, we might still want to check if it's one of ours
-      # to avoid "resource already exists" errors during initial install
-      echo "    ℹ️  $res exists but has no Helm ownership metadata (skipping to avoid data loss)"
+    elif [ -n "$ns_owner" ]; then
+      echo "    ✅ $res is correctly owned by $NAMESPACE"
     fi
   done
+  
+  if [ "$deleted_any" = true ]; then
+    echo "  ⏳ Waiting 5s for deletion propagation..."
+    sleep 5
+  fi
 }
 
 # Deep Scan for all LGTM related cluster-scoped components
