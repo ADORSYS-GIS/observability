@@ -196,3 +196,9 @@ variable "cert_issuer_kind" {
   type        = string
   default     = "ClusterIssuer"
 }
+
+variable "force_destroy" {
+  description = "Whether to force destroy storage buckets even if they contain data"
+  type        = bool
+  default     = false
+}

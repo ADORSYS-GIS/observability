@@ -11,6 +11,11 @@ on:
           - plan
           - apply
         default: 'plan'
+      force_destroy:
+        description: 'Force destroy storage buckets (use with caution)'
+        required: true
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -206,6 +211,7 @@ jobs:
           monitoring_domain      = "${{ secrets.MONITORING_DOMAIN }}"
           letsencrypt_email      = "${{ secrets.LETSENCRYPT_EMAIL }}"
           grafana_admin_password = "${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
+          force_destroy          = ${{ inputs.force_destroy || 'false' }}
           EOF
 
       - name: Terraform Plan

@@ -38,10 +38,31 @@ provider "aws" {
 }
 
 # The kubernetes and helm providers will use the configuration established
-# by gcloud/kubectl in the workflow (via ~/.kube/config).
-provider "kubernetes" {}
+# by gcloud/kubectl in the workflow (via ~/.kube/config), but for GKE
+# we explicitly configure them to avoid connection issues in GitHub Actions.
+data "google_container_cluster" "gke" {
+  count    = var.cloud_provider == "gke" ? 1 : 0
+  name     = var.cluster_name
+  location = var.cluster_location != "" ? var.cluster_location : var.region
+}
 
-provider "helm" {}
+provider "kubernetes" {
+  host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.gke[0].endpoint}" : null
+  token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+  cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.gke[0].master_auth[0].cluster_ca_certificate) : null
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = var.cloud_provider == "gke" ? "https://${data.google_container_cluster.gke[0].endpoint}" : null
+    token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+    cluster_ca_certificate = var.cloud_provider == "gke" ? base64decode(data.google_container_cluster.gke[0].master_auth[0].cluster_ca_certificate) : null
+  }
+}
+
+data "google_client_config" "default" {
+  count = var.cloud_provider == "gke" ? 1 : 0
+}
 
 # Modular Cloud Resources
 module "cloud_gke" {
@@ -55,6 +76,7 @@ module "cloud_gke" {
   k8s_service_account_name = var.k8s_service_account_name
   environment              = var.environment
   bucket_suffix            = var.bucket_suffix
+  force_destroy_buckets    = var.force_destroy
 }
 
 module "cloud_eks" {
@@ -67,6 +89,7 @@ module "cloud_eks" {
   k8s_namespace            = var.namespace
   k8s_service_account_name = var.k8s_service_account_name
   bucket_suffix            = var.bucket_suffix
+  force_destroy_buckets    = var.force_destroy
 }
 
 module "cloud_generic" {

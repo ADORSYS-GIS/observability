@@ -97,6 +97,36 @@ if kubectl get serviceaccount -n "$NAMESPACE" observability-sa &>/dev/null; then
     "Kubernetes Service Account"
 fi
 
+# GKE Specific Imports (GCP Service Account and Buckets)
+if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
+  GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
+  if [ -z "$GCP_PROJECT_ID" ]; then
+    echo "⚠️  GCP_PROJECT_ID not set, skipping GCP-level imports"
+  else
+    SA_NAME="gke-observability-sa"
+    SA_EMAIL="${SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+    
+    if gcloud iam service-accounts describe "$SA_EMAIL" --project="$GCP_PROJECT_ID" &>/dev/null; then
+      echo "👤 Found existing GCP Service Account: $SA_NAME"
+      import_resource \
+        "module.cloud_gke[0].google_service_account.observability_sa" \
+        "projects/${GCP_PROJECT_ID}/serviceAccounts/${SA_EMAIL}" \
+        "GCP Service Account: $SA_NAME"
+    fi
+
+    for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
+      BUCKET_NAME="${GCP_PROJECT_ID}-${bucket}-v1"
+      if gsutil ls -p "$GCP_PROJECT_ID" "gs://${BUCKET_NAME}" &>/dev/null; then
+        echo "🪣  Found existing bucket: $BUCKET_NAME"
+        import_resource \
+          "module.cloud_gke[0].google_storage_bucket.observability_buckets[\"${bucket}\"]" \
+          "$BUCKET_NAME" \
+          "GCS Bucket: $BUCKET_NAME"
+      fi
+    done
+  fi
+fi
+
 # Summary
 echo ""
 echo "📊 Import Summary:"

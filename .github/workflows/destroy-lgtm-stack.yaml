@@ -120,7 +120,8 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="cluster_name=${{ secrets.CLUSTER_NAME }}" \
             -var="cluster_location=${{ secrets.CLUSTER_LOCATION }}" \
-            -var="region=${{ secrets.REGION }}"
+            -var="region=${{ secrets.REGION }}" \
+            -var="force_destroy=${{ inputs.destroy_storage }}"
 
       - name: Clean up storage buckets - GKE
         if: inputs.cloud_provider == 'gke' && inputs.destroy_storage == true
