@@ -51,6 +51,7 @@ gsutil mb -p $PROJECT_ID -l us-central1 gs://$BUCKET_NAME
 gsutil versioning set on gs://$BUCKET_NAME
 ```
 
+
 ### 4. Trigger Plan Mode
 
 **Option A: Via GitHub UI**
