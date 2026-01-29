@@ -1,0 +1,267 @@
+name: Deploy ArgoCD Agent (GKE)
+
+on:
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      environment:
+        description: 'Target Environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-gke.yaml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'argocd-agent/terraform/**'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TERRAFORM_VERSION: '1.5.7'
+  ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+  WORKING_DIR: 'argocd-agent/terraform/environments/${{ inputs.environment || 'dev' }}'
+  CLOUD_PROVIDER: 'gke'
+
+jobs:
+  setup-environment:
+    name: Setup Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ env.ENVIRONMENT }}
+      working_dir: ${{ env.WORKING_DIR }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: setup-environment
+    environment: ${{ needs.setup-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials "${{ secrets.CLUSTER_NAME }}" \
+            --region="${{ secrets.REGION }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Config Backend
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Smart Import Existing Resources
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          NAMESPACE: argocd-agent
+          CLOUD_PROVIDER: gke
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh
+          $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh || true
+
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          hub_cluster_context      = "gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}"
+          hub_namespace            = "argocd-agent"
+          spoke_namespace          = "argocd-agent"
+          create_default_admin_user = true
+          default_admin_password   = "${{ secrets.PASSWORD }}"
+          
+          # Keycloak (Optional - enables if secrets exist)
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          argocd_url               = "${{ secrets.ARGOCD_URL }}"
+          
+          # Ingress/Cert (Example Secrets)
+          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          argocd_host              = "${{ secrets.ARGOCD_HOST }}"
+          EOF
+          
+          echo "✅ Created terraform.tfvars with injected secrets"
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          
+          # Save plain text for PR comment
+          terraform show -no-color tfplan > plan.txt
+          exit 0
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+      - name: Comment PR (Plan)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const planPath = '${{ env.WORKING_DIR }}/plan.txt';
+            let plan = '';
+            try {
+              plan = fs.readFileSync(planPath, 'utf8');
+            } catch (error) {
+              plan = 'Plan file not found or empty.';
+            }
+            
+            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '\n\n... (truncated)' : plan;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🌍 Terraform Plan (GKE - ${{ env.ENVIRONMENT }})\n\`\`\`hcl\n${truncatedPlan}\n\`\`\``
+            })
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    environment: ${{ needs.setup-environment.outputs.environment }}
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials "${{ secrets.CLUSTER_NAME }}" \
+            --region="${{ secrets.REGION }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Config Backend
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    environment: ${{ needs.setup-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials "${{ secrets.CLUSTER_NAME }}" \
+            --region="${{ secrets.REGION }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Run Verification Script
+        env:
+          NAMESPACE: argocd-agent
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
+          $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh

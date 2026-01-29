@@ -1,0 +1,158 @@
+name: Destroy ArgoCD Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev, staging, prod)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      cloud_provider:
+        description: 'Cloud provider'
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+          - generic
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm complete removal'
+        required: true
+      # GKE specific
+      gcp_project_id:
+        description: '[GKE] GCP Project ID'
+        required: false
+      gcp_region:
+        description: '[GKE] GCP Region'
+        required: false
+      # EKS specific
+      aws_region:
+        description: '[EKS] AWS Region'
+        required: false
+      # Generic
+      cluster_name:
+        description: 'Cluster Name (for updating kubeconfig locally)'
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  destroy-argocd-agent:
+    name: Destroy ArgoCD Agent
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "❌ Destruction not confirmed. You must type 'DESTROY' to proceed."
+            exit 1
+          fi
+          echo "✅ Destruction confirmed"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # GKE Authentication
+      - name: Authenticate to Google Cloud
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl (GKE)
+        if: inputs.cloud_provider == 'gke'
+        run: |
+          gcloud container clusters get-credentials "${{ inputs.cluster_name }}" \
+            --region="${{ inputs.gcp_region }}" \
+            --project="${{ inputs.gcp_project_id }}"
+
+      # EKS Authentication
+      - name: Configure AWS Credentials
+        if: inputs.cloud_provider == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Configure kubectl (EKS)
+        if: inputs.cloud_provider == 'eks'
+        run: |
+          aws eks update-kubeconfig \
+            --name "${{ inputs.cluster_name }}" \
+            --region "${{ inputs.aws_region }}"
+
+      # Generic Authentication
+      - name: Configure kubectl (Generic)
+        if: inputs.cloud_provider == 'generic'
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Configure Terraform Backend
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          # Pass cloud provider and environment
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh ${{ inputs.cloud_provider }} ${{ inputs.environment }}
+
+      - name: Terraform Init
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment }}
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment }}
+        env:
+          # Pass basic input vars if needed, though tfvars or state usually suffice for destroy.
+          # We just need to authorize and init state.
+          TF_VAR_gcp_project_id: ${{ inputs.gcp_project_id }}
+          TF_VAR_gcp_region: ${{ inputs.gcp_region }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+          TF_VAR_cluster_name: ${{ inputs.cluster_name }}
+          TF_VAR_environment: ${{ inputs.environment }}
+        run: terraform destroy -auto-approve
+
+      - name: Verify Cleanup
+        env:
+          NAMESPACE: argocd-agent
+        run: |
+          echo "🔍 Verifying namespace removal..."
+          if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+            echo "⚠️  Namespace still exists, attempting manual cleanup..."
+            kubectl delete namespace "$NAMESPACE" --wait=false || true
+          else
+            echo "✅ Namespace successfully removed"
+          fi
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## ArgoCD Agent Destruction" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cloud Provider**: ${{ inputs.cloud_provider }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster**: ${{ inputs.cluster_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **All ArgoCD Agent resources have been destroyed**" >> $GITHUB_STEP_SUMMARY
