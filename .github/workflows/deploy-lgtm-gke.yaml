@@ -147,7 +147,7 @@ jobs:
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: [setup-environment]
+    needs: [setup-environment, import-existing-resources]
     outputs:
       plan_exitcode: ${{ steps.plan.outputs.exitcode }}
     
