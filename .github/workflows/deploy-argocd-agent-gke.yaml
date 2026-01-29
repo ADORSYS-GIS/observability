@@ -119,6 +119,9 @@ jobs:
           KUBE_CONTEXT=$(kubectl config current-context)
           
           cat > terraform.tfvars <<EOF
+          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
+          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
+          region                   = "${{ secrets.REGION }}"
           hub_cluster_context      = "$KUBE_CONTEXT"
           hub_namespace            = "argocd"
           spoke_namespace          = "argocd"

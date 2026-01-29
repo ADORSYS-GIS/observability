@@ -18,8 +18,24 @@ variable "deploy_spokes" {
 # CLUSTER CONFIGURATION
 # =============================================================================
 
+
 variable "hub_cluster_context" {
   description = "Kubectl context for hub cluster"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Name of the GKE cluster"
+  type        = string
+}
+
+variable "region" {
+  description = "Region of the GKE cluster"
+  type        = string
+}
+
+variable "project_id" {
+  description = "GCP Project ID"
   type        = string
 }
 

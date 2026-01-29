@@ -4,14 +4,26 @@
 # Configures providers for hub and spoke clusters
 # =============================================================================
 
+data "google_client_config" "default" {}
+
+data "google_container_cluster" "hub" {
+  name     = var.cluster_name
+  location = var.region
+  project  = var.project_id
+}
+
 provider "kubernetes" {
-  config_path = "~/.kube/config"
+  host                   = "https://${data.google_container_cluster.hub.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(data.google_container_cluster.hub.master_auth[0].cluster_ca_certificate)
 }
 
 provider "helm" {
   alias = "hub"
   kubernetes {
-    config_path = "~/.kube/config"
+    host                   = "https://${data.google_container_cluster.hub.endpoint}"
+    token                  = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(data.google_container_cluster.hub.master_auth[0].cluster_ca_certificate)
   }
 }
 
