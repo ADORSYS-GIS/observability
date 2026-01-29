@@ -247,6 +247,40 @@ jobs:
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform init
 
+      - name: Create terraform.tfvars
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        run: |
+          # Get the actual current kubectl context name
+          KUBE_CONTEXT=$(kubectl config current-context)
+          
+          # Fetch cluster details using gcloud (bypasses terraform data source permissions issue)
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
+
+          cat > terraform.tfvars <<EOF
+          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
+          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
+          region                   = "${{ secrets.REGION }}"
+          cluster_endpoint         = "$CLUSTER_ENDPOINT"
+          cluster_ca_certificate   = "$CLUSTER_CA"
+          hub_cluster_context      = "$KUBE_CONTEXT"
+          hub_namespace            = "argocd"
+          spoke_namespace          = "argocd"
+          create_default_admin_user = true
+          default_admin_password   = "${{ secrets.PASSWORD }}"
+          
+          # Keycloak
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          argocd_url               = "${{ secrets.ARGOCD_URL }}"
+
+          # Ingress/Cert
+          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          EOF
+          echo "✅ Created terraform.tfvars"
+
       - name: Install argocd-agentctl
         run: |
           curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
