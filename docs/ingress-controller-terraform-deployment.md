@@ -1,234 +1,158 @@
-# NGINX Ingress Controller - Terraform Deployment
+# NGINX Ingress Controller Terraform Deployment
 
-External traffic routing and Layer 7 load balancing with multi-cloud support.
+Layer 7 load balancing and external traffic routing using Terraform with multi-cloud support.
 
-**Version**: 4.14.2 (latest stable as of January 2026)  
-**Official Docs**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)
-
-## Overview
-
-Deploys NGINX Ingress Controller with:
-- Multi-cloud support (GKE, EKS, AKS, generic)
-- Cloud provider LoadBalancer integration
-- Path-based and host-based routing
-- SSL/TLS termination with cert-manager
-- WebSocket support
-- High availability with replica scaling
-
----
-
-## State Management
-
-Terraform state tracks ingress controller deployment.
-
-### State File Location
-
-```
-<bucket>/terraform/ingress-controller/
-```
-
-### Backend Setup by Provider
-
-**GKE (GCS)**:
-```bash
-export TF_STATE_BUCKET="your-bucket"
-cd ingress-controller/terraform
-bash ../../.github/scripts/configure-backend.sh gke ingress-controller
-```
-
-**EKS (S3)**:
-```bash
-export TF_STATE_BUCKET="your-bucket"
-export AWS_REGION="us-east-1"
-bash ../../.github/scripts/configure-backend.sh eks ingress-controller
-```
-
-**AKS (Azure Blob)**:
-```bash
-export AZURE_STORAGE_ACCOUNT="your-account"
-export AZURE_STORAGE_CONTAINER="terraform-state"
-bash ../../.github/scripts/configure-backend.sh aks ingress-controller
-```
-
-See [Terraform State Management Guide](terraform-state-management.md) for bucket setup.
-
----
+**Official**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | **GitHub**: [kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx)
 
 ## Prerequisites
 
 | Requirement | Version | Purpose |
 |-------------|---------|---------|
 | Terraform | ≥ 1.5.0 | Infrastructure provisioning |
-| kubectl | ≥ 1.24 | Kubernetes access |
-| Kubernetes | ≥ 1.24 | Target cluster |
-
-**Cloud provider authentication** must be configured before deployment.
-
----
+| kubectl | ≥ 1.24 | Cluster access |
+| Kubernetes | ≥ 1.24 | GKE, EKS, AKS, or generic with LoadBalancer support |
 
 ## Deployment Methods
 
-### Option A: Automated (GitHub Actions)
+### Option A: GitHub Actions (Automated CI/CD)
 
-**Workflows**:
-- `.github/workflows/deploy-ingress-controller-gke.yaml`
-- `.github/workflows/deploy-ingress-controller-eks.yaml`
-- `.github/workflows/deploy-ingress-controller-aks.yaml`
-- `.github/workflows/destroy-ingress-controller.yaml`
+Workflows automatically handle backend configuration, authentication, and LoadBalancer provisioning.
 
-**Features**:
-- Terraform plan with PR comments
-- Multi-cloud backend (GCS/S3/Azure Blob)
-- Automatic authentication
-- LoadBalancer validation
-- Zero-downtime upgrades
+**Available Workflows:**
+- `.github/workflows/deploy-ingress-controller-gke.yaml` - Google Kubernetes Engine
+- `.github/workflows/deploy-ingress-controller-eks.yaml` - Amazon EKS
+- `.github/workflows/deploy-ingress-controller-aks.yaml` - Azure AKS
+- `.github/workflows/destroy-ingress-controller.yaml` - Cleanup
 
-**Usage**:
-1. Configure GitHub secrets (see workflow files)
-2. Push to trigger deployment
-3. Review plan in PR comments
-4. Merge to apply
+**Required GitHub Secrets:**
 
-### Option B: Manual Terraform
+| Provider | Required Secrets |
+|----------|------------------|
+| **GKE** | `GCP_SA_KEY`, `GCP_PROJECT_ID`, `CLUSTER_NAME`, `CLUSTER_LOCATION`, `REGION`, `TF_STATE_BUCKET` |
+| **EKS** | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CLUSTER_NAME`, `TF_STATE_BUCKET` |
+| **AKS** | `AZURE_CREDENTIALS`, `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_CONTAINER`, `RESOURCE_GROUP`, `CLUSTER_NAME` |
 
-#### Step 1: Configure Backend
+**Usage:**
+1. Configure GitHub repository secrets
+2. Push changes to trigger workflow
+3. Review Terraform plan in PR comments
+4. Merge to apply changes
+
+### Option B: Terraform CLI (Manual)
+
+**Step 1: Setup**
 
 ```bash
-cd ingress-controller/terraform
+cd observability/ingress-controller/terraform
 
-# Example: GKE
-export TF_STATE_BUCKET="my-tf-state"
-bash ../../.github/scripts/configure-backend.sh gke ingress-controller
+# Verify cluster connection
+kubectl config current-context
+kubectl cluster-info
 ```
 
-#### Step 2: Configure Variables
+**Step 2: Configure Backend**
+
+```bash
+# GKE
+export TF_STATE_BUCKET="your-gcs-bucket"
+bash ../../.github/scripts/configure-backend.sh gke ingress-controller
+
+# EKS
+export TF_STATE_BUCKET="your-s3-bucket"
+export AWS_REGION="us-east-1"
+bash ../../.github/scripts/configure-backend.sh eks ingress-controller
+
+# AKS
+export AZURE_STORAGE_ACCOUNT="your-storage-account"
+export AZURE_STORAGE_CONTAINER="terraform-state"
+bash ../../.github/scripts/configure-backend.sh aks ingress-controller
+```
+
+**State File Location:** `<bucket>/terraform/ingress-controller/terraform.tfstate`
+
+**Step 3: Configure Variables**
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
 ```
 
-**Configuration**:
-```hcl
-# Cloud provider
-cloud_provider = "gke"  # Options: gke, eks, aks, generic
+Edit `terraform.tfvars`:
 
-# GKE-specific (if using GKE)
-project_id         = "your-gcp-project"
-region             = "us-central1"
-gke_endpoint       = ""  # Auto-populated
-gke_ca_certificate = ""  # Auto-populated
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `cloud_provider` | Yes | Provider type | `gke`, `eks`, `aks`, `generic` |
+| `install_nginx_ingress` | Yes | Install controller | `true` |
+| `nginx_ingress_version` | No | Chart version | `4.14.2` (default) |
+| `release_name` | No | Helm release name | `nginx-monitoring` (default) |
+| `ingress_class_name` | No | IngressClass name | `nginx` (default) |
+| `namespace` | No | Installation namespace | `ingress-nginx` (default) |
+| `replica_count` | No | Controller replicas | `1` (default) |
 
-# Ingress controller
-install_nginx_ingress = true
-nginx_ingress_version = "4.14.2"
-namespace             = "ingress-nginx"
-release_name          = "nginx-monitoring"
-ingress_class_name    = "nginx"
+**GKE-Specific:**
+- `project_id` - GCP project ID
+- `region` - GCP region
+- `gke_endpoint` - Auto-populated by workflows (leave empty for CLI)
+- `gke_ca_certificate` - Auto-populated by workflows (leave empty for CLI)
 
-# High availability
-replica_count = 2  # Use 3 for production
+**EKS-Specific:**
+- `aws_region` - AWS region
 
-# Optional: Resource limits
-# controller_resources = {
-#   requests = {
-#     cpu    = "100m"
-#     memory = "90Mi"
-#   }
-#   limits = {
-#     cpu    = "1000m"
-#     memory = "512Mi"
-#   }
-# }
-```
-
-#### Step 3: Deploy
+**Step 4: Deploy**
 
 ```bash
 terraform init
+terraform validate
 terraform plan
 terraform apply
 ```
 
-Deployment: ~2-3 minutes.
-
----
-
-## Verification
-
-### Check Pods
+**Step 5: Verify**
 
 ```bash
+# Check pods
 kubectl get pods -n ingress-nginx
-```
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ingress-nginx -n ingress-nginx --timeout=300s
 
-Expected: `nginx-monitoring-ingress-nginx-controller-*` pods running.
-
-### Check LoadBalancer
-
-```bash
+# Check LoadBalancer
 kubectl get svc -n ingress-nginx
+EXTERNAL_IP=$(kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "External IP: $EXTERNAL_IP"
+
+# Verify IngressClass
+kubectl get ingressclass nginx
 ```
 
-Expected:
-```
-NAME                                        TYPE           EXTERNAL-IP
-nginx-monitoring-ingress-nginx-controller   LoadBalancer   34.xx.xx.xx
-```
+## Usage Example
 
-**Note**: `EXTERNAL-IP` may be `<pending>` for 1-3 minutes.
-
-### Verify IngressClass
-
-```bash
-kubectl get ingressclass
-```
-
-Expected:
-```
-NAME    CONTROLLER             
-nginx   k8s.io/ingress-nginx
-```
-
-### Test Ingress
+Create an Ingress resource:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: test-ingress
-  namespace: default
+  name: example-ingress
 spec:
   ingressClassName: nginx
   rules:
-    - host: test.example.com
+    - host: example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: test-service
+                name: example-service
                 port:
                   number: 80
 ```
 
-```bash
-kubectl apply -f test-ingress.yaml
-kubectl get ingress test-ingress
-```
-
----
-
-## Usage
-
-### Basic Ingress with TLS
+With TLS (requires cert-manager):
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: example
-  namespace: default
+  name: example-ingress
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
@@ -250,154 +174,54 @@ spec:
                   number: 80
 ```
 
-### Common Annotations
+## State Management
 
-```yaml
-metadata:
-  annotations:
-    # SSL redirect
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    
-    # Force SSL
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    
-    # Body size limit
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    
-    # WebSocket
-    nginx.ingress.kubernetes.io/websocket-services: "ws-service"
-    
-    # Rate limiting
-    nginx.ingress.kubernetes.io/limit-rps: "10"
-    
-    # Timeout
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-```
+State files are stored remotely and persist across deployments:
 
-### DNS Configuration
+| Provider | Backend | State File Path |
+|----------|---------|-----------------|
+| **GKE** | Google Cloud Storage | `gs://<bucket>/terraform/ingress-controller/terraform.tfstate` |
+| **EKS** | S3 + DynamoDB | `s3://<bucket>/terraform/ingress-controller/terraform.tfstate` |
+| **AKS** | Azure Blob | `<account>/<container>/terraform/ingress-controller/terraform.tfstate` |
+
+**The backend configuration script (`configure-backend.sh`) creates backend-config.tf but NEVER deletes state files.**
+
+## Upgrading
 
 ```bash
-# Get LoadBalancer IP
+cd observability/ingress-controller/terraform
+
+# Update version in terraform.tfvars
+terraform plan
+terraform apply
+```
+
+## Uninstalling
+
+```bash
+terraform destroy
+```
+
+**Note:** This removes the Ingress Controller and its LoadBalancer, affecting all Ingress resources.
+
+## DNS Configuration
+
+Point your domain A records to the LoadBalancer external IP:
+
+```bash
+# Get external IP
 kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller \
   -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-
-# Create A record: example.com -> <EXTERNAL-IP>
 ```
 
----
-
-## Operations
-
-### Upgrade Version
-
-Update `terraform.tfvars`:
-```hcl
-nginx_ingress_version = "4.15.0"
-```
-
-Apply:
-```bash
-terraform apply
-```
-
-### Scale Replicas
-
-Update `terraform.tfvars`:
-```hcl
-replica_count = 3
-```
-
-Apply:
-```bash
-terraform apply
-```
-
-### View Logs
-
-```bash
-# All controllers
-kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx --tail=100
-
-# Specific pod
-kubectl logs -n ingress-nginx <pod-name>
-
-# Follow
-kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx -f
-```
-
-### Metrics
-
-```bash
-# Port-forward
-kubectl port-forward -n ingress-nginx svc/nginx-monitoring-ingress-nginx-controller-metrics 10254:10254
-
-# Query
-curl http://localhost:10254/metrics
-```
-
----
+Create DNS records:
+- `example.com` → `<EXTERNAL-IP>` (A record)
+- `*.example.com` → `<EXTERNAL-IP>` (A record for wildcard subdomains)
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| **State lock error** | Wait or `terraform force-unlock LOCK_ID` |
-| **Bucket not found** | Create bucket (see [State Management](terraform-state-management.md)) |
-| **Backend config changed** | Run `terraform init -reconfigure` |
-| **LoadBalancer stuck** | Check quotas: `kubectl describe svc -n ingress-nginx` |
-| **404 errors** | Verify Ingress exists: `kubectl get ingress -A` |
-| **IngressClass conflict** | Use unique name: `ingress_class_name = "nginx-custom"` |
-| **TLS not working** | Check cert: `kubectl get certificate -A` |
-| **Permission denied** | Verify cloud IAM roles (see workflow files) |
+See [Troubleshooting Guide](troubleshooting-ingress-controller.md).
 
-See [Troubleshooting Guide](troubleshooting-ingress-controller.md) for detailed solutions.
+## Adoption
 
----
-
-## Production Configuration
-
-```hcl
-replica_count = 3
-
-controller_resources = {
-  requests = {
-    cpu    = "200m"
-    memory = "256Mi"
-  }
-  limits = {
-    cpu    = "2000m"
-    memory = "1Gi"
-  }
-}
-```
-
-### High Traffic Settings
-
-```yaml
-# Custom Helm values
-controller:
-  config:
-    keep-alive: "75"
-    keep-alive-requests: "10000"
-    proxy-buffer-size: "16k"
-    worker-processes: "auto"
-```
-
----
-
-## Supported Cloud Providers
-
-| Provider | Authentication | Backend | LoadBalancer |
-|----------|---------------|---------|--------------|
-| **GKE** | `gcloud` + SA | GCS | Network LB / HTTP(S) LB |
-| **EKS** | `aws` + IAM | S3 | Network LB / Classic LB |
-| **AKS** | `az` + SP | Azure Blob | Azure LB |
-| **Generic** | `kubectl` | K8s Secret | Cloud-specific |
-
----
-
-## Next Steps
-
-- [Adoption Guide](adopting-ingress-controller.md) - Import existing installation
-- [Troubleshooting](troubleshooting-ingress-controller.md) - Common issues
-- [NGINX Docs](https://kubernetes.github.io/ingress-nginx/) - Official documentation
+Already have NGINX Ingress Controller? See [Adoption Guide](adopting-ingress-controller.md).

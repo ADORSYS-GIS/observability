@@ -1,36 +1,26 @@
-# Cert-Manager Certificate Automation
+# cert-manager
 
-Automated TLS certificate management and issuance for Kubernetes workloads with multi-cloud support.
+Automated TLS certificate management for Kubernetes with ACME provider support (Let's Encrypt).
 
-**Official Documentation**: [cert-manager.io/docs](https://cert-manager.io/docs/)  
-**GitHub Repository**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
+**Official**: [cert-manager.io/docs](https://cert-manager.io/docs/) | **GitHub**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
 
 ## Features
 
-- **Multi-Cloud Support**: Deploy on GKE, EKS, AKS, or any Kubernetes cluster
-- **Automated Issuance**: Certificate provisioning from Let's Encrypt and other ACME providers
-- **Automatic Renewal**: Certificates renewed before expiration with zero downtime
-- **Ingress Integration**: Seamless TLS termination for Ingress resources
-- **Multiple Issuers**: Support for production and staging Let's Encrypt environments
-- **CI/CD Ready**: GitHub Actions workflows for automated multi-cloud deployments
+- Multi-cloud support (GKE, EKS, AKS, generic Kubernetes)
+- Automated certificate provisioning and renewal
+- ACME protocol (Let's Encrypt production and staging)
+- Ingress TLS termination
+- Certificate lifecycle management via Custom Resource Definitions
 
 ## Deployment
 
-### Automated (Terraform + GitHub Actions)
-Recommended approach with infrastructure-as-code and CI/CD automation.
-
-**Supports:** GKE, EKS, AKS  
-**Features:** Multi-cloud backend, automated authentication, zero-downtime upgrades
-
-See [Terraform deployment guide](../docs/cert-manager-terraform-deployment.md)
-
-### Manual (Helm & kubectl)
-Command-line deployment with manual configuration.
-
-See [Manual deployment guide](../docs/cert-manager-manual-deployment.md)
+| Method | Guide | Use Case |
+|--------|-------|----------|
+| **Manual** | [Manual Deployment](../docs/cert-manager-manual-deployment.md) | Quick setup with Helm/kubectl |
+| **Terraform** | [Terraform Deployment](../docs/cert-manager-terraform-deployment.md) | IaC with remote state |
+| **GitHub Actions** | See workflows in `.github/workflows/deploy-cert-manager-*.yaml` | Automated CI/CD |
 
 ## Operations
 
-- **Adopting Existing Installation**: [Adoption guide](../docs/adopting-cert-manager.md)
-- **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-cert-manager.md)
-
+- [Adopting Existing Installation](../docs/adopting-cert-manager.md)
+- [Troubleshooting](../docs/troubleshooting-cert-manager.md)

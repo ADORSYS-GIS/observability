@@ -1,6 +1,13 @@
+# Workflow: Deploy NGINX Ingress Controller (EKS)
+# This workflow handles:
+# - Infrastructure planning with Terraform
+# - NGINX Ingress Controller deployment for external traffic routing
+# - Remote state management in AWS S3 with DynamoDB locking
+# - Deployment verification
 name: Deploy ingress-controller (EKS)
 
 on:
+  # Manual trigger with plan/apply option
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -11,21 +18,25 @@ on:
           - plan
           - apply
         default: 'plan'
+  # Auto-trigger on push to main branch
   push:
     branches:
       - main
     paths:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-eks.yaml'
+  # Run plan on pull requests for review
   pull_request:
     paths:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-eks.yaml'
 
+# Required permissions for workflow operations
 permissions:
-  contents: read
-  pull-requests: write
+  contents: read           # Read repository content
+  pull-requests: write     # Comment Terraform plans on PRs
 
+# Global environment variables used across all jobs
 env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
@@ -33,14 +44,19 @@ env:
   CLOUD_PROVIDER: 'eks'
 
 jobs:
+  # Job 1: Verify EKS cluster connectivity
+  # This job runs first to ensure cluster access before Terraform operations
   setup-environment:
     name: Setup EKS Environment
     runs-on: ubuntu-latest
     
     steps:
+      # Fetch repository code containing Terraform configurations
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to AWS using access keys
+      # Required for: cluster access, state storage (S3), resource provisioning
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -48,31 +64,39 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Install kubectl and configure EKS cluster access
       - name: Setup kubectl and get EKS credentials
         run: |
+          # Download and install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
+          # Fetch EKS cluster credentials and configure kubeconfig
           aws eks update-kubeconfig \
             --name ${{ secrets.CLUSTER_NAME }} \
             --region ${{ secrets.AWS_REGION }}
           
+          # Verify connectivity to EKS cluster
           kubectl cluster-info
           kubectl get nodes
           echo "✅ Connected to EKS cluster"
 
+  # Job 2: Generate and review Terraform infrastructure plan
+  # Runs after environment setup, creates deployment plan for review
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
     needs: [setup-environment]
     outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
     
     steps:
+      # Fetch repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to AWS (needed for S3 state bucket access)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -80,22 +104,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Install Terraform CLI for infrastructure operations
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # Install kubectl and configure EKS cluster access
+      # Required for Kubernetes provider configuration in Terraform
       - name: Setup kubectl
         run: |
+          # Download and install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
+          # Configure EKS kubeconfig
           aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      # Remove stale local backend configuration files
+      # State files in S3 remain intact and accessible
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: rm -f backend.tf backend-config.tf
 
+      # Generate backend configuration for S3 state storage with DynamoDB locking
+      # State file location: s3://<bucket>/terraform/ingress-controller/terraform.tfstate
+      # Script generates backend-config.tf but never deletes state files
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -104,14 +138,19 @@ jobs:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
+      # Initialize Terraform and sync with remote state
+      # Downloads provider plugins and existing state
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # Validate Terraform configuration syntax and structure
+      # Catches configuration errors before planning
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
+      # Create Terraform variables file with ingress-controller configuration
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -126,6 +165,9 @@ jobs:
           replica_count         = 2
           EOF
 
+      # Generate deployment plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
+      # Plan saved to tfplan binary file for apply job
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
@@ -145,6 +187,8 @@ jobs:
           terraform show tfplan > plan.txt
           exit 0
 
+      # Upload plan artifacts for apply job and PR comments
+      # Binary plan ensures apply executes exactly what was reviewed
       - name: Upload plan
         uses: actions/upload-artifact@v4
         with:
@@ -154,6 +198,8 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
+      # Post plan output to pull request for review
+      # Truncate at 65000 chars to stay within GitHub comment size limit
       - name: Comment PR with plan
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -170,6 +216,9 @@ jobs:
               body: `## Terraform Plan - ingress-controller (EKS)\n\`\`\`\n${truncatedPlan}\n\`\`\``
             })
 
+  # Job 3: Execute approved deployment
+  # Only runs on main branch pushes or manual apply trigger
+  # Requires production environment approval
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
@@ -178,12 +227,14 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
-      name: production
+      name: production  # Requires approval before execution
     
     steps:
+      # Fetch repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to AWS for resource provisioning
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -191,18 +242,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Install Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # Install and configure kubectl for Kubernetes provider
       - name: Setup kubectl
         run: |
+          # Download and install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
+          # Configure EKS kubeconfig
           aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      # Recreate terraform.tfvars identical to plan job
+      # Ensures variables match what was planned
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -217,10 +274,12 @@ jobs:
           replica_count         = 2
           EOF
 
+      # Remove stale backend configs before regenerating
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: rm -f backend.tf backend-config.tf
 
+      # Configure backend to access remote state
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -229,24 +288,31 @@ jobs:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
+      # Initialize Terraform with remote state
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # Download plan artifact from plan job
+      # Ensures we apply exactly what was reviewed
       - name: Download plan
         uses: actions/download-artifact@v4
         with:
           name: tfplan-ingress-controller-eks
           path: ${{ env.WORKING_DIR }}
 
+      # Execute deployment using saved plan
+      # -auto-approve: Safe because plan was already reviewed
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
+      # Extract deployment outputs (LoadBalancer DNS, service info, etc.)
       - name: Output deployment info
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform output -json > terraform-outputs.json
 
+      # Store outputs as artifact for reference and troubleshooting
       - name: Upload outputs
         uses: actions/upload-artifact@v4
         with:
@@ -254,15 +320,19 @@ jobs:
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
           retention-days: 30
 
+  # Job 4: Verify successful deployment
+  # Runs after apply completes to validate ingress-controller is operational
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-apply]
     
     steps:
+      # Fetch repository code (if verification scripts needed)
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to AWS for cluster access
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -270,28 +340,37 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Install kubectl and configure EKS cluster access
       - name: Setup kubectl
         run: |
+          # Download and install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
+          # Configure EKS kubeconfig
           aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      # Verify all ingress-controller components are healthy
+      # Checks: namespace, pods, IngressClass, LoadBalancer service
       - name: Verify ingress-controller deployment
         run: |
           echo "🔍 Verifying ingress-controller deployment..."
           
+          # Confirm namespace exists
           echo "Checking ingress-nginx namespace..."
           kubectl get namespace ingress-nginx
           
+          # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ingress-nginx
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=300s
           
+          # Confirm IngressClass resource is created
           echo "Checking IngressClass..."
           kubectl get ingressclass nginx
           kubectl describe ingressclass nginx
           
+          # Verify LoadBalancer service has external DNS
           echo "Checking LoadBalancer service..."
           kubectl get svc -n ingress-nginx
           

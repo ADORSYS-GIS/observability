@@ -1,6 +1,13 @@
+# Automated deployment of cert-manager to Google Kubernetes Engine (GKE)
+# This workflow handles:
+# - Infrastructure planning with Terraform
+# - Automated TLS certificate management setup
+# - Remote state management in Google Cloud Storage
+# - Deployment verification
 name: Deploy cert-manager (GKE)
 
 on:
+  # Manual trigger with plan/apply option
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -11,22 +18,26 @@ on:
           - plan
           - apply
         default: 'plan'
+  # Auto-trigger on push to main branch
   push:
     branches:
       - main
     paths:
       - 'cert-manager/terraform/**'
       - '.github/workflows/deploy-cert-manager-gke.yaml'
+  # Run plan on pull requests for review
   pull_request:
     paths:
       - 'cert-manager/terraform/**'
       - '.github/workflows/deploy-cert-manager-gke.yaml'
 
+# Required permissions for workflow operations
 permissions:
-  contents: read
-  pull-requests: write
-  id-token: write
+  contents: read           # Read repository content
+  pull-requests: write     # Comment Terraform plans on PRs
+  id-token: write         # Google Cloud Workload Identity
 
+# Global environment variables used across all jobs
 env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
@@ -34,69 +45,90 @@ env:
   CLOUD_PROVIDER: 'gke'
 
 jobs:
+  # Job 1: Verify GKE cluster connectivity
+  # This job runs first to ensure cluster access before Terraform operations
   setup-environment:
     name: Setup GKE Environment
     runs-on: ubuntu-latest
     
     steps:
+      # Fetch repository code containing Terraform configurations
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to Google Cloud using service account credentials
+      # Required for: cluster access, state storage (GCS), resource provisioning
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # Install and configure gcloud CLI for GKE interactions
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Install kubectl and configure cluster access
+      # Also installs GKE auth plugin for modern authentication
       - name: Setup kubectl and get GKE credentials
         run: |
+          # Download and install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
+          # Install GKE authentication plugin (required for kubectl 1.26+)
           echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
           curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
           sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
+          # Fetch GKE cluster credentials and configure kubeconfig
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
           
+          # Verify connectivity to GKE cluster
           kubectl cluster-info
           kubectl get nodes
           echo "✅ Connected to GKE cluster"
 
+  # Job 2: Generate and review Terraform infrastructure plan
+  # Runs after environment setup, creates deployment plan for review
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
     needs: [setup-environment]
     outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
     
     steps:
+      # Fetch repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to GCP (needed for state bucket access)
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # Install gcloud CLI
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Install kubectl and configure cluster access for Terraform kubernetes provider
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
+          # Configure kubeconfig for Terraform kubernetes provider
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
+      # Extract GKE cluster endpoint and CA certificate for Terraform provider configuration
+      # These values are required by the Kubernetes provider to communicate with the cluster
       - name: Get GKE Cluster Info
         id: cluster_info
         run: |
@@ -105,11 +137,14 @@ jobs:
           echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
           echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
 
+      # Install Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # Remove stale backend configuration files to ensure clean regeneration
+      # IMPORTANT: State files in GCS are NEVER deleted - only local config files
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -118,6 +153,8 @@ jobs:
           # This ensures clean regeneration of backend configuration
           rm -f backend.tf backend-config.tf
 
+      # Generate backend-config.tf for remote state storage in GCS
+      # State file location: gs://<bucket>/terraform/cert-manager/terraform.tfstate
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -125,14 +162,18 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
+      # Initialize Terraform: download providers, configure backend, migrate/load state
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # Validate Terraform syntax and configuration
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
+      # Generate terraform.tfvars with deployment configuration
+      # Includes GKE-specific settings and cert-manager configuration
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -154,25 +195,31 @@ jobs:
           ingress_class_name   = "nginx"
           EOF
 
+      # Execute Terraform plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          set +e
+          set +e  # Don't exit on non-zero status
           terraform plan -out=tfplan -detailed-exitcode
           EXIT_CODE=$?
-          set -e
+          set -e  # Re-enable exit on error
           
+          # Save exit code for downstream jobs
           echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
           
+          # Fail only if plan had errors (exit code 1)
           if [ $EXIT_CODE -eq 1 ]; then
             echo "❌ Terraform plan failed!"
             exit 1
           fi
           
+          # Generate human-readable plan output for PR comments
           terraform show tfplan > plan.txt
           exit 0
 
+      # Save plan artifacts for apply job (tfplan binary + human-readable output)
       - name: Upload plan
         uses: actions/upload-artifact@v4
         with:
@@ -182,6 +229,8 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
+      # Post Terraform plan as PR comment for review
+      # Only runs on pull_request events
       - name: Comment PR with plan
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -189,6 +238,7 @@ jobs:
           script: |
             const fs = require('fs');
             const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan.txt', 'utf8');
+            // Truncate plan if it exceeds GitHub comment size limit
             const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '\n\n... (truncated)' : plan;
             
             github.rest.issues.createComment({
@@ -198,6 +248,8 @@ jobs:
               body: `## Terraform Plan - cert-manager (GKE)\n\`\`\`\n${truncatedPlan}\n\`\`\``
             })
 
+  # Job 3: Apply Terraform plan to deploy cert-manager
+  # Only runs on: push to main OR manual workflow_dispatch with 'apply' action
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
@@ -206,35 +258,42 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
-      name: production
+      name: production  # Requires approval if environment protection rules are configured
     
     steps:
+      # Fetch repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # Authenticate to GCP for cluster and state bucket access
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # Install gcloud CLI
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Install kubectl and configure cluster access
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
+          # Configure kubeconfig for Terraform provider
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
+      # Extract cluster connection details for Terraform provider
       - name: Get GKE Cluster Info
         id: cluster_info
         run: |
@@ -243,6 +302,7 @@ jobs:
           echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
           echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
 
+      # Recreate terraform.tfvars (must match plan job configuration)
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -264,6 +324,7 @@ jobs:
           ingress_class_name   = "nginx"
           EOF
 
+      # Remove stale backend configs
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -272,6 +333,7 @@ jobs:
           # This ensures clean regeneration of backend configuration
           rm -f backend.tf backend-config.tf
 
+      # Regenerate backend configuration (must match plan job)
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -279,24 +341,30 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
+      # Re-initialize Terraform with backend configuration
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # Download the plan artifact generated in terraform-plan job
       - name: Download plan
         uses: actions/download-artifact@v4
         with:
           name: tfplan-cert-manager-gke
           path: ${{ env.WORKING_DIR }}
 
+      # Execute the plan to deploy cert-manager
+      # Updates remote state in GCS: gs://<bucket>/terraform/cert-manager/terraform.tfstate
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
+      # Extract Terraform outputs (deployment metadata, resource IDs, etc.)
       - name: Output deployment info
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform output -json > terraform-outputs.json
 
+      # Save outputs as artifact for potential downstream jobs or auditing
       - name: Upload outputs
         uses: actions/upload-artifact@v4
         with:
@@ -304,44 +372,58 @@ jobs:
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
           retention-days: 30
 
+  # Job 4: Verify successful deployment
+  # Validates that cert-manager components are running and ClusterIssuer is ready
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-apply]
     
     steps:
+      # Fetch repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to GCP for cluster access
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # Install gcloud CLI
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Install kubectl and configure cluster access
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
+          # Configure kubeconfig
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
+      # Perform deployment validation checks
+      # 1. Verify namespace exists
+      # 2. Verify all pods are ready (5-minute timeout)
+      # 3. Verify ClusterIssuer is configured and ready
       - name: Verify cert-manager deployment
         run: |
           echo "🔍 Verifying cert-manager deployment..."
           
+          # Check namespace creation
           echo "Checking cert-manager namespace..."
           kubectl get namespace cert-manager
           
+          # Check pod status and wait for ready state
           echo "Checking cert-manager pods..."
           kubectl get pods -n cert-manager
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
           
+          # Verify ClusterIssuer configuration
           echo "Checking ClusterIssuer..."
           kubectl get clusterissuer letsencrypt-prod
           kubectl describe clusterissuer letsencrypt-prod
