@@ -376,8 +376,8 @@ jobs:
           if [ "$SCOPE_UUID" != "null" ]; then
              MAPPER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes/$SCOPE_UUID/protocol-mappers/models" | jq -r '.[] | select(.name=="group-membership") | .id')
              if [ -n "$MAPPER_UUID" ] && [ "$MAPPER_UUID" != "null" ]; then
-                # Import ID Format: realm/client_scope_id/mapper_id
-                import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/$SCOPE_UUID/$MAPPER_UUID"
+                # Import ID Format: realm/client-scope/client_scope_id/mapper_id
+                import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/client-scope/$SCOPE_UUID/$MAPPER_UUID"
              fi
           fi
 
