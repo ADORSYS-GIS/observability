@@ -58,7 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: setup-environment
     environment: ${{ needs.setup-environment.outputs.environment }}
-    
+    env:
+      KUBECONFIG: /home/runner/.kube/config
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -109,11 +110,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: terraform init
-
-      # Import step removed as manual import was performed
 
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
@@ -143,8 +140,6 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
@@ -186,6 +181,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-plan]
     environment: ${{ needs.setup-environment.outputs.environment }}
+    env:
+      KUBECONFIG: /home/runner/.kube/config
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
@@ -239,8 +236,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: terraform init
 
       - name: Download Plan Artifact
@@ -251,8 +246,6 @@ jobs:
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: terraform apply -auto-approve tfplan
 
   verify-deployment:
@@ -260,6 +253,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-apply]
     environment: ${{ needs.setup-environment.outputs.environment }}
+    env:
+      KUBECONFIG: /home/runner/.kube/config
     steps:
       - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud
