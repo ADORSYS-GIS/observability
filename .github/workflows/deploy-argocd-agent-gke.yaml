@@ -298,50 +298,83 @@ jobs:
       - name: Import Keycloak Resources if exist
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
-          # 1. Import Realm
-          if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_realm.argocd\[0\]"; then
-            echo "Attempting to import existing 'argocd' realm..."
-            terraform import module.hub_cluster[0].keycloak_realm.argocd[0] argocd || echo "Import failed or not needed"
+          # Variable Setup
+          KC_URL="${{ secrets.KEYCLOAK_URL }}"
+          KC_USER="admin"  # Assuming default admin user, update if different
+          KC_PASS="${{ secrets.KEYCLOAK_PASSWORD }}"
+          REALM="argocd"
+          
+          echo "Installing jq..."
+          sudo apt-get install -y jq
+
+          # 1. Get Access Token (from master realm)
+          echo "Authenticating to Keycloak..."
+          TOKEN=$(curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "username=$KC_USER" \
+            -d "password=$KC_PASS" \
+            -d "grant_type=password" | jq -r '.access_token')
+
+          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+            echo "⚠ Failed to get Keycloak token. Skipping imports (Keycloak might not be up yet)."
+            exit 0
+          fi
+          
+          # Helper function for import
+          import_resource() {
+            local ADDR=$1
+            local ID=$2
+            if ! terraform state list | grep -q "$ADDR"; then
+              echo "Importing $ADDR with ID $ID..."
+              terraform import "$ADDR" "$ID" || echo "⚠ Import failed for $ADDR"
+            else
+              echo "✓ $ADDR already in state"
+            fi
+          }
+
+          # 2. Import Realm
+          # Realm import uses just the realm name
+          if curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM" | grep -q "\"realm\":\"$REALM\""; then
+            import_resource "module.hub_cluster[0].keycloak_realm.argocd[0]" "$REALM"
           fi
 
-          # 2. Import Client (argocd) - Import format: realm/client-id (UUID)
-          # We need to fetch the client UUID from Keycloak first or try importing with just ID if provider allows (usually needs UUID)
-          # Note: The keycloak provider strictly requires UUID for import.
-          # Since getting the UUID via CLI/API without authentication tools installed is hard, we warn.
-          # BUT, often 'terraform import' accepts the ID for the first argument if it can look it up.
-          # Let's try optimistic import with the ID 'argocd/argocd' (realm/clientId)
-          if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_openid_client.argocd\[0\]"; then
-             # Since we can't easily get the UUID, we might skip this automated import and rely on the user or 'terraform apply' handling it.
-             # However, 'apply' FAILED with 409. So we MUST import.
-             # HACK: We can ignore the 409 error in the module logic, OR properly import here.
-             # Proper import requires the UUID. Without 'kcadm.sh' or 'curl' with token, it's hard.
-             # Let's trust that the provider can handle 'realm/client_id' format or we skip it for now and
-             # assume the previous error logs gave us enough hint.
-             # Actually, the error said "Client argocd already exists".
-             echo "⚠ Cannot automatically import Keycloak Client without UUID. Attempting 'argocd/argocd'..."
-             terraform import module.hub_cluster[0].keycloak_openid_client.argocd[0] argocd/argocd || echo "Import failed (expected if UUID required)"
+          # 3. Import Client (argocd)
+          echo "Looking up Client 'argocd'..."
+          CLIENT_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/clients?clientId=argocd" | jq -r '.[0].id')
+          if [ "$CLIENT_UUID" != "null" ]; then
+             import_resource "module.hub_cluster[0].keycloak_openid_client.argocd[0]" "$REALM/$CLIENT_UUID"
           fi
 
-          # 3. Import Client Scope (groups)
-          if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_openid_client_scope.groups\[0\]"; then
-            terraform import module.hub_cluster[0].keycloak_openid_client_scope.groups[0] argocd/groups || echo "Import failed"
+          # 4. Import Client Scope (groups)
+          echo "Looking up Client Scope 'groups'..."
+          SCOPE_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes" | jq -r '.[] | select(.name=="groups") | .id')
+          if [ -n "$SCOPE_UUID" ]; then
+             import_resource "module.hub_cluster[0].keycloak_openid_client_scope.groups[0]" "$REALM/$SCOPE_UUID"
           fi
 
-          # 4. Import Groups
-          for GROUP in ArgoCDAdmins ArgoCDDevelopers ArgoCDViewers; do
-             RESOURCE_NAME="argocd_$(echo $GROUP | sed 's/ArgoCD//' | tr '[:upper:]' '[:lower:]')s"
-             # Adjustment for 'admin' -> 'admins' vs resource name 'argocd_admins'
-             if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_group.${RESOURCE_NAME}\[0\]"; then
-                echo "Attempting to import group $GROUP..."
-                # Import path needs UUID usually. Trying realm/alias.
-                terraform import module.hub_cluster[0].keycloak_group.${RESOURCE_NAME}[0] argocd/$GROUP || echo "Import failed"
+          # 5. Import Groups
+          # Mapping: ArgoCDAdmins -> argocd_admins, ArgoCDDevelopers -> argocd_developers, ArgoCDViewers -> argocd_viewers
+          declare -A GROUPS
+          GROUPS=( ["ArgoCDAdmins"]="argocd_admins" ["ArgoCDDevelopers"]="argocd_developers" ["ArgoCDViewers"]="argocd_viewers" )
+
+          for GROUP_NAME in "${!GROUPS[@]}"; do
+             RESOURCE_NAME="${GROUPS[$GROUP_NAME]}"
+             echo "Looking up Group '$GROUP_NAME'..."
+             GROUP_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/groups?search=$GROUP_NAME" | jq -r ".[0] | select(.name==\"$GROUP_NAME\") | .id")
+             
+             if [ "$GROUP_UUID" != "null" ] && [ -n "$GROUP_UUID" ]; then
+                import_resource "module.hub_cluster[0].keycloak_group.${RESOURCE_NAME}[0]" "$REALM/$GROUP_UUID"
+             else
+                echo "Group $GROUP_NAME not found via API."
              fi
           done
 
-          # 5. Import User
-           if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_user.argocd_admin\[0\]"; then
-              terraform import module.hub_cluster[0].keycloak_user.argocd_admin[0] argocd/argocd-admin || echo "Import failed"
-           fi
+          # 6. Import User (argocd-admin)
+          echo "Looking up User 'argocd-admin'..."
+          USER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/users?username=argocd-admin" | jq -r '.[0].id')
+          if [ "$USER_UUID" != "null" ]; then
+             import_resource "module.hub_cluster[0].keycloak_user.argocd_admin[0]" "$REALM/$USER_UUID"
+          fi
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
