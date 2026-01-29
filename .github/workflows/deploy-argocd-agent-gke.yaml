@@ -1,4 +1,4 @@
-name: Deploy ArgoCD Agent (GKE)
+name: Deploy ArgoCD Agent (GKE) - v1.0.1
 
 on:
   workflow_dispatch:
