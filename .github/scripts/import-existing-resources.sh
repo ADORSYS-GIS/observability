@@ -76,45 +76,51 @@ smart_import() {
 # Check if namespace exists in K8s
 if kubectl get namespace "$NAMESPACE" &>/dev/null; then
   echo "📂 Found existing namespace in K8s: $NAMESPACE"
+  # Use correct module address for Hub Cluster namespace
   smart_import \
-    "kubernetes_namespace.argocd_agent" \
+    "module.hub_cluster[0].kubernetes_namespace.hub_argocd" \
     "$NAMESPACE" \
-    "Namespace: $NAMESPACE"
+    "Hub Namespace: $NAMESPACE"
 else
   echo "  ℹ️  Namespace $NAMESPACE does not exist in K8s (will be created by Terraform)"
 fi
 
+# Service Account Imports DISABLED
+# Reason: These resources are created via 'null_resource' / 'kubectl apply' in Terraform
+# and imply no directly managed 'resource "kubernetes_service_account"' block exists.
+# Attempting to import them would fail with "Resource not found in configuration".
+
 # Check for existing service accounts in argocd-agent namespace
-if kubectl get namespace "$NAMESPACE" &>/dev/null; then
-  if kubectl get serviceaccount -n "$NAMESPACE" argocd-agent-sa &>/dev/null; then
-    echo "👤 Found existing service account in K8s: argocd-agent-sa"
-    smart_import \
-      "kubernetes_service_account.argocd_agent_sa" \
-      "$NAMESPACE/argocd-agent-sa" \
-      "Kubernetes Service Account"
-  fi
-fi
+# if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+#   if kubectl get serviceaccount -n "$NAMESPACE" argocd-agent-sa &>/dev/null; then
+#     echo "👤 Found existing service account in K8s: argocd-agent-sa (Skipping import - managed via manifests)"
+#     # smart_import \
+#     #   "kubernetes_service_account.argocd_agent_sa" \
+#     #   "$NAMESPACE/argocd-agent-sa" \
+#     #   "Kubernetes Service Account"
+#   fi
+# fi
 
 # GKE Specific: Check for GCP Service Account (if CLOUD_PROVIDER is set)
-if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
-  GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
-  if [ -n "$GCP_PROJECT_ID" ]; then
-    SA_NAME="gke-argocd-agent-sa"
-    SA_EMAIL="${SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
-    
-    if command -v gcloud &>/dev/null; then
-      if gcloud iam service-accounts describe "$SA_EMAIL" --project="$GCP_PROJECT_ID" &>/dev/null 2>&1; then
-        echo "👤 Found existing GCP Service Account: $SA_NAME"
-        smart_import \
-          "module.cloud_gke[0].google_service_account.argocd_agent_sa" \
-          "projects/${GCP_PROJECT_ID}/serviceAccounts/${SA_EMAIL}" \
-          "GCP Service Account: $SA_NAME"
-      fi
-    else
-      echo "  ⚠️  gcloud CLI not available, skipping GCP service account check"
-    fi
-  fi
-fi
+# if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
+#   GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
+#   if [ -n "$GCP_PROJECT_ID" ]; then
+#     SA_NAME="gke-argocd-agent-sa"
+#     SA_EMAIL="${SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+#     
+#     if command -v gcloud &>/dev/null; then
+#       if gcloud iam service-accounts describe "$SA_EMAIL" --project="$GCP_PROJECT_ID" &>/dev/null 2>&1; then
+#         echo "👤 Found existing GCP Service Account: $SA_NAME (Skipping import - module not active)"
+#         # smart_import \
+#         #   "module.cloud_gke[0].google_service_account.argocd_agent_sa" \
+#         #   "projects/${GCP_PROJECT_ID}/serviceAccounts/${SA_EMAIL}" \
+#         #   "GCP Service Account: $SA_NAME"
+#       fi
+#     else
+#       echo "  ⚠️  gcloud CLI not available, skipping GCP service account check"
+#     fi
+#   fi
+# fi
 
 # Keycloak Realm: Check if realm already exists (by attempting import)
 KEYCLOAK_URL="${KEYCLOAK_URL:-}"
