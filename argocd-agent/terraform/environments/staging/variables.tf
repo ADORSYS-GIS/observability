@@ -115,9 +115,6 @@ variable "keycloak_url" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.keycloak_url != "" : true
-    error_message = "The keycloak_url is required when enable_keycloak is true."
-  }
 }
 
 variable "keycloak_user" {
@@ -133,9 +130,6 @@ variable "keycloak_password" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.keycloak_password != "" : true
-    error_message = "The keycloak_password is required when enable_keycloak is true."
-  }
 }
 
 variable "keycloak_realm" {
@@ -150,9 +144,6 @@ variable "argocd_url" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.argocd_url != "" : true
-    error_message = "The argocd_url is required when enable_keycloak is true."
-  }
 }
 
 variable "keycloak_client_id" {
@@ -197,9 +188,6 @@ variable "default_admin_password" {
   default     = ""
 
   validation {
-    condition     = var.create_default_admin_user && var.enable_keycloak ? var.default_admin_password != "" : true
-    error_message = "The default_admin_password is required when create_default_admin_user is true. Set TF_VAR_default_admin_password environment variable."
-  }
 }
 
 variable "default_admin_password_temporary" {
