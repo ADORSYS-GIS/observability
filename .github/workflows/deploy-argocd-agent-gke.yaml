@@ -136,7 +136,7 @@ jobs:
         id: plan
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         env:
-          KUBE_CONFIG_PATH: ${{ env.KUBECONFIG }}
+          KUBECONFIG: /home/runner/.kube/config
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
@@ -215,6 +215,8 @@ jobs:
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          KUBECONFIG: /home/runner/.kube/config
         run: terraform apply -auto-approve tfplan
 
   verify-deployment:
