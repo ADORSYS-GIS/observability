@@ -113,7 +113,7 @@ variable "keycloak_url" {
   description = "Keycloak URL (e.g., https://keycloak.example.com)"
   type        = string
   default     = ""
-
+}
 
 variable "keycloak_user" {
   description = "Keycloak admin username"
@@ -126,7 +126,7 @@ variable "keycloak_password" {
   type        = string
   sensitive   = true
   default     = ""
-
+}
 
 variable "keycloak_realm" {
   description = "Keycloak realm name to create ArgoCD client in"
@@ -138,7 +138,7 @@ variable "argocd_url" {
   description = "ArgoCD URL for Keycloak redirect URIs (e.g., https://argocd.example.com)"
   type        = string
   default     = ""
-
+}
 
 variable "keycloak_client_id" {
   description = "Keycloak OIDC client ID for ArgoCD"
@@ -180,7 +180,7 @@ variable "default_admin_password" {
   type        = string
   sensitive   = true
   default     = ""
-
+}
 
 variable "default_admin_password_temporary" {
   description = "Whether the default admin password is temporary (user must change on first login)"
