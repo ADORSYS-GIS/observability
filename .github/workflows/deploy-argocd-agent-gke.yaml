@@ -63,21 +63,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Configure kubectl (GKE)
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Setup Full Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
 
       - name: Verify kubectl connection
         run: |
@@ -87,9 +77,13 @@ jobs:
           kubectl config get-contexts
           echo "Cluster info:"
           kubectl cluster-info
-          echo "KUBECONFIG location:"
-          echo $KUBECONFIG
-          ls -la $HOME/.kube/
+          echo "Testing connection to hub cluster..."
+          kubectl get nodes --context=gke_observe-472521_europe-west3_observe-prod-cluster
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Config Backend
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
@@ -101,8 +95,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: terraform init
 
       # Import step removed as manual import was performed
@@ -110,11 +102,9 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
-          # Get the actual current kubectl context name
-          KUBE_CONTEXT=$(kubectl config current-context)
-          
+          # Use the hardcoded context from terraform.tfvars instead of dynamic detection
           cat > terraform.tfvars <<EOF
-          hub_cluster_context      = "$KUBE_CONTEXT"
+          hub_cluster_context      = "gke_observe-472521_europe-west3_observe-prod-cluster"
           hub_namespace            = "argocd"
           spoke_namespace          = "argocd"
           create_default_admin_user = true
@@ -135,8 +125,6 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
