@@ -111,8 +111,8 @@ jobs:
           create_default_admin_user = true
           default_admin_password   = "${{ secrets.PASSWORD }}"
           
-          # Keycloak (Optional - enables if secrets exist)
-          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          # Keycloak (TEMPORARILY DISABLED to avoid 409 conflicts)
+          enable_keycloak          = false
           keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
           keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
           keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
@@ -123,7 +123,7 @@ jobs:
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
           EOF
           
-          echo "✅ Created terraform.tfvars with injected secrets"
+          echo "✅ Created terraform.tfvars with injected secrets (Keycloak temporarily disabled)"
 
       - name: Smart Import Existing Resources
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
