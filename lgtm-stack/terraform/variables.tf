@@ -3,7 +3,7 @@ variable "cloud_provider" {
   type        = string
   default     = "gke"
   validation {
-    condition     = contains(["gke", "eks", "generic"], var.c loud_provider)
+    condition     = contains(["gke", "eks", "generic"], var.cloud_provider)
     error_message = "The cloud provider must be one of the following: gke, eks, or generic."
   }
 }
