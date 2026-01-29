@@ -48,7 +48,7 @@ jobs:
       - name: Set Environment Variables
         id: set-env
         run: |
-          ENV="${{ inputs.environment || 'dev' }}"
+          ENV="${{ inputs.environment || 'prod' }}"
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           # Path relative to repository root
           echo "working_dir=argocd-agent/terraform/environments/$ENV" >> $GITHUB_OUTPUT
