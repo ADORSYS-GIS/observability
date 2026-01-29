@@ -24,11 +24,14 @@ Select a deployment method based on your requirements:
 
 | Method | Guide | Use Case |
 |--------|-------|----------|
-| **Overview** | [Deployment Guide](../docs/cert-manager-terraform-deployment.md) | Method comparison and decision guidance |
-| **Automated** | [GitHub Actions Deployment](../docs/cert-manager-github-actions.md) | Production environments, CI/CD pipelines |
-| **Manual** | [Manual Helm Deployment](../docs/cert-manager-manual-deployment.md) | Learning, local development, direct control |
+| **Manual Helm** | [Manual Deployment](../docs/cert-manager-manual-deployment.md) | Learning, local development, direct control |
+| **Terraform CLI** | [Terraform Deployment](../docs/cert-manager-terraform-deployment.md) | Infrastructure as Code, reproducible deployments |
+| **GitHub Actions** | [Automated CI/CD](../docs/cert-manager-github-actions.md) | Production environments, team workflows |
 
-For deployment method selection guidance, see the [Deployment Guide](../docs/cert-manager-terraform-deployment.md).
+**Choosing a Method:**
+- **Manual Helm**: Best for learning, quick setups, local development
+- **Terraform CLI**: Best for infrastructure as code workflows, version control, multi-environment deployments
+- **GitHub Actions**: Best for production, automated deployments, team collaboration with PR-based reviews
 
 ---
 
@@ -36,37 +39,6 @@ For deployment method selection guidance, see the [Deployment Guide](../docs/cer
 
 - [Adopting Existing Installation](../docs/adopting-cert-manager.md) - Migrate existing cert-manager deployment
 - [Troubleshooting Guide](../docs/troubleshooting-cert-manager.md) - Common issues and resolutions
-
----
-
-## Directory Structure
-
-```
-cert-manager/
-├── terraform/              # Terraform modules and configuration
-│   ├── main.tf            # Main Terraform configuration
-│   ├── variables.tf       # Input variables
-│   ├── outputs.tf         # Output values
-│   └── terraform.tfvars.template  # Template for variables
-└── README.md              # This file
-```
-
----
-
-## Quick Start
-
-**Prerequisites:** NGINX Ingress Controller must be deployed before cert-manager. See [Ingress Controller Deployment Guide](../ingress-controller/README.md).
-
-### GitHub Actions Deployment
-
-1. Configure GitHub Secrets ([configuration guide](../docs/cert-manager-github-actions.md#step-1-configure-github-secrets))
-2. Push to repository to trigger workflow
-3. Verify deployment: `kubectl get pods -n cert-manager`
-
-### Manual Deployment
-
-1. Follow the [Manual Deployment Guide](../docs/cert-manager-manual-deployment.md)
-2. Verify ClusterIssuer: `kubectl get clusterissuer letsencrypt-prod`
 
 ---
 

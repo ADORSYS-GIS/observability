@@ -490,7 +490,7 @@ Access metrics at `http://localhost:10254/metrics`
 ## Related Documentation
 
 - [GitHub Actions Deployment](ingress-controller-github-actions.md) - Automated CI/CD deployment
-- [Deployment Overview](ingress-controller-terraform-deployment.md) - Method comparison
+- [Terraform CLI Deployment](ingress-controller-terraform-deployment.md) - Infrastructure as Code deployment
 - [cert-manager Manual Deployment](cert-manager-manual-deployment.md) - TLS automation
 - [Troubleshooting Guide](troubleshooting-ingress-controller.md) - Advanced debugging
 - [Adopting Existing Installation](adopting-ingress-controller.md) - Migration guide

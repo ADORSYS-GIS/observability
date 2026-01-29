@@ -551,7 +551,7 @@ For advanced Helm values, modify the Terraform module inputs in `ingress-control
 ## Related Documentation
 
 - [Manual Deployment Guide](ingress-controller-manual-deployment.md) - Helm CLI deployment
-- [Deployment Overview](ingress-controller-terraform-deployment.md) - Method comparison
+- [Terraform CLI Deployment](ingress-controller-terraform-deployment.md) - Infrastructure as Code deployment
 - [cert-manager Setup](cert-manager-github-actions.md) - TLS automation
 - [Troubleshooting Guide](troubleshooting-ingress-controller.md) - Detailed debugging
 

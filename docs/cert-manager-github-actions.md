@@ -443,7 +443,7 @@ Edit the workflow's `terraform.tfvars` generation section (approximately line 14
 ## Related Documentation
 
 - [Manual Deployment Guide](cert-manager-manual-deployment.md) - Helm CLI installation
-- [Deployment Overview](cert-manager-terraform-deployment.md) - All deployment methods
+- [Terraform CLI Deployment](cert-manager-terraform-deployment.md) - Infrastructure as Code deployment
 - [Ingress Controller Deployment](ingress-controller-github-actions.md) - Required dependency
 - [Troubleshooting Guide](troubleshooting-cert-manager.md) - Detailed debugging procedures
 - [Official cert-manager Documentation](https://cert-manager.io/docs/) - Upstream reference

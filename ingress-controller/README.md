@@ -24,11 +24,14 @@ Select a deployment method based on your requirements:
 
 | Method | Guide | Use Case |
 |--------|-------|----------|
-| **Overview** | [Deployment Guide](../docs/ingress-controller-terraform-deployment.md) | Method comparison and decision guidance |
-| **Automated** | [GitHub Actions Deployment](../docs/ingress-controller-github-actions.md) | Production environments, CI/CD pipelines |
-| **Manual** | [Manual Helm Deployment](../docs/ingress-controller-manual-deployment.md) | Learning, local development, direct control |
+| **Manual Helm** | [Manual Deployment](../docs/ingress-controller-manual-deployment.md) | Learning, local development, direct control |
+| **Terraform CLI** | [Terraform Deployment](../docs/ingress-controller-terraform-deployment.md) | Infrastructure as Code, reproducible deployments |
+| **GitHub Actions** | [Automated CI/CD](../docs/ingress-controller-github-actions.md) | Production environments, team workflows |
 
-For deployment method selection guidance, see the [Deployment Guide](../docs/ingress-controller-terraform-deployment.md).
+**Choosing a Method:**
+- **Manual Helm**: Best for learning, quick setups, local development
+- **Terraform CLI**: Best for infrastructure as code workflows, version control, multi-environment deployments
+- **GitHub Actions**: Best for production, automated deployments, team collaboration with PR-based reviews
 
 ---
 

@@ -447,7 +447,7 @@ spec:
 ## Related Documentation
 
 - [GitHub Actions Deployment](cert-manager-github-actions.md) - Automated CI/CD deployment
-- [Deployment Overview](cert-manager-terraform-deployment.md) - Method comparison
+- [Terraform CLI Deployment](cert-manager-terraform-deployment.md) - Infrastructure as Code deployment
 - [Ingress Controller Manual Deployment](ingress-controller-manual-deployment.md) - Required dependency
 - [Troubleshooting Guide](troubleshooting-cert-manager.md) - Advanced debugging
 - [Adopting Existing Installation](adopting-cert-manager.md) - Migration guide
