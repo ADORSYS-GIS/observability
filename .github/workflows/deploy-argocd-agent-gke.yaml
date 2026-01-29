@@ -324,7 +324,8 @@ jobs:
           import_resource() {
             local ADDR=$1
             local ID=$2
-            if ! terraform state list | grep -q "$ADDR"; then
+            # Use grep -F for fixed string matching to handle [ ] characters correctly without escaping issues
+            if ! terraform state list | grep -F -q "$ADDR"; then
               echo "Importing $ADDR with ID $ID..."
               terraform import "$ADDR" "$ID" || echo "⚠ Import failed for $ADDR"
             else
@@ -354,11 +355,11 @@ jobs:
 
           # 5. Import Groups
           # Mapping: ArgoCDAdmins -> argocd_admins, ArgoCDDevelopers -> argocd_developers, ArgoCDViewers -> argocd_viewers
-          declare -A GROUPS
-          GROUPS=( ["ArgoCDAdmins"]="argocd_admins" ["ArgoCDDevelopers"]="argocd_developers" ["ArgoCDViewers"]="argocd_viewers" )
+          declare -A KC_GROUPS
+          KC_GROUPS=( ["ArgoCDAdmins"]="argocd_admins" ["ArgoCDDevelopers"]="argocd_developers" ["ArgoCDViewers"]="argocd_viewers" )
 
-          for GROUP_NAME in "${!GROUPS[@]}"; do
-             RESOURCE_NAME="${GROUPS[$GROUP_NAME]}"
+          for GROUP_NAME in "${!KC_GROUPS[@]}"; do
+             RESOURCE_NAME="${KC_GROUPS[$GROUP_NAME]}"
              echo "Looking up Group '$GROUP_NAME'..."
              GROUP_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/groups?search=$GROUP_NAME" | jq -r ".[0] | select(.name==\"$GROUP_NAME\") | .id")
              
