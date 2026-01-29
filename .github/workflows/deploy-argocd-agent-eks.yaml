@@ -29,6 +29,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-eks.yaml'
 
 permissions:
   contents: read
