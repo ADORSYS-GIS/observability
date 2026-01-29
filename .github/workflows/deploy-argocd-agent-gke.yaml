@@ -379,7 +379,7 @@ jobs:
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
 
   verify-deployment:
     name: Verify Deployment
