@@ -36,8 +36,6 @@ permissions:
 
 env:
   TERRAFORM_VERSION: '1.5.7'
-  ENVIRONMENT: ${{ inputs.environment || 'dev' }}
-  WORKING_DIR: 'argocd-agent/terraform/environments/${{ inputs.environment || 'dev' }}'
   CLOUD_PROVIDER: 'generic'
 
 jobs:
@@ -45,9 +43,16 @@ jobs:
     name: Setup Environment
     runs-on: ubuntu-latest
     outputs:
-      environment: ${{ env.ENVIRONMENT }}
+      environment: ${{ steps.set-env.outputs.environment }}
+      working_dir: ${{ steps.set-env.outputs.working_dir }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set Environment Variables
+        id: set-env
+        run: |
+          ENV="${{ inputs.environment || 'dev' }}"
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "working_dir=argocd-agent/terraform/environments/$ENV" >> $GITHUB_OUTPUT
 
   terraform-plan:
     name: Terraform Plan
@@ -71,18 +76,18 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Config Backend
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
           # Generic backend uses kubernetes secret, so no bucket/region needed
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ env.ENVIRONMENT }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ needs.setup-environment.outputs.environment }}
 
       - name: Terraform Init
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform init
 
       - name: Smart Import Existing Resources
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         env:
           NAMESPACE: argocd-agent
           CLOUD_PROVIDER: generic
@@ -93,7 +98,7 @@ jobs:
           $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh || true
 
       - name: Create terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
           cat > terraform.tfvars <<EOF
           hub_cluster_context      = "in-cluster" # Or specific context if known
@@ -116,7 +121,7 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
@@ -130,10 +135,10 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ env.ENVIRONMENT }}
+          name: tfplan-${{ needs.setup-environment.outputs.environment }}
           path: |
-            ${{ env.WORKING_DIR }}/tfplan
-            ${{ env.WORKING_DIR }}/plan.txt
+            ${{ needs.setup-environment.outputs.working_dir }}/tfplan
+            ${{ needs.setup-environment.outputs.working_dir }}/plan.txt
           retention-days: 5
 
       - name: Comment PR (Plan)
@@ -142,7 +147,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const planPath = '${{ env.WORKING_DIR }}/plan.txt';
+            const planPath = '${{ needs.setup-environment.outputs.working_dir }}/plan.txt';
             let plan = '';
             try { plan = fs.readFileSync(planPath, 'utf8'); } catch (e) { plan = 'Plan file invalid.'; }
             const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '...' : plan;
@@ -150,13 +155,13 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🌍 Terraform Plan (Generic - ${{ env.ENVIRONMENT }})\n\`\`\`hcl\n${truncatedPlan}\n\`\`\``
+              body: `## 🌍 Terraform Plan (Generic - ${{ needs.setup-environment.outputs.environment }})\n\`\`\`hcl\n${truncatedPlan}\n\`\`\``
             })
 
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    needs: terraform-plan
+    needs: [setup-environment, terraform-plan]
     environment: ${{ needs.setup-environment.outputs.environment }}
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
@@ -176,29 +181,29 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Config Backend
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ env.ENVIRONMENT }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ needs.setup-environment.outputs.environment }}
 
       - name: Terraform Init
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform init
 
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ env.ENVIRONMENT }}
-          path: ${{ env.WORKING_DIR }}
+          name: tfplan-${{ needs.setup-environment.outputs.environment }}
+          path: ${{ needs.setup-environment.outputs.working_dir }}
 
       - name: Terraform Apply
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform apply -auto-approve tfplan
 
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs: terraform-apply
+    needs: [setup-environment, terraform-apply]
     environment: ${{ needs.setup-environment.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
