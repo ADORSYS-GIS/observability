@@ -224,12 +224,32 @@ After deployment completes:
    
    Login: `admin` / `${GRAFANA_ADMIN_PASSWORD}`
 
-3. **Check component health:**
-   ```bash
-   kubectl get pods -n observability
-   kubectl get svc -n observability
-   kubectl get ingress -n observability
-   ```
+### Accessing the Stack
+
+After a successful deployment, the Ingress Controller creates a **LoadBalancer** with a public IP.
+
+#### 1. Get the External IP
+The easiest way is to check the **Verification** job logs in GitHub Actions. It now automatically prints the IP. Or run manually:
+```bash
+kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+```
+
+#### 2. Configure DNS
+Create a wildcard A record (or individual records) pointing to this IP:
+- `*.monitoring.your-domain.com` -> `LOAD_BALANCER_IP`
+
+#### 3. Access Grafana
+Once DNS propagates, open:
+`https://grafana.monitoring.your-domain.com`
+
+Login: `admin` / `${GRAFANA_ADMIN_PASSWORD}`
+
+### Component Health
+```bash
+kubectl get pods -n observability
+kubectl get svc -n observability
+kubectl get ingress -n observability
+```
 
 ### Destroy Stack
 

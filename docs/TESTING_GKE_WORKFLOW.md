@@ -93,6 +93,13 @@ After workflow completes:
    - `import-report.json` - Resource import results
    - `plan.txt` - Terraform plan output  
    - `tfplan` - Terraform plan binary
+96: 
+97: ### 7. Get LoadBalancer IP
+98: 
+99: After a successful **Apply**:
+100: 1. Check the `Verify Deployment` job logs in GitHub
+101: 2. Look for the `Get LoadBalancer IP` step
+102: 3. Point your domain (e.g., `*.monitoring.example.com`) to this IP in your DNS provider.
 
 ### Workflow Jobs
 

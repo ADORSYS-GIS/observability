@@ -55,12 +55,14 @@ EOF
 
 # 1. Check namespace exists
 echo "📂 Checking namespace..."
-if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+if kubectl get namespace "$NAMESPACE" >/dev/null; then
   add_section "✅ Namespace" "Namespace '$NAMESPACE' exists"
 else
-  add_section "❌ Namespace" "Namespace '$NAMESPACE' not found" "error"
+  echo "❌ Namespace check failed. Printing stderr for debugging..."
+  kubectl get namespace "$NAMESPACE" || true
+  add_section "❌ Namespace" "Namespace '$NAMESPACE' not found or authentication failed" "error"
   echo "</div></body></html>" >> "$REPORT_FILE"
-  echo "❌ Verification failed: namespace not found"
+  echo "❌ Verification failed: namespace not found or authentication failed"
   exit 1
 fi
 

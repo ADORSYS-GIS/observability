@@ -97,13 +97,17 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Setup kubectl
+      - name: Setup kubectl and get GKE credentials
         run: |
+          # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
-          # Get GKE credentials
+          # Install gke-gcloud-auth-plugin (Required for GKE 1.26+)
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+          
+          # Get cluster credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
@@ -163,13 +167,17 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Setup kubectl
+      - name: Setup kubectl and get GKE credentials
         run: |
+          # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           
-          # Get GKE credentials
+          # Install gke-gcloud-auth-plugin
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+          
+          # Get cluster credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
             --region=${{ secrets.CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
@@ -296,11 +304,15 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Setup kubectl
+      - name: Setup kubectl and get GKE credentials
         run: |
+          # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
+          
+          # Install gke-gcloud-auth-plugin
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get GKE credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -387,11 +399,15 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Setup kubectl
+      - name: Setup kubectl and get GKE credentials
         run: |
+          # Install kubectl
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
+          
+          # Install gke-gcloud-auth-plugin
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get GKE credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -408,6 +424,26 @@ jobs:
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           MONITORING_DOMAIN: ${{ secrets.MONITORING_DOMAIN }}
+
+      - name: Get LoadBalancer IP
+        run: |
+          echo "🌐 Retrieving External IP for Ingress Controller..."
+          # Try to get IP from the ingress service
+          IP=""
+          for i in {1..10}; do
+            IP=$(kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            if [ -n "$IP" ]; then break; fi
+            echo "  ⏳ Waiting for LoadBalancer IP... (attempt $i)"
+            sleep 10
+          done
+          
+          if [ -n "$IP" ]; then
+            echo "✅ External IP: $IP"
+            echo "👉 POINT YOUR DOMAIN (*.${{ secrets.MONITORING_DOMAIN }}) TO THIS IP"
+            echo "lb_ip=$IP" >> $GITHUB_ENV
+          else
+            echo "⚠️  Could not retrieve External IP. Check 'kubectl get svc -n ingress-nginx' manually."
+          fi
 
       - name: Upload verification report
         uses: actions/upload-artifact@v4
