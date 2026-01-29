@@ -417,6 +417,7 @@ jobs:
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           MONITORING_DOMAIN: ${{ secrets.MONITORING_DOMAIN }}
+          USE_PORT_FORWARD: "true"
 
       - name: Get LoadBalancer IP
         run: |

@@ -34,28 +34,59 @@ record_test() {
     "$RESULTS_FILE" > /tmp/results.tmp && mv /tmp/results.tmp "$RESULTS_FILE"
 }
 
+# Track port-forward PIDs to clean up later
+declare -g -A PF_PIDS
+declare -g -A PF_PORTS
+
 # Get service endpoint
 get_endpoint() {
   local service="$1"
+  local target_port="${2:-80}"
   
-  if [ -n "$MONITORING_DOMAIN" ]; then
-    echo "https://${service}.${MONITORING_DOMAIN}"
+  # For CI or when domain is not yet propagating, use port-forwarding
+  if [ "${USE_PORT_FORWARD:-false}" == "true" ] || [ -z "$MONITORING_DOMAIN" ]; then
+    # Find a free port
+    local local_port=$((10000 + RANDOM % 20000))
+    while lsof -i :$local_port >/dev/null 2>&1; do
+      local_port=$((10000 + RANDOM % 20000))
+    done
+    
+    echo "  🔌 Port-forwarding $service (target $target_port) to localhost:$local_port..." >&2
+    kubectl port-forward -n "$NAMESPACE" "svc/$service" "$local_port:$target_port" >/dev/null 2>&1 &
+    local pf_pid=$!
+    
+    # Store PID and port for cleanup
+    PF_PIDS["$service"]=$pf_pid
+    PF_PORTS["$service"]=$local_port
+    
+    # Wait for port to be ready
+    local timeout=10
+    while ! nc -z localhost "$local_port" >/dev/null 2>&1; do
+      sleep 1
+      timeout=$((timeout - 1))
+      if [ "$timeout" -le 0 ]; then
+        echo "    ❌ Timeout waiting for port-forward $service" >&2
+        return 1
+      fi
+    done
+    
+    echo "http://localhost:$local_port"
   else
-    # Port-forward for local testing
-    kubectl port-forward -n "$NAMESPACE" "svc/$service" 8080:80 &
-    PF_PID=$!
-    sleep 2
-    echo "http://localhost:8080"
+    echo "https://${service}.${MONITORING_DOMAIN}"
   fi
 }
 
-cleanup_port_forward() {
-  if [ -n "${PF_PID:-}" ]; then
-    kill "$PF_PID" 2>/dev/null || true
-  fi
+cleanup_port_forwards() {
+  for service in "${!PF_PIDS[@]}"; do
+    local pid="${PF_PIDS[$service]}"
+    if [ -n "$pid" ]; then
+      # echo "  🛑 Stopping port-forward for $service (PID $pid)..." >&2
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
 }
 
-trap cleanup_port_forward EXIT
+trap cleanup_port_forwards EXIT
 
 #=============================================================================
 # LOKI TESTS
@@ -114,7 +145,7 @@ else
   echo "    ❌ Failed to query logs"
 fi
 
-cleanup_port_forward
+
 
 #=============================================================================
 # MIMIR TESTS
@@ -164,7 +195,7 @@ else
   echo "    ❌ Failed to query metrics"
 fi
 
-cleanup_port_forward
+
 
 #=============================================================================
 # PROMETHEUS TESTS
@@ -204,7 +235,7 @@ else
   echo "    ❌ Failed to query Prometheus"
 fi
 
-cleanup_port_forward
+
 
 #=============================================================================
 # TEMPO TESTS
@@ -212,7 +243,7 @@ cleanup_port_forward
 echo ""
 echo "🔍 Testing Tempo..."
 
-TEMPO_ENDPOINT=$(get_endpoint "monitoring-tempo-query-frontend")
+TEMPO_ENDPOINT=$(get_endpoint "monitoring-tempo-query-frontend" 3200)
 
 # Test 1: Push trace to Tempo
 echo "  📤 Pushing test trace..."
@@ -274,7 +305,7 @@ else
   echo "    ⚠️  Trace not found (may need more time to index)"
 fi
 
-cleanup_port_forward
+
 
 #=============================================================================
 # GRAFANA TESTS
@@ -327,7 +358,7 @@ for ds_id in $(echo "$GRAFANA_DS" | jq -r '.[].uid' 2>/dev/null); do
   fi
 done
 
-cleanup_port_forward
+
 
 #=============================================================================
 # INTEGRATION TEST
