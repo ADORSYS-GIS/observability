@@ -212,7 +212,7 @@ jobs:
             --region="${{ secrets.REGION }}" \
             --project="${{ secrets.GCP_PROJECT_ID }}"
 
-      - name: Setup Terraform
+      - name: Setup Terraform 
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
