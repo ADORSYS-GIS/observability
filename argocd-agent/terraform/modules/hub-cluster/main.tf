@@ -46,7 +46,7 @@ resource "null_resource" "hub_argocd_base_install" {
         
         RETRY=$((RETRY+1))
         if [ $RETRY -lt $MAX_RETRIES ]; then
-          echo "⚠ Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
+          echo "WARNING: Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
           sleep $RETRY_DELAY
         else
           echo "✗ ERROR: Failed after $MAX_RETRIES attempts. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
@@ -395,7 +395,7 @@ resource "null_resource" "hub_principal_installation" {
         
         RETRY=$((RETRY+1))
         if [ $RETRY -lt $MAX_RETRIES ]; then
-          echo "⚠ Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
+          echo "WARNING: Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
           sleep $RETRY_DELAY
         else
           echo "✗ ERROR: Failed after $MAX_RETRIES attempts. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
@@ -464,7 +464,7 @@ resource "null_resource" "hub_redis_network_policy_patch" {
         2>&1 | tee -a "$LOG_FILE"; then
         echo "✓ NetworkPolicy patched successfully" | tee -a "$LOG_FILE"
       else
-        echo "⚠ NetworkPolicy already patched or doesn't exist (non-fatal)" | tee -a "$LOG_FILE"
+        echo "WARNING: NetworkPolicy already patched or doesn't exist (non-fatal)" | tee -a "$LOG_FILE"
       fi
       
       echo "Logs saved to: $LOG_FILE"

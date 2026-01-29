@@ -59,5 +59,5 @@ output "management_commands" {
 
 output "pki_backup_warning" {
   description = "CRITICAL: Backup PKI CA immediately after deployment"
-  value       = "⚠️  CRITICAL: Backup PKI CA with: kubectl get secret argocd-agent-pki-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} -o yaml > pki-ca-backup.yaml"
+  value       = "WARNING: CRITICAL: Backup PKI CA with: kubectl get secret argocd-agent-pki-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} -o yaml > pki-ca-backup.yaml"
 }

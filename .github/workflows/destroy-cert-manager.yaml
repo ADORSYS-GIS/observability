@@ -1,0 +1,144 @@
+name: Destroy cert-manager
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud Provider'
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+          - aks
+        default: 'gke'
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm'
+        required: true
+        type: string
+
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  WORKING_DIR: 'cert-manager/terraform'
+
+jobs:
+  validate-confirmation:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation input
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "❌ Destroy confirmation failed. You must type 'DESTROY' to proceed."
+            exit 1
+          fi
+          echo "✅ Destroy confirmation validated"
+
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    needs: validate-confirmation
+    environment:
+      name: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Setup Cloud Credentials - GKE
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Compute Environment - GKE
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Cloud Credentials - EKS
+        if: inputs.cloud_provider == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Cloud Credentials - AKS
+        if: inputs.cloud_provider == 'aks'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          if [ "${{ inputs.cloud_provider }}" == "gke" ]; then
+            gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+              --region=${{ secrets.CLUSTER_LOCATION }} \
+              --project=${{ secrets.GCP_PROJECT_ID }}
+          elif [ "${{ inputs.cloud_provider }}" == "eks" ]; then
+            aws eks update-kubeconfig \
+              --name ${{ secrets.CLUSTER_NAME }} \
+              --region ${{ secrets.AWS_REGION }}
+          elif [ "${{ inputs.cloud_provider }}" == "aks" ]; then
+            az aks get-credentials \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --name ${{ secrets.CLUSTER_NAME }} \
+              --overwrite-existing
+          fi
+
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ inputs.cloud_provider }}" "cert-manager"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider       = "${{ inputs.cloud_provider }}"
+          install_cert_manager = true
+          create_issuer        = true
+          release_name         = "cert-manager"
+          cert_manager_version = "v1.19.2"
+          namespace            = "cert-manager"
+          letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
+          cert_issuer_name     = "letsencrypt-prod"
+          cert_issuer_kind     = "ClusterIssuer"
+          issuer_server        = "https://acme-v02.api.letsencrypt.org/directory"
+          ingress_class_name   = "nginx"
+          EOF
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform destroy -auto-approve
+
+      - name: Verify cleanup
+        run: |
+          echo "📊 Checking remaining cert-manager resources..."
+          kubectl get namespace cert-manager 2>/dev/null || echo "✓ Namespace removed"
+          kubectl get clusterissuer letsencrypt-prod 2>/dev/null || echo "✓ ClusterIssuer removed"
+          kubectl get crd | grep cert-manager || echo "✓ CRDs removed"
+          echo "✅ Destroy complete"

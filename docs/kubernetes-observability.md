@@ -90,6 +90,58 @@ gcloud container clusters get-credentials CLUSTER_NAME \
   --project=PROJECT_ID
 ```
 
+---
+
+## State Management
+
+Terraform state tracks all deployed LGTM Stack resources for team collaboration and infrastructure consistency.
+
+### State File Location
+
+```
+<bucket>/terraform/lgtm-stack/
+```
+
+### State Persistence
+
+State files are stored remotely and persist across all deployments:
+- Terraform always knows about existing resources
+- No "resource already exists" errors
+- Team members collaborate using the same state
+- State locking prevents concurrent modifications
+
+### Backend Setup
+
+**GCS (GKE)**:
+```bash
+export TF_STATE_BUCKET="your-bucket"
+cd lgtm-stack/terraform
+bash ../../.github/scripts/configure-backend.sh gke lgtm-stack
+```
+
+**S3 (EKS)**:
+```bash
+export TF_STATE_BUCKET="your-bucket"
+export AWS_REGION="us-east-1"
+bash ../../.github/scripts/configure-backend.sh eks lgtm-stack
+```
+
+**Azure Blob (AKS)**:
+```bash
+export AZURE_STORAGE_ACCOUNT="your-account"
+export AZURE_STORAGE_CONTAINER="terraform-state"
+bash ../../.github/scripts/configure-backend.sh aks lgtm-stack
+```
+
+See [Terraform State Management Guide](terraform-state-management.md) for bucket setup.
+
+**Note**: The generated `backend-config.tf` should not be committed. Add to `.gitignore`:
+```bash
+echo "backend-config.tf" >> .gitignore
+```
+
+---
+
 ## Installation
 
 > **Existing Installation?** If you already have an LGTM stack deployed and want to manage it with Terraform, see the [Adoption Guide](adopting-lgtm-stack.md) before proceeding. The adoption process imports existing resources to avoid recreation and potential data loss.
@@ -101,7 +153,18 @@ git clone https://github.com/Adorsys-gis/observability.git
 cd observability/lgtm-stack/terraform
 ```
 
-### Step 2: Configure Variables
+### Step 2: Configure Backend (Optional)
+
+For remote state storage and team collaboration, configure the backend:
+
+```bash
+export TF_STATE_BUCKET="your-bucket-name"
+bash ../../.github/scripts/configure-backend.sh gke lgtm-stack
+```
+
+Skip this step for local development with local state files.
+
+### Step 3: Configure Variables
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
@@ -148,13 +211,13 @@ For all available variables and their descriptions, see [variables.tf](../lgtm-s
 | `install_nginx_ingress` | Deploy NGINX ingress | `false` | |
 | `loki_schema_from_date` | Loki schema effective date | `2024-01-01` | |
 
-### Step 3: Initialize Terraform
+### Step 4: Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-### Step 4: Plan Deployment
+### Step 5: Plan Deployment
 
 ```bash
 terraform plan
@@ -162,7 +225,7 @@ terraform plan
 
 Review the planned changes carefully before applying.
 
-### Step 5: Apply Configuration
+### Step 6: Apply Configuration
 
 ```bash
 terraform apply
@@ -292,6 +355,16 @@ gcloud storage rm -r gs://PROJECT_ID-tempo-traces/**
 ```
 
 ## Troubleshooting
+
+### State Management Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| **Backend configuration changed** | Backend config modified/regenerated | Run `terraform init -reconfigure` |
+| **State lock acquisition error** | Another process running Terraform | Wait or `terraform force-unlock LOCK_ID` |
+| **Bucket does not exist** | State bucket not created | Verify: `gcloud storage ls gs://your-bucket` |
+| **Permission denied on bucket** | Insufficient IAM permissions | Grant `roles/storage.admin` to service account |
+| **State file not found** | First deployment or deleted state | Normal for first run; import if state was lost |
 
 ### Terraform State Lock
 

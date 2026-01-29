@@ -28,7 +28,7 @@
 TF_VARS="$(dirname "$0")/../terraform/environments/prod/terraform.tfvars"
 
 if [ ! -f "$TF_VARS" ]; then
-  echo "❌ Error: terraform.tfvars not found at $TF_VARS"
+  echo "ERROR: Error: terraform.tfvars not found at $TF_VARS"
   exit 1
 fi
 
@@ -44,7 +44,7 @@ ALL_AGENTS=($(grep -A 20 "workload_clusters =" "$TF_VARS" | grep "=" | grep -v "
 ALL_SPOKES=($(grep -A 20 "workload_clusters =" "$TF_VARS" | grep "=" | grep -v "{" | cut -d'"' -f4))
 
 if [ -z "$HUB_CTX" ]; then
-  echo "❌ Error: Could not extract hub_cluster_context from $TF_VARS"
+  echo "ERROR: Error: Could not extract hub_cluster_context from $TF_VARS"
   exit 1
 fi
 
@@ -79,7 +79,7 @@ force_delete() {
   done
   
   # 3. If still exists, patch finalizers
-  echo "    ⚠️  Stuck. Force removing finalizers..."
+  echo "    WARNING: Stuck. Force removing finalizers..."
   kubectl patch $KIND $NAME $NS_FLAG --context $CONTEXT -p '{"metadata":{"finalizers":[]}}' --type=merge &>/dev/null || true
   
   # 4. Wait again
@@ -87,7 +87,7 @@ force_delete() {
   if ! kubectl get $KIND $NAME $NS_FLAG --context $CONTEXT &>/dev/null; then
     echo "    ✓ Deleted (Forced)"
   else
-    echo "    ❌ Failed to delete $KIND $NAME"
+    echo "    ERROR: Failed to delete $KIND $NAME"
   fi
 }
 
@@ -100,7 +100,7 @@ clean_spoke() {
   
   # Check if context exists
   if ! kubectl config get-contexts "$CTX" &>/dev/null; then
-    echo "  ⚠️  Context '$CTX' not found, skipping..."
+    echo "  WARNING: Context '$CTX' not found, skipping..."
     return 0
   fi
   
@@ -217,7 +217,7 @@ clean_terraform_artifacts() {
     # Optional: remove .terraform directory to force re-init
     # rm -rf "$TF_DIR/.terraform"
   else
-    echo "  ⚠️  Terraform directory not found at $TF_DIR"
+    echo "  WARNING: Terraform directory not found at $TF_DIR"
   fi
 }
 
@@ -228,7 +228,7 @@ delete_keycloak_realm() {
   echo "───────────────────────────────────────────────"
 
   if [ -z "$KC_URL" ] || [ -z "$KC_USER" ] || [ -z "$KC_PASSWORD" ]; then
-    echo "  ⚠️  Keycloak credentials not set, skipping realm cleanup..."
+    echo "  WARNING: Keycloak credentials not set, skipping realm cleanup..."
     return 0
   fi
 
@@ -240,7 +240,7 @@ delete_keycloak_realm() {
                   "$KC_URL/realms/master/protocol/openid-connect/token" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
   if [ -z "$TOKEN" ]; then
-    echo "  ❌ Failed to get access token. Check credentials."
+    echo "  ERROR: Failed to get access token. Check credentials."
     return 1
   fi
 
@@ -254,7 +254,7 @@ delete_keycloak_realm() {
   elif [ "$HTTP_CODE" -eq 404 ]; then
     echo "  ✓ Realm not found (already deleted)."
   else
-    echo "  ⚠️  Failed to delete realm (HTTP $HTTP_CODE)."
+    echo "  WARNING: Failed to delete realm (HTTP $HTTP_CODE)."
   fi
 }
 
@@ -291,13 +291,13 @@ echo ""
 # Show what will be cleaned
 case "$TARGET" in
   all)
-    echo "⚠️  Will clean: Hub + all spokes (${ALL_SPOKES[*]})"
+    echo "WARNING: Will clean: Hub + all spokes (${ALL_SPOKES[*]})"
     ;;
   hub)
-    echo "⚠️  Will clean: Hub only"
+    echo "WARNING: Will clean: Hub only"
     ;;
   spokes)
-    echo "⚠️  Will clean: All spokes (${ALL_SPOKES[*]})"
+    echo "WARNING: Will clean: All spokes (${ALL_SPOKES[*]})"
     ;;
   *)
     # Check if target is one of the spokes
@@ -310,9 +310,9 @@ case "$TARGET" in
     done
 
     if [ "$IS_SPOKE" == "true" ]; then
-      echo "⚠️  Will clean: $TARGET only"
+      echo "WARNING: Will clean: $TARGET only"
     else
-      echo "❌ Unknown target: $TARGET"
+      echo "ERROR: Unknown target: $TARGET"
       echo ""
       echo "Valid targets: all, hub, spokes, ${ALL_SPOKES[*]}"
       exit 1

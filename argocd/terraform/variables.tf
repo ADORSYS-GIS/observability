@@ -42,7 +42,7 @@ variable "install_nginx_ingress" {
 variable "nginx_ingress_version" {
   description = "Version of ingress-nginx chart"
   type        = string
-  default     = "4.10.1"
+  default     = "4.14.2"
 }
 
 variable "nginx_ingress_release_name" {
@@ -72,7 +72,7 @@ variable "install_cert_manager" {
 variable "cert_manager_version" {
   description = "Version of cert-manager chart"
   type        = string
-  default     = "v1.15.0"
+  default     = "v1.19.2"
 }
 
 variable "namespace" {

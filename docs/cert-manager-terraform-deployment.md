@@ -1,6 +1,6 @@
 # Cert-Manager Terraform Deployment
 
-Automated TLS certificate management deployment using Terraform and Helm.
+Automated TLS certificate management deployment using Terraform and Helm with multi-cloud support.
 
 **Official Documentation**: [cert-manager.io/docs](https://cert-manager.io/docs/)  
 **GitHub Repository**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
@@ -9,11 +9,13 @@ Automated TLS certificate management deployment using Terraform and Helm.
 
 This deployment configures cert-manager with:
 
+- **Multi-Cloud Support**: GKE, EKS, AKS, and generic Kubernetes clusters
 - **Automated Certificate Issuance**: Let's Encrypt integration via ACME protocol
 - **Automatic Renewal**: Certificates renewed before expiration
 - **ClusterIssuer Configuration**: Cluster-wide certificate authority for all namespaces
 - **HTTP-01 Challenge Solver**: Ingress-based domain validation
 - **CRD Management**: Custom Resource Definitions for certificate lifecycle
+- **CI/CD Ready**: GitHub Actions workflows for automated deployments
 
 ## Prerequisites
 
@@ -21,7 +23,16 @@ This deployment configures cert-manager with:
 |-------------|---------|---------|
 | **Terraform** | ≥ 1.5.0 | Infrastructure provisioning |
 | **kubectl** | ≥ 1.24 | Kubernetes cluster access |
-| **Kubernetes Cluster** | ≥ 1.24 | Target platform |
+| **Kubernetes Cluster** | ≥ 1.24 | Target platform (GKE, EKS, AKS, or generic) |
+
+### Supported Cloud Providers
+
+| Provider | Authentication | Backend Storage |
+|----------|---------------|-----------------|
+| **GKE** | `gcloud` CLI + service account | Google Cloud Storage |
+| **EKS** | `aws` CLI + IAM role | S3 |
+| **AKS** | `az` CLI + service principal | Azure Blob Storage |
+| **Generic** | `kubectl` config | Kubernetes Secret |
 
 ### Required Infrastructure
 
@@ -33,6 +44,39 @@ This deployment configures cert-manager with:
 ## Installation
 
 > **Existing Installation?** If you already have cert-manager deployed and want to manage it with Terraform, see the [Adoption Guide](adopting-cert-manager.md) before proceeding.
+
+### Deployment Methods
+
+Choose between **manual deployment** (command-line) or **automated deployment** (GitHub Actions):
+
+#### Option A: Automated Deployment (Recommended for CI/CD)
+
+GitHub Actions workflows provide automated, multi-cloud deployment capabilities:
+
+**Available Workflows:**
+- `.github/workflows/deploy-cert-manager-gke.yaml` - Google Kubernetes Engine
+- `.github/workflows/deploy-cert-manager-eks.yaml` - Amazon Elastic Kubernetes Service
+- `.github/workflows/deploy-cert-manager-aks.yaml` - Azure Kubernetes Service
+- `.github/workflows/destroy-cert-manager.yaml` - Destroy cert-manager resources
+
+**Workflow Features:**
+- Terraform plan with detailed output and PR comments
+- Multi-cloud backend configuration (GCS, S3, Azure Blob)
+- Automatic cluster authentication
+- Zero-downtime upgrades
+- Rollback capability
+
+**Usage:**
+1. Configure GitHub repository secrets (see workflow files for required secrets)
+2. Push changes to trigger deployment workflow
+3. Review Terraform plan in PR comments
+4. Merge to apply changes
+
+See individual workflow files for detailed configuration and required secrets.
+
+#### Option B: Manual Deployment
+
+Follow the steps below for command-line deployment:
 
 ### Step 1: Clone Repository
 
@@ -58,6 +102,18 @@ cp terraform.tfvars.template terraform.tfvars
 Edit `terraform.tfvars` with your environment values:
 
 ```hcl
+# Cloud Provider Configuration
+cloud_provider = "gke"  # Options: gke, eks, aks, generic
+
+# GKE-specific (required only for GKE)
+project_id           = "your-gcp-project"
+region               = "us-central1"
+gke_endpoint         = ""  # Auto-populated by workflow
+gke_ca_certificate   = ""  # Auto-populated by workflow
+
+# EKS-specific (required only for EKS)
+# aws_region = "us-east-1"
+
 # Enable cert-manager installation
 install_cert_manager = true
 
@@ -69,7 +125,7 @@ cert_issuer_name = "letsencrypt-prod"
 cert_issuer_kind = "ClusterIssuer"
 
 # Deployment Configuration
-cert_manager_version = "v1.16.2"
+cert_manager_version = "v1.19.2"
 namespace            = "cert-manager"
 release_name         = "cert-manager"
 
@@ -86,9 +142,15 @@ For all available variables, see [variables.tf](../cert-manager/terraform/variab
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
+| `cloud_provider` | Cloud platform (gke, eks, aks, generic) | `gke` | ✓ |
+| `project_id` | GCP Project ID (GKE only) | `""` | GKE |
+| `region` | GCP Region (GKE only) | `us-central1` | GKE |
+| `aws_region` | AWS Region (EKS only) | `us-east-1` | EKS |
+| `gke_endpoint` | GKE cluster endpoint | `""` | GKE |
+| `gke_ca_certificate` | GKE cluster CA certificate | `""` | GKE |
 | `install_cert_manager` | Enable cert-manager installation | `false` | |
 | `letsencrypt_email` | Email for Let's Encrypt notifications | - | ✓ |
-| `cert_manager_version` | Helm chart version | `v1.16.2` | |
+| `cert_manager_version` | Helm chart version | `v1.19.2` | |
 | `namespace` | Kubernetes namespace | `cert-manager` | |
 | `release_name` | Helm release name | `cert-manager` | |
 | `cert_issuer_name` | Issuer resource name | `letsencrypt-prod` | |
