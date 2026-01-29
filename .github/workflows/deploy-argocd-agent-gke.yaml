@@ -353,4 +353,4 @@ jobs:
           NAMESPACE: argocd
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
-          $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
+          $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
