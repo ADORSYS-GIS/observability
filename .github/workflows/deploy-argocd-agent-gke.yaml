@@ -372,24 +372,26 @@ jobs:
 
           # 6. Import Protocol Mapper (group-membership)
           echo "Looking up Protocol Mapper 'group-membership'..."
-          # Need Client UUID (already fetched as CLIENT_UUID) and Mapper UUID
-          if [ "$CLIENT_UUID" != "null" ]; then
-             MAPPER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/clients/$CLIENT_UUID/protocol-mappers/models" | jq -r '.[] | select(.name=="group-membership") | .id')
+          # The mapper is attached to the Client Scope 'groups' (SCOPE_UUID), NOT the Client.
+          if [ "$SCOPE_UUID" != "null" ]; then
+             MAPPER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes/$SCOPE_UUID/protocol-mappers/models" | jq -r '.[] | select(.name=="group-membership") | .id')
              if [ -n "$MAPPER_UUID" ] && [ "$MAPPER_UUID" != "null" ]; then
-                import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/$CLIENT_UUID/$MAPPER_UUID"
+                # Import ID Format: realm/client_scope_id/mapper_id
+                import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/$SCOPE_UUID/$MAPPER_UUID"
              fi
           fi
 
-          # 7. Import Ingress (argocd-server) - if it exists in the cluster
-          # Resource: module.hub_cluster[0].kubernetes_ingress_v1.argocd_ui[0]
-          # ID Format: namespace/name
-          INGRESS_NS="argocd" # Assuming default, or we can try to guess/grep
+          # 7. Import Ingress (argocd-server)
+          # Conflict Resolution: The error indicates an ingress exists in 'argocd-agent' namespace (or similar).
+          # We need to clear it from the old namespace if we are deploying to a new one ('argocd').
+          echo "Checking for conflicting Ingress in 'argocd-agent' namespace..."
+          kubectl delete ingress argocd-server -n argocd-agent --ignore-not-found || true
+
+          # Now check target namespace
+          INGRESS_NS="argocd"
           INGRESS_NAME="argocd-server"
-          
           echo "Checking for existing Ingress '$INGRESS_NAME' in '$INGRESS_NS'..."
-          # We need to run this check on the GKE cluster. We are authenticated via step 'Configure kubectl'.
           if kubectl get ingress "$INGRESS_NAME" -n "$INGRESS_NS" >/dev/null 2>&1; then
-             # Verify if it maps to the same resource address
              import_resource "module.hub_cluster[0].kubernetes_ingress_v1.argocd_ui[0]" "$INGRESS_NS/$INGRESS_NAME"
           fi
 
