@@ -247,12 +247,14 @@ jobs:
           # Install argocd-agentctl if not already installed
           if ! command -v argocd-agentctl &> /dev/null; then
             echo "Installing argocd-agentctl..."
-            curl -L -o argocd-agentctl-linux-amd64 https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl-linux-amd64
-            chmod +x argocd-agentctl-linux-amd64
-            sudo mv argocd-agentctl-linux-amd64 /usr/local/bin/argocd-agentctl
-            echo "argocd-agentctl installed successfully"
+            curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
+            chmod +x argocd-agentctl
+            sudo mv argocd-agentctl /usr/local/bin/argocd-agentctl
+            echo "✓ argocd-agentctl installed successfully"
+            argocd-agentctl version
           else
-            echo "argocd-agentctl already installed"
+            echo "✓ argocd-agentctl already installed"
+            argocd-agentctl version
           fi
 
       - name: Terraform Apply
