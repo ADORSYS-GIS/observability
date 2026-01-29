@@ -16,38 +16,38 @@ case "$CLOUD_PROVIDER" in
     cat > "$BACKEND_FILE" <<EOF
 terraform {
   backend "gcs" {
-    bucket = "\${TF_STATE_BUCKET}"
+    bucket = "${TF_STATE_BUCKET}"
     prefix = "terraform/argocd-agent/${ENVIRONMENT}"
   }
 }
 EOF
-    echo "✅ Configured GCS backend: \${TF_STATE_BUCKET} (prefix: terraform/argocd-agent/${ENVIRONMENT})"
+    echo "✅ Configured GCS backend: ${TF_STATE_BUCKET} (prefix: terraform/argocd-agent/${ENVIRONMENT})"
     ;;
     
   eks)
     cat > "$BACKEND_FILE" <<EOF
 terraform {
   backend "s3" {
-    bucket = "\${TF_STATE_BUCKET}"
+    bucket = "${TF_STATE_BUCKET}"
     key    = "terraform/argocd-agent/${ENVIRONMENT}/terraform.tfstate"
-    region = "\${AWS_REGION}"
+    region = "${AWS_REGION}"
   }
 }
 EOF
-    echo "✅ Configured S3 backend: \${TF_STATE_BUCKET} (key: terraform/argocd-agent/${ENVIRONMENT}/terraform.tfstate)"
+    echo "✅ Configured S3 backend: ${TF_STATE_BUCKET} (key: terraform/argocd-agent/${ENVIRONMENT}/terraform.tfstate)"
     ;;
     
   aks)
     cat > "$BACKEND_FILE" <<EOF
 terraform {
   backend "azurerm" {
-    storage_account_name = "\${AZURE_STORAGE_ACCOUNT}"
-    container_name       = "\${AZURE_STORAGE_CONTAINER}"
+    storage_account_name = "${AZURE_STORAGE_ACCOUNT}"
+    container_name       = "${AZURE_STORAGE_CONTAINER}"
     key                  = "terraform/argocd-agent/${ENVIRONMENT}/terraform.tfstate"
   }
 }
 EOF
-    echo "✅ Configured Azure Blob backend: \${AZURE_STORAGE_ACCOUNT}/\${AZURE_STORAGE_CONTAINER}"
+    echo "✅ Configured Azure Blob backend: ${AZURE_STORAGE_ACCOUNT}/${AZURE_STORAGE_CONTAINER}"
     ;;
     
   generic)
