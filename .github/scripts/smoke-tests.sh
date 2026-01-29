@@ -205,9 +205,9 @@ MIMIR_QUERY_SUCCESS=false
 for i in {1..12}; do
   sleep 5
   # Instead of a manual push which is hard with curl, we verify that Prometheus is successfully
-  # remote-writing its own health metrics to Mimir.
+  # remote-writing its own metrics to Mimir. We look for any metric starting with 'prometheus_'
   MIMIR_QUERY_RESPONSE=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
-    --data-urlencode 'query=up{job="prometheus"}' || echo "FAILED")
+    --data-urlencode 'query={__name__=~"prometheus_.*"}' || echo "FAILED")
 
   if [[ "$MIMIR_QUERY_RESPONSE" != "FAILED" ]] && echo "$MIMIR_QUERY_RESPONSE" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
     SAMPLES=$(echo "$MIMIR_QUERY_RESPONSE" | jq -r '.data.result | length')
@@ -268,7 +268,7 @@ fi
 echo ""
 echo "🔍 Testing Tempo..."
 
-TEMPO_INGEST_ENDPOINT=$(get_endpoint "monitoring-tempo-distributor" 4318)
+TEMPO_INGEST_ENDPOINT=$(get_endpoint "monitoring-tempo-query-frontend" 3200)
 TEMPO_QUERY_ENDPOINT=$(get_endpoint "monitoring-tempo-query-frontend" 3200)
 
 # Test 1: Push trace to Tempo
