@@ -20,15 +20,6 @@ on:
           - dev
           - staging
           - prod
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-eks.yaml'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'argocd-agent/terraform/**'
       - '.github/workflows/deploy-argocd-agent-eks.yaml'
 
 permissions:

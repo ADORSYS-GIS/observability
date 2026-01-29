@@ -1,0 +1,141 @@
+# =============================================================================
+# ArgoCD Agent Terraform Configuration - EXAMPLE
+# Copy to terraform.tfvars and customize for your environment
+# =============================================================================
+
+# =============================================================================
+# DEPLOYMENT MODE
+# =============================================================================
+
+deploy_hub    = true
+deploy_spokes = true
+
+# =============================================================================
+# CLUSTER CONFIGURATION
+# =============================================================================
+
+# Hub cluster kubectl context
+hub_cluster_context = "gke_observe-472521_europe-west3_observe-prod-cluster"
+
+# Workload clusters (map of agent_name => cluster_context)
+workload_clusters = {
+  "agent-1" = "spoke-1"
+  "agent-2" = "spoke-2"
+  "agent-3" = "spoke-3"
+}
+
+# =============================================================================
+# ARGOCD CONFIGURATION
+# =============================================================================
+
+argocd_version  = "v0.5.3"
+hub_namespace   = "argocd"
+spoke_namespace = "argocd"
+
+# =============================================================================
+# EXPOSURE CONFIGURATION
+# =============================================================================
+
+# Method: "loadbalancer" (recommended for production with direct IP access)
+ui_expose_method        = "loadbalancer"
+principal_expose_method = "loadbalancer"
+
+# ArgoCD UI hostname (for ingress if needed)
+argocd_host = "argocd.observe.camer.digital"
+
+# =============================================================================
+# EXISTING INFRASTRUCTURE (DO NOT INSTALL)
+# =============================================================================
+
+# Use existing cert-manager and ingress-controller
+install_nginx_ingress = false
+install_cert_manager  = false
+
+# Reference existing infrastructure
+nginx_ingress_namespace = "mstack-ingress-nginx"
+ingress_class_name      = "nginx"
+cert_manager_namespace  = "mstack-cert-manager" 
+letsencrypt_email       = "admin@example.com"
+cert_issuer_name        = "letsencrypt-prod"
+cert_issuer_kind        = "Issuer" # Use namespace-scoped Issuer instead of ClusterIssuer
+
+# =============================================================================
+# KEYCLOAK INTEGRATION (SSO Authentication)
+# =============================================================================
+
+enable_keycloak   = true
+keycloak_url      = "https://keycloak.example.com"
+keycloak_user     = "admin"
+keycloak_password = "CHANGE-ME"  # SECURITY: Use environment variable TF_VAR_keycloak_password
+keycloak_realm    = "argocd"
+argocd_url        = "https://argocd.example.com"
+
+# PKCE mode (enables CLI login with --sso)
+keycloak_enable_pkce = false  # Set to true for CLI support
+
+# Default admin user for initial ArgoCD access
+create_default_admin_user        = true
+default_admin_username           = "argocd-admin"
+default_admin_email              = "admin@example.com"
+default_admin_password           = "CHANGE-ME"  # REQUIRED: Set a strong password
+default_admin_password_temporary = true  # User must change password on first login
+
+# =============================================================================
+# PATHS
+# =============================================================================
+
+# argocd-agentctl will be installed to /usr/local/bin by Terraform (see install.tf)
+# Run: terraform apply -target=null_resource.install_argocd_agentctl
+argocd_agentctl_path = "/usr/local/bin/argocd-agentctl"
+
+# =============================================================================
+# HIGH AVAILABILITY
+# =============================================================================
+
+# Set to 2+ for production (enables PDB and anti-affinity)
+principal_replicas = 2
+
+# =============================================================================
+# DEPLOYMENT SCENARIOS
+# =============================================================================
+
+# SCENARIO 1: Full Deployment (Hub + Spokes)
+# ───────────────────────────────────────────
+# deploy_hub    = true
+# deploy_spokes = true
+# workload_clusters = {
+#   "prod"    = "gke_project_region_prod-cluster"
+#   "staging" = "gke_project_region_staging-cluster"
+# }
+
+# SCENARIO 2: Hub Only (Get Principal IP for later spoke additions)
+# ──────────────────────────────────────────────────────────────────
+# deploy_hub    = true
+# deploy_spokes = false
+# workload_clusters = {}
+# 
+# After deployment, get principal IP from outputs:
+#   terraform output principal_address
+
+# SCENARIO 3: Add Spokes to Existing Hub
+# ───────────────────────────────────────
+# deploy_hub        = false
+# deploy_spokes     = true
+# principal_address = "34.89.123.45"  # IP from hub deployment output
+# principal_port    = 443
+# workload_clusters = {
+#   "agent-4" = "gke_project_region_spoke-4"
+# }
+
+# =============================================================================
+# ARGOCD COMPONENT NAMES (Optional - Customize for specific deployments)
+# =============================================================================
+
+# Uncomment and modify if you need custom ArgoCD component names
+# argocd_repo_server_name            = "argocd-repo-server"
+# argocd_application_controller_name = "argocd-application-controller"
+# argocd_redis_name                  = "argocd-redis"
+# argocd_redis_network_policy_name   = "argocd-redis-network-policy"
+# argocd_cmd_params_cm_name          = "argocd-cmd-params-cm"
+# argocd_cm_name                     = "argocd-cm"
+# argocd_secret_name                 = "argocd-secret"
