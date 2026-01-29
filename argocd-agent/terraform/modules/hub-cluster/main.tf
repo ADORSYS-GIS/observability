@@ -708,7 +708,10 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
     EOT
   }
 
-  depends_on = [data.external.hub_principal_address]
+  depends_on = [
+    data.external.hub_principal_address,
+    null_resource.hub_principal_loadbalancer_service
+  ]
 }
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
