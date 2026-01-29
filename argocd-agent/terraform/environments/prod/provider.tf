@@ -5,15 +5,13 @@
 # =============================================================================
 
 provider "kubernetes" {
-  config_path    = "~/.kube/config"
-  config_context = var.hub_cluster_context
+  config_path = "~/.kube/config"
 }
 
 provider "helm" {
   alias = "hub"
   kubernetes {
-    config_path    = "~/.kube/config"
-    config_context = var.hub_cluster_context
+    config_path = "~/.kube/config"
   }
 }
 
