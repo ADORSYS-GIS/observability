@@ -1,191 +1,192 @@
-# cert-manager Terraform Deployment
+# cert-manager Deployment Guide
 
-Automated TLS certificate management using Terraform with multi-cloud support.
+Automated TLS certificate management for Kubernetes clusters with ACME provider support.
 
-**Official**: [cert-manager.io/docs](https://cert-manager.io/docs/) | **GitHub**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
+**Official Documentation**: [cert-manager.io](https://cert-manager.io/docs/) | **GitHub**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager) | **Version**: `v1.19.2`
 
-## Prerequisites
-
-| Requirement | Version | Purpose |
-|-------------|---------|---------|
-| Terraform | ≥ 1.5.0 | Infrastructure provisioning |
-| kubectl | ≥ 1.24 | Cluster access |
-| Kubernetes | ≥ 1.24 | GKE, EKS, AKS, or generic |
-
-**Dependencies**: Requires NGINX Ingress Controller for HTTP-01 challenges. See [Ingress Controller Setup](ingress-controller-terraform-deployment.md).
+---
 
 ## Deployment Methods
 
-### Option A: GitHub Actions (Automated CI/CD)
+This guide covers two deployment approaches for cert-manager:
 
-Workflows automatically handle backend configuration, authentication, and deployment.
+### Method 1: GitHub Actions (Automated CI/CD)
 
-**Available Workflows:**
-- `.github/workflows/deploy-cert-manager-gke.yaml` - Google Kubernetes Engine
-- `.github/workflows/deploy-cert-manager-eks.yaml` - Amazon EKS
-- `.github/workflows/deploy-cert-manager-aks.yaml` - Azure AKS
-- `.github/workflows/destroy-cert-manager.yaml` - Cleanup
+Recommended for production environments and teams using infrastructure as code workflows.
 
-**Required GitHub Secrets:**
+**Features:**
+- Automated Terraform backend configuration (GCS/S3/Azure Blob)
+- Cloud provider authentication via GitHub Secrets
+- Pull request-based plan review
+- Automated state management
+- Zero-downtime upgrades
 
-| Provider | Required Secrets |
-|----------|------------------|
-| **GKE** | `GCP_SA_KEY`, `GCP_PROJECT_ID`, `CLUSTER_NAME`, `CLUSTER_LOCATION`, `REGION`, `TF_STATE_BUCKET`, `LETSENCRYPT_EMAIL` |
-| **EKS** | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CLUSTER_NAME`, `TF_STATE_BUCKET`, `LETSENCRYPT_EMAIL` |
-| **AKS** | `AZURE_CREDENTIALS`, `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_CONTAINER`, `RESOURCE_GROUP`, `CLUSTER_NAME`, `LETSENCRYPT_EMAIL` |
+**Supported platforms:** GKE, EKS, AKS
 
-**Usage:**
-1. Configure GitHub repository secrets
-2. Push changes to trigger workflow
-3. Review Terraform plan in PR comments
-4. Merge to apply changes
+**Guide:** [GitHub Actions Deployment](cert-manager-github-actions.md)
 
-### Option B: Terraform CLI (Manual)
+---
 
-**Step 1: Setup**
+### Method 2: Manual Helm Deployment
 
-```bash
-cd observability/cert-manager/terraform
+Recommended for local development, learning environments, or clusters without CI/CD infrastructure.
 
-# Verify cluster connection
-kubectl config current-context
-kubectl cluster-info
-```
+**Features:**
+- Direct command-line control
+- Helm chart-based installation
+- Step-by-step verification
+- Works with any Kubernetes cluster
 
-**Step 2: Configure Backend**
+**Supported platforms:** Any Kubernetes cluster (≥ 1.24)
 
-```bash
-# GKE
-export TF_STATE_BUCKET="your-gcs-bucket"
-bash ../../.github/scripts/configure-backend.sh gke cert-manager
+**Guide:** [Manual Deployment](cert-manager-manual-deployment.md)
 
-# EKS
-export TF_STATE_BUCKET="your-s3-bucket"
-export AWS_REGION="us-east-1"
-bash ../../.github/scripts/configure-backend.sh eks cert-manager
+---
 
-# AKS
-export AZURE_STORAGE_ACCOUNT="your-storage-account"
-export AZURE_STORAGE_CONTAINER="terraform-state"
-bash ../../.github/scripts/configure-backend.sh aks cert-manager
-```
+## Choosing a Deployment Method
 
-**State File Location:** `<bucket>/terraform/cert-manager/terraform.tfstate`
+Consider the following when selecting a deployment approach:
 
-**Step 3: Configure Variables**
+**Use GitHub Actions if:**
+- Deploying to production environments
+- Managing multi-cloud infrastructure
+- Requiring audit trails and version control
+- Working in team environments
 
-```bash
-cp terraform.tfvars.template terraform.tfvars
-```
+**Use Manual Deployment if:**
+- Running local development clusters (Minikube, Kind, etc.)
+- Learning cert-manager functionality
+- Operating without CI/CD infrastructure
+- Requiring immediate, hands-on control
 
-Edit `terraform.tfvars`:
+---
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `cloud_provider` | Yes | Provider type | `gke`, `eks`, `aks`, `generic` |
-| `install_cert_manager` | Yes | Install cert-manager | `true` |
-| `create_issuer` | Yes | Create ClusterIssuer | `true` |
-| `letsencrypt_email` | Yes | Let's Encrypt email | `admin@example.com` |
-| `cert_manager_version` | No | Chart version | `v1.19.2` (default) |
-| `cert_issuer_name` | No | Issuer name | `letsencrypt-prod` (default) |
-| `cert_issuer_kind` | No | Issuer type | `ClusterIssuer` (default) |
-| `issuer_server` | No | ACME server | Production (default) or staging |
-| `ingress_class_name` | No | Ingress class | `nginx` (default) |
+## Prerequisites
 
-**GKE-Specific:**
-- `project_id` - GCP project ID
-- `region` - GCP region
-- `gke_endpoint` - Auto-populated by workflows (leave empty for CLI)
-- `gke_ca_certificate` - Auto-populated by workflows (leave empty for CLI)
+### Common Requirements (Both Methods)
 
-**EKS-Specific:**
-- `aws_region` - AWS region
+| Component | Requirement |
+|-----------|-------------|
+| Kubernetes cluster | Version ≥ 1.24 (GKE, EKS, AKS, or generic) |
+| NGINX Ingress Controller | Must be deployed first |
+| kubectl | For cluster access and verification |
+| Let's Encrypt email | Valid email address for certificate notifications |
 
-**Step 4: Deploy**
+### Additional Requirements by Method
 
-```bash
-terraform init
-terraform validate
-terraform plan
-terraform apply
-```
+| Component | GitHub Actions | Manual Deployment |
+|-----------|----------------|-------------------|
+| Helm | Not required | Version ≥ 3.12 |
+| Cloud credentials | GitHub Secrets | Local authentication |
+| Terraform | Not required locally | Not required |
 
-**Step 5: Verify**
+**Note:** NGINX Ingress Controller must be deployed before cert-manager. cert-manager uses HTTP-01 ACME challenges for domain validation, which requires an active ingress controller.
 
-```bash
-# Check pods
-kubectl get pods -n cert-manager
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+See: [Ingress Controller Deployment Guide](ingress-controller-terraform-deployment.md)
 
-# Verify ClusterIssuer
-kubectl get clusterissuer letsencrypt-prod
-kubectl describe clusterissuer letsencrypt-prod
-```
+---
 
-## Usage Example
+## How cert-manager Works
 
-Create an Ingress with automatic TLS:
+cert-manager automates the following certificate lifecycle operations:
+
+1. **Certificate Requests:** Initiates certificate requests to ACME providers (Let's Encrypt)
+2. **Domain Validation:** Completes HTTP-01 challenges via ingress controller
+3. **Certificate Storage:** Stores issued certificates as Kubernetes Secrets
+4. **Automatic Renewal:** Renews certificates 30 days before expiration
+5. **Ingress Integration:** Automatically updates Ingress resources with valid certificates
+
+### Example Usage
+
+Once deployed, cert-manager automatically provisions and manages TLS certificates for Ingress resources:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: example-ingress
+  name: example-app
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - example.com
-      secretName: example-tls
+        - app.example.com
+      secretName: app-tls  # cert-manager manages this Secret
   rules:
-    - host: example.com
+    - host: app.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: example-service
+                name: app-service
                 port:
                   number: 80
 ```
 
-## State Management
+Certificates are typically issued within 2-3 minutes and automatically renewed every 60 days.
 
-State files are stored remotely and persist across deployments:
-
-| Provider | Backend | State File Path |
-|----------|---------|-----------------|
-| **GKE** | Google Cloud Storage | `gs://<bucket>/terraform/cert-manager/terraform.tfstate` |
-| **EKS** | S3 + DynamoDB | `s3://<bucket>/terraform/cert-manager/terraform.tfstate` |
-| **AKS** | Azure Blob | `<account>/<container>/terraform/cert-manager/terraform.tfstate` |
-
-**The backend configuration script (`configure-backend.sh`) creates backend-config.tf but NEVER deletes state files.**
+---
 
 ## Upgrading
 
-```bash
-cd observability/cert-manager/terraform
+### GitHub Actions Deployments
 
-# Update version in terraform.tfvars
-terraform plan
-terraform apply
+1. Update `cert_manager_version` in `terraform/terraform.tfvars`
+2. Commit and push changes to trigger workflow
+3. Review Terraform plan in pull request
+4. Merge to apply changes
+
+### Manual Deployments
+
+1. Update chart version in Helm upgrade command:
+
+```bash
+helm upgrade cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --version <new-version> \
+  --reuse-values
 ```
+
+All upgrades are performed with zero downtime. Existing certificates remain valid during the upgrade process.
+
+---
 
 ## Uninstalling
 
+**Warning:** Uninstalling cert-manager removes all managed Certificate resources and Custom Resource Definitions. Ensure you have backups of any required certificates.
+
+### GitHub Actions
+
+Use the destroy workflow:
 ```bash
-terraform destroy
+.github/workflows/destroy-cert-manager.yaml
 ```
 
-**Note:** This removes cert-manager, CRDs, and all Certificate resources.
+### Manual Helm
 
-## Troubleshooting
+```bash
+helm uninstall cert-manager -n cert-manager
+kubectl delete namespace cert-manager
+```
 
-See [Troubleshooting Guide](troubleshooting-cert-manager.md).
+---
 
-## Adoption
+## Additional Documentation
 
-Already have cert-manager? See [Adoption Guide](adopting-cert-manager.md).
+- [Troubleshooting Guide](troubleshooting-cert-manager.md) - Common issues and resolutions
+- [Adoption Guide](adopting-cert-manager.md) - Migrating existing cert-manager installations
+- [cert-manager Official Documentation](https://cert-manager.io/docs/) - Comprehensive upstream documentation
+
+---
+
+## Next Steps
+
+Select your deployment method and follow the corresponding guide:
+
+- [GitHub Actions Deployment](cert-manager-github-actions.md) - Automated CI/CD approach
+- [Manual Helm Deployment](cert-manager-manual-deployment.md) - Direct installation approach
+
+Both methods result in a production-ready cert-manager installation. Choose based on your operational requirements and infrastructure setup.
