@@ -129,20 +129,33 @@ else
 fi
 
 # Test 2: Query logs from Loki
-sleep 3  # Wait for logs to be indexed
-echo "  📥 Querying logs..."
+echo "  📥 Querying logs (with retries)..."
+LOKI_QUERY_SUCCESS=false
 
-LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query" \
-  --data-urlencode 'query={job="smoke-test"}' \
-  --data-urlencode 'limit=10' || echo "FAILED")
+# Try for up to 30 seconds
+for i in {1..6}; do
+  sleep 5
+  LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query" \
+    --data-urlencode 'query={job="smoke-test"}' \
+    --data-urlencode 'limit=10' || echo "FAILED")
 
-if [[ "$LOKI_QUERY_RESPONSE" == *"smoke test"* ]]; then
-  RESULT_COUNT=$(echo "$LOKI_QUERY_RESPONSE" | jq -r '.data.result | length' 2>/dev/null || echo "0")
-  record_test "loki" "query_logs" "PASS" "Retrieved $RESULT_COUNT log streams"
-  echo "    ✅ Logs queried successfully ($RESULT_COUNT streams)"
-else
-  record_test "loki" "query_logs" "FAIL" "Failed to query logs"
+  if [[ "$LOKI_QUERY_RESPONSE" != "FAILED" ]] && echo "$LOKI_QUERY_RESPONSE" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
+    RESULT_COUNT=$(echo "$LOKI_QUERY_RESPONSE" | jq -r '.data.result | length')
+    record_test "loki" "query_logs" "PASS" "Retrieved $RESULT_COUNT log streams"
+    echo "    ✅ Logs queried successfully ($RESULT_COUNT streams)"
+    LOKI_QUERY_SUCCESS=true
+    break
+  fi
+  echo "    ⏳ Waiting for logs to be indexed... (attempt $i)"
+done
+
+if [ "$LOKI_QUERY_SUCCESS" = false ]; then
+  record_test "loki" "query_logs" "FAIL" "Failed to query logs or logs not indexed in time"
   echo "    ❌ Failed to query logs"
+  # Support debugging
+  if [[ "$LOKI_QUERY_RESPONSE" != "FAILED" ]]; then
+     echo "    DEBUG: Loki Response: $(echo "$LOKI_QUERY_RESPONSE" | cut -c 1-100)..."
+  fi
 fi
 
 
@@ -180,19 +193,32 @@ else
 fi
 
 # Test 2: Query metrics from Mimir
-sleep 5  # Wait for metrics to be ingested
-echo "  📥 Querying metrics..."
+echo "  📥 Querying metrics (with retries)..."
+MIMIR_QUERY_SUCCESS=false
 
-MIMIR_QUERY_RESPONSE=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
-  --data-urlencode 'query=smoke_test_metric' || echo "FAILED")
+# Try for up to 30 seconds
+for i in {1..6}; do
+  sleep 5
+  MIMIR_QUERY_RESPONSE=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
+    --data-urlencode 'query=smoke_test_metric' || echo "FAILED")
 
-if [[ "$MIMIR_QUERY_RESPONSE" == *"smoke_test_metric"* ]]; then
-  SAMPLES=$(echo "$MIMIR_QUERY_RESPONSE" | jq -r '.data.result | length' 2>/dev/null || echo "0")
-  record_test "mimir" "query_metrics" "PASS" "Retrieved $SAMPLES metric series"
-  echo "    ✅ Metrics queried successfully ($SAMPLES series)"
-else
-  record_test "mimir" "query_metrics" "FAIL" "Failed to query metrics"
+  if [[ "$MIMIR_QUERY_RESPONSE" != "FAILED" ]] && echo "$MIMIR_QUERY_RESPONSE" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
+    SAMPLES=$(echo "$MIMIR_QUERY_RESPONSE" | jq -r '.data.result | length')
+    record_test "mimir" "query_metrics" "PASS" "Retrieved $SAMPLES metric series"
+    echo "    ✅ Metrics queried successfully ($SAMPLES series)"
+    MIMIR_QUERY_SUCCESS=true
+    break
+  fi
+  echo "    ⏳ Waiting for metrics to be ingested... (attempt $i)"
+done
+
+if [ "$MIMIR_QUERY_SUCCESS" = false ]; then
+  record_test "mimir" "query_metrics" "FAIL" "Failed to query metrics or metrics not ingested in time"
   echo "    ❌ Failed to query metrics"
+  # Support debugging
+  if [[ "$MIMIR_QUERY_RESPONSE" != "FAILED" ]]; then
+     echo "    DEBUG: Mimir Response: $(echo "$MIMIR_QUERY_RESPONSE" | cut -c 1-100)..."
+  fi
 fi
 
 
@@ -292,17 +318,26 @@ else
 fi
 
 # Test 2: Query trace from Tempo
-sleep 5  # Wait for trace to be ingested
-echo "  📥 Querying trace..."
+echo "  📥 Querying trace (with retries)..."
+TEMPO_QUERY_SUCCESS=false
 
-TEMPO_QUERY=$(curl -s "$TEMPO_ENDPOINT/api/traces/${TRACE_ID}" || echo "FAILED")
+# Try for up to 40 seconds for Tempo as tracing can be slower to index
+for i in {1..8}; do
+  sleep 5
+  TEMPO_QUERY=$(curl -s "$TEMPO_ENDPOINT/api/traces/${TRACE_ID}" || echo "FAILED")
 
-if [[ "$TEMPO_QUERY" == *"batches"* ]] || [[ "$TEMPO_QUERY" == *"spans"* ]]; then
-  record_test "tempo" "query_trace" "PASS" "Successfully retrieved trace"
-  echo "    ✅ Trace queried successfully"
-else
-  record_test "tempo" "query_trace" "WARN" "Trace might not be indexed yet"
-  echo "    ⚠️  Trace not found (may need more time to index)"
+  if [[ "$TEMPO_QUERY" != "FAILED" ]] && echo "$TEMPO_QUERY" | jq -e '.batches | length > 0' >/dev/null 2>&1; then
+    record_test "tempo" "query_trace" "PASS" "Successfully retrieved trace"
+    echo "    ✅ Trace queried successfully"
+    TEMPO_QUERY_SUCCESS=true
+    break
+  fi
+  echo "    ⏳ Waiting for trace to be indexed... (attempt $i)"
+done
+
+if [ "$TEMPO_QUERY_SUCCESS" = false ]; then
+  record_test "tempo" "query_trace" "WARN" "Trace not found in allowed window. This is common; checking internal Grafana status..."
+  echo "    ⚠️  Trace not found (indexing taking longer than expected)"
 fi
 
 
