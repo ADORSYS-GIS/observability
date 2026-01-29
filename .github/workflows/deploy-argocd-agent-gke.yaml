@@ -185,16 +185,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Configure kubectl (GKE)
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
+      - name: Setup Full Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -229,13 +224,11 @@ jobs:
     environment: ${{ needs.setup-environment.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
+      - name: Setup Full Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
       - name: Run Verification
         env:
           NAMESPACE: argocd
