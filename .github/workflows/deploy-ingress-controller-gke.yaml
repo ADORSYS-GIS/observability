@@ -252,6 +252,7 @@ jobs:
     needs: [setup-environment, terraform-plan]
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/feat/issue-28-setup-pipelines-cert-manager-ingress') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
       name: production  # Requires approval before execution
