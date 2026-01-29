@@ -101,17 +101,6 @@ jobs:
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform init
 
-      - name: Smart Import Existing Resources
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          NAMESPACE: argocd-agent
-          CLOUD_PROVIDER: gke
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          KEYCLOAK_URL: ${{ secrets.KEYCLOAK_URL }}
-        run: |
-          chmod +x $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh
-          $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh || true
-
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
@@ -135,6 +124,17 @@ jobs:
           EOF
           
           echo "✅ Created terraform.tfvars with injected secrets"
+
+      - name: Smart Import Existing Resources
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          NAMESPACE: argocd-agent
+          CLOUD_PROVIDER: gke
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          KEYCLOAK_URL: ${{ secrets.KEYCLOAK_URL }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh
+          $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh || true
 
       - name: Terraform Plan
         id: plan
