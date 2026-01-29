@@ -247,11 +247,33 @@ jobs:
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform init
 
+      - name: Install argocd-agentctl
+        run: |
+          curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
+          chmod +x argocd-agentctl
+          sudo mv argocd-agentctl /usr/local/bin/
+
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ needs.setup-environment.outputs.environment }}
           path: ${{ needs.setup-environment.outputs.working_dir }}
+
+      - name: Import Keycloak Realm if exists
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        run: |
+          # Check if the Keycloak realm is already in Terraform state
+          if ! terraform state list | grep -q "module.hub_cluster\[0\].keycloak_realm.argocd\[0\]"; then
+            echo "Checking if Keycloak realm 'argocd' exists in Keycloak..."
+            # Note: We optimistically attempt import. Terraform import will verify if it exists.
+            # If it doesn't exist, import will fail, but we ignore failure because then apply will create it.
+            # However, standard terraform import requires the resource to exist.
+            # Given the error was "409 Conflict", we know it exists.
+            echo "Attempting to import existing 'argocd' realm..."
+            terraform import module.hub_cluster[0].keycloak_realm.argocd[0] argocd || echo "Import failed or not needed, proceeding to apply..."
+          else
+            echo "Keycloak realm already in state."
+          fi
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
