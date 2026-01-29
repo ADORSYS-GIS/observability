@@ -412,7 +412,7 @@ jobs:
       # 3. Verify ClusterIssuer is configured and ready
       - name: Verify cert-manager deployment
         run: |
-          echo "🔍 Verifying cert-manager deployment..."
+          echo "Verifying cert-manager deployment..."
           
           # Check namespace creation
           echo "Checking cert-manager namespace..."
@@ -428,4 +428,4 @@ jobs:
           kubectl get clusterissuer letsencrypt-prod
           kubectl describe clusterissuer letsencrypt-prod
           
-          echo "✅ cert-manager deployment verified successfully"
+          echo "cert-manager deployment verified successfully"

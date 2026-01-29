@@ -18,11 +18,10 @@ on:
           - plan
           - apply
         default: 'plan'
-  # Auto-trigger on push to main branch and testing branch
+  # Auto-trigger on push to main branch for production deployments
   push:
     branches:
       - main
-      - feat/issue-28-setup-pipelines-cert-manager-ingress
     paths:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-gke.yaml'
@@ -205,7 +204,6 @@ jobs:
     needs: terraform-plan
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/feat/issue-28-setup-pipelines-cert-manager-ingress') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
       name: production  # Requires approval before execution
@@ -326,7 +324,7 @@ jobs:
       # Checks: namespace, pods, IngressClass, LoadBalancer service
       - name: Verify ingress-controller deployment
         run: |
-          echo "🔍 Verifying ingress-controller deployment..."
+          echo "Verifying ingress-controller deployment..."
           
           # Confirm namespace exists
           echo "Checking ingress-nginx namespace..."

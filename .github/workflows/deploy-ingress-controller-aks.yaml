@@ -18,7 +18,7 @@ on:
           - plan
           - apply
         default: 'plan'
-  # Auto-trigger on push to main branch
+  # Auto-trigger on push to main branch for production deployments
   push:
     branches:
       - main
@@ -35,58 +35,22 @@ on:
 permissions:
   contents: read           # Read repository content
   pull-requests: write     # Comment Terraform plans on PRs
+  id-token: write         # Azure Workload Identity (optional)
 
 # Global environment variables used across all jobs
 env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
+  KUBELOGIN_VERSION: '0.1.4'
   WORKING_DIR: 'ingress-controller/terraform'
   CLOUD_PROVIDER: 'aks'
 
 jobs:
-  # Job 1: Verify AKS cluster connectivity
-  # This job runs first to ensure cluster access before Terraform operations
-  setup-environment:
-    name: Setup AKS Environment
-    runs-on: ubuntu-latest
-    
-    steps:
-      # Fetch repository code containing Terraform configurations
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Authenticate to Azure using service principal credentials
-      # Required for: cluster access, state storage (Blob), resource provisioning
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      # Install kubectl and configure AKS cluster access
-      - name: Setup kubectl and get AKS credentials
-        run: |
-          # Download and install kubectl
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          
-          # Fetch AKS cluster credentials and configure kubeconfig
-          az aks get-credentials \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --name ${{ secrets.CLUSTER_NAME }} \
-            --overwrite-existing
-          
-          # Verify connectivity to AKS cluster
-          kubectl cluster-info
-          kubectl get nodes
-          echo "✅ Connected to AKS cluster"
-
-  # Job 2: Generate and review Terraform infrastructure plan
-  # Runs after environment setup, creates deployment plan for review
+  # Job 1: Generate and review Terraform infrastructure plan
+  # Includes cluster connectivity verification
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: [setup-environment]
     outputs:
       plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
     
@@ -95,11 +59,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Authenticate to Azure (needed for Blob Storage state bucket access)
+      # Authenticate to Azure using Service Principal
+      # For production: Consider using Azure Workload Identity (OIDC)
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Install Azure CLI for AKS cluster operations
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # Install kubectl for Kubernetes provider configuration
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      # Install kubelogin (required for AAD-enabled AKS clusters)
+      # kubelogin enables kubectl authentication with Azure Active Directory
+      - name: Setup kubelogin
+        run: |
+          curl -LO "https://github.com/Azure/kubelogin/releases/download/v${KUBELOGIN_VERSION}/kubelogin-linux-amd64.zip"
+          unzip kubelogin-linux-amd64.zip
+          sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+          kubelogin --version
+
+      # Configure AKS cluster access using Azure CLI
+      # kubelogin handles AAD authentication for kubectl commands
+      - name: Configure cluster access
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --overwrite-existing
+          
+          # Convert kubeconfig to use kubelogin for AAD auth
+          kubelogin convert-kubeconfig -l azurecli
+
+      # Verify cluster connectivity before proceeding
+      - name: Verify cluster access
+        run: |
+          echo "Testing AKS cluster connectivity..."
+          kubectl cluster-info
+          kubectl get nodes
 
       # Install Terraform CLI for infrastructure operations
       - name: Setup Terraform
@@ -107,25 +113,14 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      # Install kubectl and configure AKS cluster access
-      # Required for Kubernetes provider configuration in Terraform
-      - name: Setup kubectl
-        run: |
-          # Download and install kubectl
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          # Configure AKS kubeconfig
-          az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.CLUSTER_NAME }} --overwrite-existing
-
       # Remove stale local backend configuration files
-      # State files in Blob Storage remain intact and accessible
+      # State files in Azure Blob Storage remain intact and accessible
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: rm -f backend.tf backend-config.tf
 
       # Generate backend configuration for Azure Blob Storage state storage
-      # State file location: <account>/<container>/terraform/ingress-controller/terraform.tfstate
+      # State file location: https://<storage-account>.blob.core.windows.net/<container>/terraform/ingress-controller/terraform.tfstate
       # Script generates backend-config.tf but never deletes state files
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
@@ -148,11 +143,14 @@ jobs:
         run: terraform validate
 
       # Create Terraform variables file with ingress-controller configuration
+      # Includes cluster info for Kubernetes provider and NGINX settings
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > terraform.tfvars <<EOF
           cloud_provider        = "${{ env.CLOUD_PROVIDER }}"
+          azure_resource_group  = "${{ secrets.AZURE_RESOURCE_GROUP }}"
+          aks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
           nginx_ingress_version = "4.14.2"
@@ -212,13 +210,13 @@ jobs:
               body: `## Terraform Plan - ingress-controller (AKS)\n\`\`\`\n${truncatedPlan}\n\`\`\``
             })
 
-  # Job 3: Execute approved deployment
+  # Job 2: Execute approved deployment and verify
   # Only runs on main branch pushes or manual apply trigger
   # Requires production environment approval
-  terraform-apply:
-    name: Terraform Apply
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-plan]
+    needs: terraform-plan
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
@@ -230,27 +228,57 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Authenticate to Azure for resource provisioning
+      # Authenticate to Azure
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Install Azure CLI
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # Install kubectl for Kubernetes provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      # Install kubelogin (critical for AAD-enabled AKS clusters)
+      # Without kubelogin, kubectl cannot authenticate to AKS
+      - name: Setup kubelogin
+        run: |
+          curl -LO "https://github.com/Azure/kubelogin/releases/download/v${KUBELOGIN_VERSION}/kubelogin-linux-amd64.zip"
+          unzip kubelogin-linux-amd64.zip
+          sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+          kubelogin --version
+
+      # Configure cluster access
+      - name: Configure cluster access
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --overwrite-existing
+          
+          # Convert kubeconfig to use kubelogin for AAD auth
+          kubelogin convert-kubeconfig -l azurecli
+
+      # Verify cluster connectivity
+      - name: Verify cluster access
+        run: |
+          echo "Testing AKS cluster connectivity..."
+          kubectl cluster-info
+          kubectl get nodes
 
       # Install Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      # Install and configure kubectl for Kubernetes provider
-      - name: Setup kubectl
-        run: |
-          # Download and install kubectl
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          # Configure AKS kubeconfig
-          az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.CLUSTER_NAME }} --overwrite-existing
 
       # Recreate terraform.tfvars identical to plan job
       # Ensures variables match what was planned
@@ -259,6 +287,8 @@ jobs:
         run: |
           cat > terraform.tfvars <<EOF
           cloud_provider        = "${{ env.CLOUD_PROVIDER }}"
+          azure_resource_group  = "${{ secrets.AZURE_RESOURCE_GROUP }}"
+          aks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
           nginx_ingress_version = "4.14.2"
@@ -313,39 +343,11 @@ jobs:
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
           retention-days: 30
 
-  # Job 4: Verify successful deployment
-  # Runs after apply completes to validate ingress-controller is operational
-  verify-deployment:
-    name: Verify Deployment
-    runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-apply]
-    
-    steps:
-      # Fetch repository code (if verification scripts needed)
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Authenticate to Azure for cluster access
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      # Install kubectl and configure AKS cluster access
-      - name: Setup kubectl
-        run: |
-          # Download and install kubectl
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          # Configure AKS kubeconfig
-          az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.CLUSTER_NAME }} --overwrite-existing
-
       # Verify all ingress-controller components are healthy
       # Checks: namespace, pods, IngressClass, LoadBalancer service
       - name: Verify ingress-controller deployment
         run: |
-          echo "🔍 Verifying ingress-controller deployment..."
+          echo "Verifying ingress-controller deployment..."
           
           # Confirm namespace exists
           echo "Checking ingress-nginx namespace..."
