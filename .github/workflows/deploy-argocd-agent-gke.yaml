@@ -98,7 +98,7 @@ jobs:
           $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ needs.setup-environment.outputs.environment }}
 
       - name: Terraform Init
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }} 
         run: terraform init
 
       - name: Create terraform.tfvars
