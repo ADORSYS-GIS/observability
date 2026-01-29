@@ -20,7 +20,7 @@ on:
           - dev
           - staging
           - prod
-      - '.github/workflows/deploy-argocd-agent-generic.yaml'
+      - '.github/workflows/deploy-argocd-agent-generic.yaml' 
 
 permissions:
   contents: read
