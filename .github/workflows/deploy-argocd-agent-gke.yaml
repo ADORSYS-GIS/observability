@@ -79,6 +79,15 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Verify kubectl connection
+        run: |
+          echo "Current kubectl context:"
+          kubectl config current-context
+          echo "Available contexts:"
+          kubectl config get-contexts
+          echo "Cluster info:"
+          kubectl cluster-info
+
       - name: Config Backend
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         env:
@@ -96,8 +105,11 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
+          # Get the actual current kubectl context name
+          KUBE_CONTEXT=$(kubectl config current-context)
+          
           cat > terraform.tfvars <<EOF
-          hub_cluster_context      = "gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}"
+          hub_cluster_context      = "$KUBE_CONTEXT"
           hub_namespace            = "argocd"
           spoke_namespace          = "argocd"
           create_default_admin_user = true
