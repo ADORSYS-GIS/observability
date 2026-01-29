@@ -374,8 +374,7 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
-          retention-days: 30
-          
+          retention-days: 30          
 
   verify-deployment:
     name: Verify Deployment

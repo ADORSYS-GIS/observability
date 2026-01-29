@@ -132,11 +132,16 @@ fi
 echo "  📥 Querying logs (with retries)..."
 LOKI_QUERY_SUCCESS=false
 
+# Use query_range as Loki doesn't support log queries in instant /query
+# Search for logs in the last 5 minutes
+START_TIME_LOKI=$(($(date +%s) - 300))
+
 # Try for up to 30 seconds
 for i in {1..6}; do
   sleep 5
-  LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query" \
+  LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
     --data-urlencode 'query={job="smoke-test"}' \
+    --data-urlencode "start=$START_TIME_LOKI" \
     --data-urlencode 'limit=10' || echo "FAILED")
 
   if [[ "$LOKI_QUERY_RESPONSE" != "FAILED" ]] && echo "$LOKI_QUERY_RESPONSE" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
@@ -196,9 +201,10 @@ fi
 echo "  📥 Querying metrics (with retries)..."
 MIMIR_QUERY_SUCCESS=false
 
-# Try for up to 30 seconds
-for i in {1..6}; do
+# Try for up to 45 seconds for Mimir
+for i in {1..9}; do
   sleep 5
+  # Query using the exact metric name. We don't use query_range here as instant query is standard for 'latest' metric.
   MIMIR_QUERY_RESPONSE=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
     --data-urlencode 'query=smoke_test_metric' || echo "FAILED")
 
@@ -321,8 +327,8 @@ fi
 echo "  📥 Querying trace (with retries)..."
 TEMPO_QUERY_SUCCESS=false
 
-# Try for up to 40 seconds for Tempo as tracing can be slower to index
-for i in {1..8}; do
+# Try for up to 60 seconds for Tempo as tracing can be slower to index
+for i in {1..12}; do
   sleep 5
   TEMPO_QUERY=$(curl -s "$TEMPO_ENDPOINT/api/traces/${TRACE_ID}" || echo "FAILED")
 
