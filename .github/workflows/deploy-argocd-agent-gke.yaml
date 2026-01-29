@@ -6,7 +6,7 @@ on:
       - '**'  # Trigger on push to any branch (for testing)
     paths:
       - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-gke.yaml'
+      - '.github/workflows/deploy-argocd-agent-gke.yaml' 
   workflow_dispatch:
     inputs:
       terraform_action:
