@@ -87,6 +87,9 @@ jobs:
           kubectl config get-contexts
           echo "Cluster info:"
           kubectl cluster-info
+          echo "KUBECONFIG location:"
+          echo $KUBECONFIG
+          ls -la $HOME/.kube/
 
       - name: Config Backend
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
@@ -98,6 +101,8 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          KUBECONFIG: /home/runner/.kube/config
         run: terraform init
 
       # Import step removed as manual import was performed
@@ -130,6 +135,8 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          KUBE_CONFIG_PATH: ${{ env.KUBECONFIG }}
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
