@@ -55,6 +55,8 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Setup kubectl and get GKE credentials
         run: |
@@ -62,11 +64,6 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Install gke-gcloud-auth-plugin
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get cluster credentials using gcloud (authenticated via google-github-actions/auth)
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -96,6 +93,8 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Setup kubectl and get GKE credentials
         run: |
@@ -103,9 +102,6 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Install gke-gcloud-auth-plugin (Required for GKE 1.26+)
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get cluster credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -166,6 +162,8 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Setup kubectl and get GKE credentials
         run: |
@@ -173,9 +171,6 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Install gke-gcloud-auth-plugin
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get cluster credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -303,6 +298,8 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Setup kubectl and get GKE credentials
         run: |
@@ -310,9 +307,6 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Install gke-gcloud-auth-plugin
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get GKE credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
@@ -398,6 +392,8 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Setup kubectl and get GKE credentials
         run: |
@@ -405,9 +401,6 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          
-          # Install gke-gcloud-auth-plugin
-          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
           
           # Get GKE credentials
           gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
