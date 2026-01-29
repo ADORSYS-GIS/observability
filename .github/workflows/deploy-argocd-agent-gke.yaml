@@ -99,7 +99,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ needs.setup-environment.outputs.working_dir }} 
-        run: terraform init
+        run: terraform init 
 
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
