@@ -1,0 +1,149 @@
+# =============================================================================
+# ArgoCD Agent Terraform Configuration Template
+# Copy to terraform.tfvars and customize for your environment
+# =============================================================================
+
+# =============================================================================
+# DEPLOYMENT MODE
+# =============================================================================
+
+deploy_hub    = true   # Deploy hub infrastructure (ArgoCD + Principal)
+deploy_spokes = true   # Deploy spoke clusters (Agents)
+
+# =============================================================================
+# CLUSTER CONFIGURATION
+# =============================================================================
+
+# Hub cluster kubectl context
+hub_cluster_context = "<YOUR-HUB-CONTEXT>"  # Example: "gke_project_region_hub-cluster"
+
+# Workload clusters (map of agent_name => cluster_context)
+workload_clusters = {
+  "agent-1" = "<SPOKE-CONTEXT-1>"  # Example: "gke_project_region_spoke-1"
+  # "agent-2" = "<SPOKE-CONTEXT-2>"
+  # Add more agents as needed
+}
+
+# =============================================================================
+# ARGOCD CONFIGURATION
+# =============================================================================
+
+argocd_version  = "v0.5.3"  # Latest stable version
+hub_namespace   = "argocd"
+spoke_namespace = "argocd"
+
+# =============================================================================
+# EXPOSURE CONFIGURATION
+# =============================================================================
+
+# Method: "loadbalancer" (cloud providers) or "ingress" (with ingress controller)
+ui_expose_method        = "loadbalancer"
+principal_expose_method = "loadbalancer"
+
+# ArgoCD UI hostname (required if ui_expose_method="ingress")
+argocd_host = "<ARGOCD-HOSTNAME>"  # Example: "argocd.example.com"
+
+# =============================================================================
+# INFRASTRUCTURE DEPENDENCIES
+# =============================================================================
+
+# Set to false if cert-manager and nginx-ingress are already installed
+install_nginx_ingress = false
+install_cert_manager  = false
+
+# Reference existing infrastructure (if not installing new)
+nginx_ingress_namespace = "ingress-nginx"
+ingress_class_name      = "nginx"
+cert_manager_namespace  = "cert-manager"
+letsencrypt_email       = "<YOUR-EMAIL>"
+cert_issuer_name        = "letsencrypt-prod"
+cert_issuer_kind        = "ClusterIssuer"  # or "Issuer"
+
+# =============================================================================
+# KEYCLOAK INTEGRATION (SSO Authentication)
+# =============================================================================
+
+enable_keycloak   = true
+keycloak_url      = "<KEYCLOAK-URL>"  # Example: "https://keycloak.example.com"
+keycloak_user     = "admin"
+keycloak_password = "<KEYCLOAK-ADMIN-PASSWORD>"  # SECURITY: Use env var TF_VAR_keycloak_password
+keycloak_realm    = "argocd"
+argocd_url        = "<ARGOCD-URL>"  # Example: "https://argocd.example.com"
+
+# PKCE mode (enables CLI login with --sso)
+keycloak_enable_pkce = false  # Set to true for CLI support (argocd login --sso)
+
+# Default admin user for initial ArgoCD access
+create_default_admin_user        = true
+default_admin_username           = "argocd-admin"
+default_admin_email              = "<ADMIN-EMAIL>"
+default_admin_password           = "<STRONG-PASSWORD>"  # REQUIRED: Set a strong password
+default_admin_password_temporary = true  # User must change password on first login
+
+# =============================================================================
+# PATHS
+# =============================================================================
+
+# argocd-agentctl will be installed to /usr/local/bin
+argocd_agentctl_path = "/usr/local/bin/argocd-agentctl"
+
+# =============================================================================
+# HIGH AVAILABILITY (Optional)
+# =============================================================================
+
+# Set to 2+ for production (enables PDB and anti-affinity)
+# principal_replicas = 2
+
+# =============================================================================
+# DEPLOYMENT SCENARIOS
+# =============================================================================
+
+# SCENARIO 1: Full Deployment (Hub + Spokes)
+# ───────────────────────────────────────────
+# Use the configuration above as-is with deploy_hub=true and deploy_spokes=true
+# Deploys everything in one go
+
+# SCENARIO 2: Hub Only (Get Principal IP for later spoke additions)
+# ──────────────────────────────────────────────────────────────────
+# deploy_hub    = true
+# deploy_spokes = false
+# workload_clusters = {}
+# 
+# After deployment, get principal IP:
+#   terraform output principal_address
+#   terraform output principal_port
+
+# SCENARIO 3: Add Spokes to Existing Hub
+# ───────────────────────────────────────
+# deploy_hub        = false
+# deploy_spokes     = true
+# principal_address = "34.89.123.45"  # IP from hub deployment output
+# principal_port    = 443
+# workload_clusters = {
+#   "new-agent" = "gke_project_region_new-spoke"
+# }
+
+# =============================================================================
+# NOTES
+# =============================================================================
+# 
+# 1. Backend Configuration:
+#    Add backend configuration in versions.tf or create backend.tf:
+#    terraform {
+#      backend "gcs" {
+#        bucket = "your-terraform-state-bucket"
+#        prefix = "argocd-agent"
+#      }
+#    }
+#
+# 2. Security Best Practices:
+#    - Use environment variables for sensitive values:
+#      export TF_VAR_keycloak_password="..."
+#      export TF_VAR_default_admin_password="..."
+#    - Enable encryption for terraform state
+#    - Back up PKI CA secret immediately after deployment
+#
+# 3. Post-Deployment:
+#    - Backup PKI CA: terraform output pki_backup_instructions
+#    - Login to ArgoCD: terraform output keycloak_login_instructions
+#    - Verify agents: argocd-agentctl agent list

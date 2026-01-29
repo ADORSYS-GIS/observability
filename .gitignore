@@ -97,12 +97,11 @@ yarn.lock
 *.tfstate.*
 *.tfstate.backup
 *.backup
-*.tfvars
-!*.tfvars.template
 .terraform/
 .terraform.lock.hcl
 backend-config.tf
 backend.tf
+terraform.tfplan
 
 # Crash logs
 crash.log
@@ -111,3 +110,33 @@ crash.*.log
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Terraform sensitive variable files
+*.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+!*.tfvars.template
+!*.tfvars.example
+
+# Terraform override files (for personal configs)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Environment variables with secrets
+.env.local
+*.env
+
+# PKI backups (contain sensitive keys)
+pki-ca-backup-*.yaml
+pki-ca-backup*.yaml
+pki-ca-backup*.yaml.gpg
+
+# Terraform temp files
+.principal_ip.json
+*LOG_FILE
+
+# Zencoder files
+.zencoder
+.zenflow

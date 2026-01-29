@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.0.0"
+
   required_providers {
     keycloak = {
       source  = "mrparkers/keycloak"
@@ -8,13 +10,17 @@ terraform {
       source  = "hashicorp/helm"
       version = ">= 2.0.0"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">= 2.0.0"
+    }
   }
 }
 
 # 1. Connect to your EXISTING Keycloak
 provider "keycloak" {
   client_id = "admin-cli"
-  url       = var.keycloak_url      # e.g. https://auth.example.com
+  url       = var.keycloak_url # e.g. https://auth.example.com
   username  = var.keycloak_user
   password  = var.keycloak_password
 }

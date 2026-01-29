@@ -14,40 +14,23 @@ Production-ready infrastructure-as-code for deploying enterprise observability a
 
 - [Kubernetes](https://kubernetes.io/docs/setup/) cluster
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) configured with cluster admin access
-- [Terraform 1.6+](https://developer.hashicorp.com/terraform/install)
-- GitHub repository with configured secrets
+- [Helm 3.8+](https://helm.sh/docs/intro/install/) (for manual deployments)
+- [Terraform 1.3+](https://developer.hashicorp.com/terraform/install) (for automated deployments)
 
-## Quick Start (GKE)
+## Architecture
 
-1. **Configure Secrets:** Add `GCP_PROJECT_ID`, `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`, `REGION`, `TF_STATE_BUCKET`, `MONITORING_DOMAIN`, `LETSENCRYPT_EMAIL`, and `GRAFANA_ADMIN_PASSWORD` to GitHub Secrets.
-2. **Deploy:** Go to `Actions` → `Deploy LGTM Stack (GKE)` → `Run workflow`.
-3. **Verify:** Check the `verification-report.html` artifact after the workflow completes.
+This repository follows a modular architecture where components maintain operational independence while integrating seamlessly. Deploy individual components as needed or provision the complete stack for full observability coverage.
 
-## Required Secrets for CI/CD
+## Components
 
-| Secret | Provider | Description |
-|--------|----------|-------------|
-| `GCP_PROJECT_ID` | GKE | Your Google Cloud Project ID |
-| `GCP_SA_KEY` | GKE | JSON key for deployment Service Account |
-| `AWS_ACCESS_KEY_ID` | EKS | AWS Access Key |
-| `AWS_SECRET_ACCESS_KEY` | EKS | AWS Secret Key |
-| `KUBECONFIG` | Generic | Base64-encoded kubeconfig file |
-| `TF_STATE_BUCKET` | GKE/EKS | Bucket name for Terraform state |
-| `MONITORING_DOMAIN` | All | Domain for observability (e.g., monitor.example.com) |
-| `GRAFANA_ADMIN_PASSWORD` | All | Admin password for Grafana UI |
+### [LGTM Observability Stack](lgtm-stack/README.md)
+Comprehensive monitoring, logging, and distributed tracing platform built on Grafana Labs' open-source stack (Loki, Grafana, Tempo, Mimir).
 
-## Deployment Order & Dependencies
+### [ArgoCD GitOps Engine](argocd/README.md)
+Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
 
-The LGTM stack deployment follows this order:
-1. **Namespace & Service Account:** Created first to provide identity.
-2. **Cloud Storage & IAM:** Modules configure S3/GCS buckets and IAM bindings.
-3. **Core Infrastructure:** cert-manager and ingress-nginx (if enabled).
-4. **LGTM Components:** Loki, Mimir, Tempo, and Prometheus.
-5. **Grafana:** Deployed last to integrate all data sources.
+### [cert-manager Certificate Authority](cert-manager/README.md)
+Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
 
-## Documentation Index
-
-- [GitHub Actions Deployment Guide](docs/github-actions-deployment.md)
-- [GKE Testing Workflow](docs/TESTING_GKE_WORKFLOW.md)
-- [Workflow Guide](docs/WORKFLOWS_GUIDE.md)
-- [LGTM Stack Details](lgtm-stack/README.md)
+### [NGINX Ingress Controller](ingress-controller/README.md)
+Layer 7 load balancer and reverse proxy for routing external HTTP/HTTPS traffic to cluster services.

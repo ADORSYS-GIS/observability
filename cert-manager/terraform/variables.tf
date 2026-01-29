@@ -4,6 +4,12 @@ variable "install_cert_manager" {
   default     = false
 }
 
+variable "create_issuer" {
+  description = "Whether to create the cert issuer (set to false if creating it separately to avoid circular dependencies)"
+  type        = bool
+  default     = true
+}
+
 variable "release_name" {
   description = "Helm release name"
   type        = string
@@ -41,7 +47,7 @@ variable "cert_issuer_kind" {
   default     = "ClusterIssuer"
   validation {
     condition     = contains(["ClusterIssuer", "Issuer"], var.cert_issuer_kind)
-    error_message = "cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
+    error_message = "The cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
   }
 }
 
