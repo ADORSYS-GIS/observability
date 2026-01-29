@@ -111,8 +111,8 @@ jobs:
           create_default_admin_user = true
           default_admin_password   = "${{ secrets.PASSWORD }}"
           
-          # Keycloak (TEMPORARILY DISABLED to avoid 409 conflicts)
-          enable_keycloak          = false
+          # Keycloak (Optional - enables if secrets exist)
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
           keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
           keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
           keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
