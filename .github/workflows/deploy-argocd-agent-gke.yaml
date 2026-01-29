@@ -12,7 +12,7 @@ on:
           - apply
         default: 'plan'
       environment:
-        description: 'Target Environment'
+        description: 'Target Environment' 
         required: true
         default: 'dev'
         type: choice
