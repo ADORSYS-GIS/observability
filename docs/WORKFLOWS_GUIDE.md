@@ -87,7 +87,7 @@ cat ~/.kube/config | base64 -w 0
 
 **How to Use:**
 1. Go to Actions → Destroy LGTM Stack
-2. Select cloud provider (gke/eks/aks/generic)
+2. Select cloud provider (gke/eks/generic)
 3. Choose whether to delete storage buckets
 4. Type "DESTROY" to confirm
 5. Run workflow

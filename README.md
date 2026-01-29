@@ -1,54 +1,53 @@
 # Kubernetes Observability & Operations
 
-Production-ready infrastructure-as-code for deploying enterprise observability and operational tooling on **any Kubernetes cluster**. This repository provides modular, production-grade deployments for GKE, EKS, AKS, and generic Kubernetes clusters where each component can be installed independently or as part of a complete observability and operations stack.
+Production-ready infrastructure-as-code for deploying enterprise observability and operational tooling on Kubernetes. This repository provides modular, production-grade deployments for GKE, EKS, and generic Kubernetes clusters.
+
+## Supported Providers
+
+- **GKE** (Google Kubernetes Engine) - Fully tested with Workload Identity and GCS.
+- **EKS** (Amazon Elastic Kubernetes Service) - Fully tested with IRSA and S3.
+- **Generic Kubernetes** (minikube, kind, on-premise) - Supports persistent volumes.
+
+**Note:** AKS (Azure Kubernetes Service) is currently not supported.
 
 ## Requirements
 
-- [Kubernetes](https://kubernetes.io/docs/setup/) cluster (GKE, EKS, AKS, minikube, kind, or on-premise)
+- [Kubernetes](https://kubernetes.io/docs/setup/) cluster
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) configured with cluster admin access
-- [Helm 3.8+](https://helm.sh/docs/intro/install/) (for manual deployments)
-- [Terraform 1.3+](https://developer.hashicorp.com/terraform/install) (for automated deployments)
-- GitHub repository (for GitHub Actions deployments)
+- [Terraform 1.6+](https://developer.hashicorp.com/terraform/install)
+- GitHub repository with configured secrets
 
-## Architecture
+## Quick Start (GKE)
 
-This repository follows a modular architecture where components maintain operational independence while integrating seamlessly. Deploy individual components as needed or provision the complete stack for full observability coverage.
+1. **Configure Secrets:** Add `GCP_PROJECT_ID`, `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`, `REGION`, `TF_STATE_BUCKET`, `MONITORING_DOMAIN`, `LETSENCRYPT_EMAIL`, and `GRAFANA_ADMIN_PASSWORD` to GitHub Secrets.
+2. **Deploy:** Go to `Actions` → `Deploy LGTM Stack (GKE)` → `Run workflow`.
+3. **Verify:** Check the `verification-report.html` artifact after the workflow completes.
 
-## Deployment Methods
+## Required Secrets for CI/CD
 
-### [GitHub Actions (Recommended)](docs/github-actions-deployment.md)
-**Automated CI/CD deployment** using GitHub Actions workflows with Terraform. Supports all cloud providers (GKE, EKS, AKS, generic K8s) with automated testing and verification.
+| Secret | Provider | Description |
+|--------|----------|-------------|
+| `GCP_PROJECT_ID` | GKE | Your Google Cloud Project ID |
+| `GCP_SA_KEY` | GKE | JSON key for deployment Service Account |
+| `AWS_ACCESS_KEY_ID` | EKS | AWS Access Key |
+| `AWS_SECRET_ACCESS_KEY` | EKS | AWS Secret Key |
+| `KUBECONFIG` | Generic | Base64-encoded kubeconfig file |
+| `TF_STATE_BUCKET` | GKE/EKS | Bucket name for Terraform state |
+| `MONITORING_DOMAIN` | All | Domain for observability (e.g., monitor.example.com) |
+| `GRAFANA_ADMIN_PASSWORD` | All | Admin password for Grafana UI |
 
-**Features:**
-- ✅ Cloud-agnostic (GKE/EKS/AKS/Generic)
-- ✅ Automated resource import (no conflicts)
-- ✅ Comprehensive smoke tests
-- ✅ Post-deployment verification
-- ✅ Safe teardown workflows
+## Deployment Order & Dependencies
 
-**Quick Start:**
-1. Configure GitHub secrets
-2. Trigger workflow from Actions tab
-3. Verify deployment with automatic tests
+The LGTM stack deployment follows this order:
+1. **Namespace & Service Account:** Created first to provide identity.
+2. **Cloud Storage & IAM:** Modules configure S3/GCS buckets and IAM bindings.
+3. **Core Infrastructure:** cert-manager and ingress-nginx (if enabled).
+4. **LGTM Components:** Loki, Mimir, Tempo, and Prometheus.
+5. **Grafana:** Deployed last to integrate all data sources.
 
-[→ GitHub Actions Deployment Guide](docs/github-actions-deployment.md)
+## Documentation Index
 
-### Manual Terraform
-For direct infrastructure management and customization.
-
-### Helm Charts
-For granular component control and manual deployments.
-
-## Components
-
-### [LGTM Observability Stack](lgtm-stack/README.md)
-Comprehensive monitoring, logging, and distributed tracing platform built on Grafana Labs' open-source stack (Loki, Grafana, Tempo, Mimir).
-
-### [ArgoCD GitOps Engine](argocd/README.md)
-Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
-
-### [cert-manager Certificate Authority](cert-manager/README.md)
-Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
-
-### [NGINX Ingress Controller](ingress-controller/README.md)
-Layer 7 load balancer and reverse proxy for routing external HTTP/HTTPS traffic to cluster services.
+- [GitHub Actions Deployment Guide](docs/github-actions-deployment.md)
+- [GKE Testing Workflow](docs/TESTING_GKE_WORKFLOW.md)
+- [Workflow Guide](docs/WORKFLOWS_GUIDE.md)
+- [LGTM Stack Details](lgtm-stack/README.md)

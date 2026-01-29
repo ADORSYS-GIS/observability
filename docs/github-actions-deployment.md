@@ -8,7 +8,6 @@ This guide explains how to deploy the LGTM stack (Loki, Grafana, Tempo, Mimir, P
 
 - **GKE** (Google Kubernetes Engine)
 - **EKS** (Amazon Elastic Kubernetes Service)
-- **AKS** (Azure Kubernetes Service)
 - **Generic Kubernetes** (minikube, kind, on-premise, etc.)
 
 ## Architecture
@@ -21,8 +20,7 @@ lgtm-stack/terraform/
 ├── variables.tf               # Variables with cloud_provider support
 ├── modules/
 │   ├── cloud-gke/            # GCS buckets + Workload Identity
-│   ├── cloud-eks/            # S3 buckets + IRSA
-│   ├── cloud-aks/            # Azure Blob + Managed Identity
+│   ├── eks-storage-buckets/  # S3 buckets + IRSA
 │   └── cloud-generic/        # PersistentVolumes
 
 .github/
@@ -86,14 +84,7 @@ TF_STATE_BUCKET=my-terraform-state-bucket
 CLUSTER_NAME=my-eks-cluster
 ```
 
-**For AKS:**
-```
-CLOUD_PROVIDER=aks
-AZURE_CREDENTIALS=<service-principal-json>
-AZURE_STORAGE_ACCOUNT=mystorageaccount
-AZURE_STORAGE_CONTAINER=terraform-state
-CLUSTER_NAME=my-aks-cluster
-```
+
 
 **For Generic Kubernetes:**
 ```
@@ -194,7 +185,7 @@ No cloud-specific setup required. Just ensure:
 1. Go to `Actions` tab in GitHub
 2. Select `Deploy LGTM Stack` workflow
 3. Click `Run workflow`
-4. Select your cloud provider (gke/eks/aks/generic)
+4. Select your cloud provider (gke/eks/generic)
 5. Choose action: `apply` (to deploy)
 6. Click `Run workflow`
 
@@ -351,7 +342,7 @@ kubectl logs -n observability <pod-name>
 # Common issues:
 # - Insufficient resources
 # - Storage class not available (generic k8s)
-# - Cloud IAM permissions (GKE/EKS/AKS)
+# - Cloud IAM permissions (GKE/EKS)
 ```
 
 ### Storage Bucket Access Denied
@@ -393,6 +384,8 @@ aws iam get-role --role-name my-eks-cluster-lgtm-irsa
 
 ## Related Documentation
 
+- [GKE Testing Workflow](TESTING_GKE_WORKFLOW.md)
+- [Workflow Guide](WORKFLOWS_GUIDE.md)
 - [Manual LGTM Deployment](manual-lgtm-deployment.md)
 - [Testing Monitoring Stack](testing-monitoring-stack-deployment.md)
 - [Troubleshooting LGTM Stack](troubleshooting-lgtm-stack.md)

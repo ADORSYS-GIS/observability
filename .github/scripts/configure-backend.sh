@@ -35,19 +35,7 @@ EOF
     echo "✅ Configured S3 backend: ${TF_STATE_BUCKET}"
     ;;
     
-  aks)
-    cat > "$BACKEND_FILE" <<EOF
-terraform {
-  backend "azurerm" {
-    storage_account_name = "${AZURE_STORAGE_ACCOUNT}"
-    container_name       = "${AZURE_STORAGE_CONTAINER}"
-    key                  = "terraform/lgtm-stack/terraform.tfstate"
-  }
-}
-EOF
-    echo "✅ Configured Azure Blob backend: ${AZURE_STORAGE_ACCOUNT}/${AZURE_STORAGE_CONTAINER}"
-    ;;
-    
+
   generic)
     cat > "$BACKEND_FILE" <<EOF
 terraform {

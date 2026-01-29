@@ -10,7 +10,6 @@ on:
         options:
           - gke
           - eks
-          - aks
           - generic
         default: 'gke'
       destroy_storage:
@@ -75,11 +74,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Setup Cloud Credentials - AKS
-        if: inputs.cloud_provider == 'aks'
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
 
       - name: Setup kubectl
         run: |
@@ -155,14 +150,7 @@ jobs:
             aws s3 rb "s3://${BUCKET_NAME}" --force || true
           done
 
-      - name: Clean up storage - AKS
-        if: inputs.cloud_provider == 'aks' && inputs.destroy_storage == true
-        run: |
-          STORAGE_ACCOUNT="${{ secrets.AZURE_STORAGE_ACCOUNT }}"
-          for container in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
-            echo "🗑️ Deleting container: $container"
-            az storage container delete --account-name "$STORAGE_ACCOUNT" --name "$container" || true
-          done
+
 
       - name: Verify cleanup
         run: |

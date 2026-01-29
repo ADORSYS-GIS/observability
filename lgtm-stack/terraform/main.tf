@@ -74,9 +74,9 @@ module "cloud_gke" {
   force_destroy_buckets    = var.force_destroy
 }
 
-module "cloud_eks" {
+module "eks_storage" {
   count  = var.cloud_provider == "eks" ? 1 : 0
-  source = "./modules/cloud-eks"
+  source = "./modules/eks-storage-buckets"
 
   bucket_prefix            = var.cluster_name
   cluster_name             = var.cluster_name
@@ -104,8 +104,8 @@ locals {
     buckets      = var.cloud_provider == "gke" ? module.cloud_gke[0].storage_buckets : {}
 
     # EKS values
-    aws_role_arn = var.cloud_provider == "eks" ? module.cloud_eks[0].irsa_role_arn : ""
-    s3_buckets   = var.cloud_provider == "eks" ? module.cloud_eks[0].storage_buckets : {}
+    aws_role_arn = var.cloud_provider == "eks" ? module.eks_storage[0].irsa_role_arn : ""
+    s3_buckets   = var.cloud_provider == "eks" ? module.eks_storage[0].storage_buckets : {}
   }
 }
 
@@ -204,7 +204,7 @@ resource "helm_release" "loki" {
   depends_on = [
     kubernetes_service_account.observability_sa,
     module.cloud_gke,
-    module.cloud_eks
+    module.eks_storage
   ]
 }
 
@@ -238,7 +238,7 @@ resource "helm_release" "mimir" {
   depends_on = [
     kubernetes_service_account.observability_sa,
     module.cloud_gke,
-    module.cloud_eks
+    module.eks_storage
   ]
 }
 
@@ -270,7 +270,7 @@ resource "helm_release" "tempo" {
   depends_on = [
     kubernetes_service_account.observability_sa,
     module.cloud_gke,
-    module.cloud_eks
+    module.eks_storage
   ]
 }
 
