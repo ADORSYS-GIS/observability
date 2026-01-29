@@ -71,20 +71,36 @@ echo "⏳ Waiting for pods to be ready (timeout: ${TIMEOUT}s)..."
 START_TIME=$(date +%s)
 
 while true; do
-  NOT_READY=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "Running\|Completed" | wc -l || echo "0")
+  # Use JQ for highly reliable parsing of pod statuses
+  # READY_COUNT: Pods in Running phase where ALL containers are ready, OR Pods that have Succeeded (Jobs)
+  READY_COUNT=$(kubectl get pods -n "$NAMESPACE" -o json 2>/dev/null | jq '[.items[] | select((.status.phase == "Running" and (.status.containerStatuses | length > 0) and (.status.containerStatuses | all(.ready == true))) or .status.phase == "Succeeded")] | length' || echo "0")
   
-  if [ "$NOT_READY" -eq 0 ]; then
-    echo "✅ All pods are ready"
+  # TOTAL_COUNT: All pods that are NOT in a Terminating state (no deletionTimestamp)
+  TOTAL_COUNT=$(kubectl get pods -n "$NAMESPACE" -o json 2>/dev/null | jq '[.items[] | select(.metadata.deletionTimestamp == null)] | length' || echo "0")
+  
+  # Strip any accidental whitespace just in case
+  READY_COUNT=$(echo "$READY_COUNT" | tr -d '[:space:]')
+  TOTAL_COUNT=$(echo "$TOTAL_COUNT" | tr -d '[:space:]')
+
+  if [ "$TOTAL_COUNT" -gt 0 ] && [ "$READY_COUNT" -eq "$TOTAL_COUNT" ]; then
+    echo "✅ All $TOTAL_COUNT pods are ready"
     break
   fi
+  
+  NOT_READY=$((TOTAL_COUNT - READY_COUNT))
   
   ELAPSED=$(($(date +%s) - START_TIME))
   if [ "$ELAPSED" -gt "$TIMEOUT" ]; then
-    echo "⏱️  Timeout waiting for pods"
+    echo "⏱️  Timeout waiting for pods ($READY_COUNT/$TOTAL_COUNT ready)"
     break
   fi
   
-  echo "  ⏳ Waiting... ($NOT_READY pods not ready, ${ELAPSED}s elapsed)"
+  if [ "$TOTAL_COUNT" -eq 0 ]; then
+    echo "  ⏳ Waiting for pods to be created..."
+  else
+    echo "  ⏳ Waiting... ($NOT_READY pods not ready, ${ELAPSED}s elapsed)"
+  fi
+  
   sleep 10
 done
 
