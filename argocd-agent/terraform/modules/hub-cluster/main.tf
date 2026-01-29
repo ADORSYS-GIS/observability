@@ -5,7 +5,6 @@
 # 1.1 Create Namespace
 resource "kubernetes_namespace" "hub_argocd" {
 
-  provider = kubernetes
 
   metadata {
     name = var.hub_namespace
@@ -225,7 +224,6 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
   count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
-  provider = kubernetes
 
   metadata {
     name      = "argocd-server"
@@ -607,7 +605,6 @@ data "external" "hub_principal_address" {
 # Exposes Principal service via Ingress with TLS termination
 resource "kubernetes_ingress_v1" "hub_principal_ingress" {
   count    = var.deploy_hub && var.enable_principal_ingress && var.principal_ingress_host != "" ? 1 : 0
-  provider = kubernetes
 
   metadata {
     name      = var.principal_service_name
@@ -1073,7 +1070,6 @@ resource "null_resource" "spoke_agent_creation" {
 # Creates agent-specific namespace on hub cluster for managed mode resources
 resource "kubernetes_namespace" "spoke_agent_managed_namespace" {
   for_each = var.workload_clusters
-  provider = kubernetes
 
   metadata {
     name = each.key
