@@ -67,11 +67,6 @@ module "hub_cluster" {
   count  = var.deploy_hub ? 1 : 0
   source = "../../modules/hub-cluster"
 
-  providers = {
-    kubernetes = kubernetes.hub
-    helm       = helm.hub
-    keycloak   = keycloak
-  }
 
   # Pass through all variables
   hub_cluster_context                      = var.hub_cluster_context

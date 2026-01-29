@@ -5,7 +5,6 @@
 # =============================================================================
 
 provider "kubernetes" {
-  alias          = "hub"
   config_path    = "~/.kube/config"
   config_context = var.hub_cluster_context
 }
