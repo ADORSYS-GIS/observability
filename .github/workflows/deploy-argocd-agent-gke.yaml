@@ -118,10 +118,16 @@ jobs:
           # Get the actual current kubectl context name
           KUBE_CONTEXT=$(kubectl config current-context)
           
+          # Fetch cluster details using gcloud (bypasses terraform data source permissions issue)
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
+
           cat > terraform.tfvars <<EOF
           project_id               = "${{ secrets.GCP_PROJECT_ID }}"
           cluster_name             = "${{ secrets.CLUSTER_NAME }}"
           region                   = "${{ secrets.REGION }}"
+          cluster_endpoint         = "$CLUSTER_ENDPOINT"
+          cluster_ca_certificate   = "$CLUSTER_CA"
           hub_cluster_context      = "$KUBE_CONTEXT"
           hub_namespace            = "argocd"
           spoke_namespace          = "argocd"

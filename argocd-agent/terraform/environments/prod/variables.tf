@@ -34,6 +34,16 @@ variable "region" {
   type        = string
 }
 
+variable "cluster_endpoint" {
+  description = "GKE Cluster Endpoint"
+  type        = string
+}
+
+variable "cluster_ca_certificate" {
+  description = "GKE Cluster CA Certificate (base64 encoded)"
+  type        = string
+}
+
 variable "project_id" {
   description = "GCP Project ID"
   type        = string

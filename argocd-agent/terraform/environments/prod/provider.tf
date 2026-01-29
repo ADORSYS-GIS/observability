@@ -6,24 +6,18 @@
 
 data "google_client_config" "default" {}
 
-data "google_container_cluster" "hub" {
-  name     = var.cluster_name
-  location = var.region
-  project  = var.project_id
-}
-
 provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.hub.endpoint}"
+  host                   = "https://${var.cluster_endpoint}"
   token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.hub.master_auth[0].cluster_ca_certificate)
+  cluster_ca_certificate = base64decode(var.cluster_ca_certificate)
 }
 
 provider "helm" {
   alias = "hub"
   kubernetes {
-    host                   = "https://${data.google_container_cluster.hub.endpoint}"
+    host                   = "https://${var.cluster_endpoint}"
     token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(data.google_container_cluster.hub.master_auth[0].cluster_ca_certificate)
+    cluster_ca_certificate = base64decode(var.cluster_ca_certificate)
   }
 }
 
