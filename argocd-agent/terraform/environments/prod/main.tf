@@ -27,7 +27,7 @@ module "cert_manager" {
   source = "../../../../cert-manager/terraform"
 
   providers = {
-    kubernetes = kubernetes.hub
+    kubernetes = kubernetes
     helm       = helm.hub
   }
 
@@ -48,7 +48,7 @@ module "ingress_nginx" {
   source = "../../../../ingress-controller/terraform"
 
   providers = {
-    kubernetes = kubernetes.hub
+    kubernetes = kubernetes
     helm       = helm.hub
   }
 
