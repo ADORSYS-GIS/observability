@@ -191,6 +191,17 @@ jobs:
           echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
           chmod 600 ~/.kube/config
 
+      - name: Verify kubectl connection and context
+        run: |
+          echo "Current kubectl context:"
+          kubectl config current-context
+          echo "Available contexts:"
+          kubectl config get-contexts
+          echo "Cluster info:"
+          kubectl cluster-info
+          echo "Testing connection to hub cluster..."
+          kubectl get nodes --context=gke_observe-472521_europe-west3_observe-prod-cluster
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
@@ -215,8 +226,6 @@ jobs:
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          KUBECONFIG: /home/runner/.kube/config
         run: terraform apply -auto-approve tfplan
 
   verify-deployment:
@@ -231,6 +240,12 @@ jobs:
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
           chmod 600 ~/.kube/config
+      - name: Verify kubectl connection
+        run: |
+          echo "Current kubectl context:"
+          kubectl config current-context
+          echo "Available contexts:"
+          kubectl config get-contexts
       - name: Run Verification
         env:
           NAMESPACE: argocd
