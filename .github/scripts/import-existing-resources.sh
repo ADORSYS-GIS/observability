@@ -116,6 +116,18 @@ if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
   fi
 fi
 
+# Keycloak Realm: Check if realm already exists (by attempting import)
+KEYCLOAK_URL="${KEYCLOAK_URL:-}"
+if [ -n "$KEYCLOAK_URL" ]; then
+  echo "🔐 Checking for existing Keycloak realm 'argocd'..."
+  # We assume if Keycloak URL is provided, we might need to import the realm
+  
+  smart_import \
+    "module.hub_cluster[0].keycloak_realm.argocd[0]" \
+    "argocd" \
+    "Keycloak Realm: argocd"
+fi
+
 # Summary
 echo ""
 echo "📊 Import Summary:"
