@@ -222,7 +222,7 @@ resource "null_resource" "hub_argocd_server_insecure" {
 
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
-  count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
+  count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
 
   metadata {
     name      = "argocd-server"
@@ -308,14 +308,19 @@ resource "null_resource" "hub_pki_initialization" {
       echo "Principal context: ${var.hub_cluster_context}" | tee -a "$LOG_FILE"
       echo "Principal namespace: ${var.hub_namespace}" | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} pki init \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
+      # Check if CA secret already exists to avoid errors
+      if kubectl get secret argocd-agent-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+          echo "⚠ CA secret 'argocd-agent-ca' already exists. Skipping initialization." | tee -a "$LOG_FILE"
+      else
+          if ! ${var.argocd_agentctl_path} pki init \
+            --principal-context ${var.hub_cluster_context} \
+            --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
+            echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+            exit 1
+          fi
+          echo "✓ PKI initialized successfully" | tee -a "$LOG_FILE"
       fi
       
-      echo "✓ PKI initialized successfully" | tee -a "$LOG_FILE"
       echo "PKI initialization logs saved to: $LOG_FILE"
     EOT
   }
@@ -603,7 +608,7 @@ data "external" "hub_principal_address" {
 
 # Exposes Principal service via Ingress with TLS termination
 resource "kubernetes_ingress_v1" "hub_principal_ingress" {
-  count    = var.deploy_hub && var.enable_principal_ingress && var.principal_ingress_host != "" ? 1 : 0
+  count = var.deploy_hub && var.enable_principal_ingress && var.principal_ingress_host != "" ? 1 : 0
 
   metadata {
     name      = var.principal_service_name
@@ -754,15 +759,20 @@ resource "null_resource" "hub_pki_jwt_signing_key" {
       
       echo "Creating JWT signing key for agent authentication..." | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} jwt create-key \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} \
-        --upsert 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Failed to create JWT signing key. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
+      # Check if token key secret exists
+      if kubectl get secret argocd-agent-token-key -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "⚠ JWT Key secret 'argocd-agent-token-key' already exists. Skipping creation." | tee -a "$LOG_FILE"
+      else
+        if ! ${var.argocd_agentctl_path} jwt create-key \
+          --principal-context ${var.hub_cluster_context} \
+          --principal-namespace ${var.hub_namespace} \
+          --upsert 2>&1 | tee -a "$LOG_FILE"; then
+          echo "✗ ERROR: Failed to create JWT signing key. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+          exit 1
+        fi
+        echo "✓ JWT signing key created successfully" | tee -a "$LOG_FILE"
       fi
       
-      echo "✓ JWT signing key created successfully" | tee -a "$LOG_FILE"
       echo "Key creation logs saved to: $LOG_FILE"
     EOT
   }
