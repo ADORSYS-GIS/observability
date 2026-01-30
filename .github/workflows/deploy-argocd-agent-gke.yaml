@@ -68,11 +68,75 @@ jobs:
           args: --advertise-tags=tag:ci
           hostname: github-runner-plan-${{ github.run_id }}
 
+      - name: Wait for Tailscale Connection
+        run: |
+          echo "Waiting for Tailscale to establish VPN connection..."
+          sleep 10
+          
+          echo "Verifying Tailscale status..."
+          sudo tailscale status
+          
+          echo "Tailscale is ready"
+
       - name: Setup Kubeconfig
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          
+      - name: Verify Spoke Cluster Connectivity
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
+        run: |
+          echo "Verifying spoke cluster connectivity via Tailscale..."
+          
+          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "No workload clusters configured, skipping connectivity check"
+            exit 0
+          fi
+          
+          # Extract spoke contexts from JSON
+          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
+          
+          if [ -z "$CONTEXTS" ]; then
+            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
+            exit 0
+          fi
+          
+          echo "Testing connectivity to spoke clusters..."
+          for CONTEXT in $CONTEXTS; do
+            echo "Testing context: $CONTEXT"
+            
+            # Check if context exists in kubeconfig
+            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
+              echo "  ✓ Context $CONTEXT found in kubeconfig"
+              
+              # Test actual connectivity with timeout
+              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                echo "  ✓ Successfully connected to $CONTEXT"
+              else
+                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
+                echo "  This may indicate Tailscale tunnel is not fully established"
+                echo "  Waiting 15 more seconds..."
+                sleep 15
+                
+                # Retry once
+                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                  echo "  ✓ Successfully connected to $CONTEXT after retry"
+                else
+                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
+                  exit 1
+                fi
+              fi
+            else
+              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
+              echo "Available contexts:"
+              kubectl config get-contexts
+              exit 1
+            fi
+          done
+          
+          echo "✓ All spoke clusters are reachable"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -228,11 +292,75 @@ jobs:
           args: --advertise-tags=tag:ci
           hostname: github-runner-${{ github.run_id }}
 
+      - name: Wait for Tailscale Connection
+        run: |
+          echo "Waiting for Tailscale to establish VPN connection..."
+          sleep 10
+          
+          echo "Verifying Tailscale status..."
+          sudo tailscale status
+          
+          echo "Tailscale is ready"
+
       - name: Setup Kubeconfig
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          
+      - name: Verify Spoke Cluster Connectivity
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
+        run: |
+          echo "Verifying spoke cluster connectivity via Tailscale..."
+          
+          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "No workload clusters configured, skipping connectivity check"
+            exit 0
+          fi
+          
+          # Extract spoke contexts from JSON
+          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
+          
+          if [ -z "$CONTEXTS" ]; then
+            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
+            exit 0
+          fi
+          
+          echo "Testing connectivity to spoke clusters..."
+          for CONTEXT in $CONTEXTS; do
+            echo "Testing context: $CONTEXT"
+            
+            # Check if context exists in kubeconfig
+            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
+              echo "  ✓ Context $CONTEXT found in kubeconfig"
+              
+              # Test actual connectivity with timeout
+              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                echo "  ✓ Successfully connected to $CONTEXT"
+              else
+                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
+                echo "  This may indicate Tailscale tunnel is not fully established"
+                echo "  Waiting 15 more seconds..."
+                sleep 15
+                
+                # Retry once
+                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                  echo "  ✓ Successfully connected to $CONTEXT after retry"
+                else
+                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
+                  exit 1
+                fi
+              fi
+            else
+              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
+              echo "Available contexts:"
+              kubectl config get-contexts
+              exit 1
+            fi
+          done
+          
+          echo "✓ All spoke clusters are reachable"
 
       - uses: actions/checkout@v4
 
@@ -467,11 +595,75 @@ jobs:
           args: --advertise-tags=tag:ci
           hostname: github-runner-${{ github.run_id }}
 
+      - name: Wait for Tailscale Connection
+        run: |
+          echo "Waiting for Tailscale to establish VPN connection..."
+          sleep 10
+          
+          echo "Verifying Tailscale status..."
+          sudo tailscale status
+          
+          echo "Tailscale is ready"
+
       - name: Setup Kubeconfig
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          
+      - name: Verify Spoke Cluster Connectivity
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
+        run: |
+          echo "Verifying spoke cluster connectivity via Tailscale..."
+          
+          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "No workload clusters configured, skipping connectivity check"
+            exit 0
+          fi
+          
+          # Extract spoke contexts from JSON
+          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
+          
+          if [ -z "$CONTEXTS" ]; then
+            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
+            exit 0
+          fi
+          
+          echo "Testing connectivity to spoke clusters..."
+          for CONTEXT in $CONTEXTS; do
+            echo "Testing context: $CONTEXT"
+            
+            # Check if context exists in kubeconfig
+            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
+              echo "  ✓ Context $CONTEXT found in kubeconfig"
+              
+              # Test actual connectivity with timeout
+              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                echo "  ✓ Successfully connected to $CONTEXT"
+              else
+                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
+                echo "  This may indicate Tailscale tunnel is not fully established"
+                echo "  Waiting 15 more seconds..."
+                sleep 15
+                
+                # Retry once
+                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                  echo "  ✓ Successfully connected to $CONTEXT after retry"
+                else
+                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
+                  exit 1
+                fi
+              fi
+            else
+              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
+              echo "Available contexts:"
+              kubectl config get-contexts
+              exit 1
+            fi
+          done
+          
+          echo "✓ All spoke clusters are reachable"
 
       - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud 
