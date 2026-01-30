@@ -16,17 +16,8 @@ resource "null_resource" "spoke_namespace" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
-      
-      echo "DEBUG: Running as user $(whoami)"
-      echo "DEBUG: KUBECONFIG env var: $KUBECONFIG"
-      ls -l $KUBECONFIG || echo "DEBUG: KUBECONFIG file not found!"
-      echo "DEBUG: Available contexts:"
-      kubectl config get-contexts
       
       if ! kubectl get namespace ${self.triggers.namespace} --context ${self.triggers.context} >/dev/null 2>&1; then
         echo "Creating namespace ${self.triggers.namespace} in cluster ${self.triggers.context}..."
@@ -42,10 +33,7 @@ resource "null_resource" "spoke_namespace" {
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Deleting namespace ${self.triggers.namespace} from ${self.triggers.context}..."
       
       # Graceful deletion with timeout
@@ -80,12 +68,7 @@ resource "null_resource" "spoke_argocd_installation" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      GIT_HTTP_USER_AGENT   = "kubectl-kustomize"
-      GIT_CONFIG_PARAMETERS = "'http.lowSpeedLimit=1000' 'http.lowSpeedTime=600'"
-      KUBECONFIG            = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -137,10 +120,7 @@ resource "null_resource" "spoke_argocd_installation" {
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Uninstalling ArgoCD from spoke cluster ${self.triggers.agent}..."
       kubectl delete -n ${self.triggers.namespace} \
         --context ${self.triggers.context} \
@@ -170,10 +150,7 @@ resource "null_resource" "spoke_argocd_secret_patch" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -207,10 +184,7 @@ resource "null_resource" "spoke_cluster_secret" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -254,10 +228,7 @@ EOF
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Deleting in-cluster secret from ${self.triggers.agent}..."
       kubectl delete secret cluster-in-cluster -n ${self.triggers.namespace} \
         --context ${self.triggers.context} \
@@ -281,10 +252,7 @@ resource "null_resource" "spoke_k3s_redis_workaround" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -335,10 +303,7 @@ resource "null_resource" "spoke_argocd_readiness_check" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -400,10 +365,7 @@ resource "null_resource" "spoke_agent_client_certificate" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -434,10 +396,7 @@ resource "null_resource" "spoke_agent_client_certificate" {
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Deleting client certificate for agent ${self.triggers.agent}..."
       kubectl delete secret argocd-agent-client-tls \
         -n ${self.triggers.namespace} \
@@ -462,10 +421,7 @@ resource "null_resource" "spoke_agent_ca_propagation" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -496,10 +452,7 @@ resource "null_resource" "spoke_agent_ca_propagation" {
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Deleting CA certificate from ${self.triggers.agent}..."
       kubectl delete secret argocd-agent-ca \
         -n ${self.triggers.namespace} \
@@ -526,10 +479,7 @@ resource "null_resource" "spoke_agent_installation" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -572,10 +522,7 @@ resource "null_resource" "spoke_agent_installation" {
     when        = destroy
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       echo "Uninstalling agent client from ${self.triggers.agent}..."
       kubectl delete -n ${self.triggers.namespace} \
         --context ${self.triggers.context} \
@@ -606,10 +553,7 @@ resource "null_resource" "spoke_agent_configuration" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -660,10 +604,7 @@ resource "null_resource" "spoke_agent_restart" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG = "/home/usherking/.kube/config"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
