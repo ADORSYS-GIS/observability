@@ -114,6 +114,8 @@ jobs:
 
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
           # Get the actual current kubectl context name
           KUBE_CONTEXT=$(kubectl config current-context)
@@ -145,6 +147,14 @@ jobs:
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
           EOF
+          
+          # Append workload_clusters if secret exists
+          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "" >> terraform.tfvars
+            echo "workload_clusters = $WORKLOAD_CLUSTERS_JSON" >> terraform.tfvars
+            echo "✅ appended workload_clusters to terraform.tfvars"
+          fi
+
           echo "✅ Created terraform.tfvars"
 
       - name: Terraform Plan
