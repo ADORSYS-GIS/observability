@@ -467,8 +467,7 @@ jobs:
           chmod 600 ~/.kube/config
 
       - uses: actions/checkout@v4
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Authenticate to Google Cloud 
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
