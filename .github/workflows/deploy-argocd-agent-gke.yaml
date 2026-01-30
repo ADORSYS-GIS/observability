@@ -71,12 +71,33 @@ jobs:
       - name: Wait for Tailscale Connection
         run: |
           echo "Waiting for Tailscale to establish VPN connection..."
-          sleep 10
+          sleep 15
           
-          echo "Verifying Tailscale status..."
+          echo "======================================"
+          echo "Tailscale Diagnostics"
+          echo "======================================"
+          
+          echo "\n1. Tailscale Status:"
           sudo tailscale status
           
-          echo "Tailscale is ready"
+          echo "\n2. Tailscale IP:"
+          sudo tailscale ip -4
+          
+          echo "\n3. Tailscale Routes:"
+          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          
+          echo "\n4. Checking route acceptance..."
+          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
+          
+          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          sleep 10
+          
+          echo "\n6. Final Tailscale status:"
+          sudo tailscale status
+          
+          echo "\n======================================"
+          echo "Tailscale setup complete"
+          echo "======================================"
 
       - name: Setup Kubeconfig
         run: |
@@ -88,14 +109,17 @@ jobs:
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          echo "Verifying spoke cluster connectivity via Tailscale..."
+          echo "======================================"
+          echo "Spoke Cluster Connectivity Verification"
+          echo "======================================"
           
           if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
             echo "No workload clusters configured, skipping connectivity check"
             exit 0
           fi
           
-          # Extract spoke contexts from JSON
+          # Extract spoke cluster info from JSON
+          echo "\nParsing workload clusters configuration..."
           CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
           
           if [ -z "$CONTEXTS" ]; then
@@ -103,40 +127,72 @@ jobs:
             exit 0
           fi
           
-          echo "Testing connectivity to spoke clusters..."
+          echo "\nTesting connectivity to spoke clusters..."
           for CONTEXT in $CONTEXTS; do
-            echo "Testing context: $CONTEXT"
+            echo "\n--- Testing context: $CONTEXT ---"
             
             # Check if context exists in kubeconfig
-            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
-              echo "  ✓ Context $CONTEXT found in kubeconfig"
-              
-              # Test actual connectivity with timeout
-              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                echo "  ✓ Successfully connected to $CONTEXT"
-              else
-                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
-                echo "  This may indicate Tailscale tunnel is not fully established"
-                echo "  Waiting 15 more seconds..."
-                sleep 15
-                
-                # Retry once
-                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                  echo "  ✓ Successfully connected to $CONTEXT after retry"
-                else
-                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
-                  exit 1
-                fi
-              fi
-            else
+            if ! kubectl config get-contexts "$CONTEXT" &>/dev/null; then
               echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
-              echo "Available contexts:"
+              echo "\nAvailable contexts:"
               kubectl config get-contexts
               exit 1
             fi
+            
+            echo "  ✓ Context $CONTEXT found in kubeconfig"
+            
+            # Extract cluster endpoint IP
+            CLUSTER_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$CONTEXT\")].cluster.server}" 2>/dev/null)
+            echo "  Cluster endpoint: $CLUSTER_SERVER"
+            
+            # Extract IP from server URL (format: https://IP:PORT)
+            CLUSTER_IP=$(echo "$CLUSTER_SERVER" | sed -E 's|https?://([^:]+):.*|\1|')
+            echo "  Cluster IP: $CLUSTER_IP"
+            
+            # Test network connectivity to the IP
+            echo "  Testing network connectivity to $CLUSTER_IP..."
+            if timeout 5 ping -c 2 "$CLUSTER_IP" &>/dev/null; then
+              echo "  ✓ Ping successful to $CLUSTER_IP"
+            else
+              echo "  ⚠ Ping failed to $CLUSTER_IP (may be blocked by firewall)"
+            fi
+            
+            # Test Kubernetes API connectivity
+            echo "  Testing Kubernetes API connection..."
+            if timeout 15 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+              echo "  ✓ Successfully connected to $CONTEXT"
+            else
+              echo "  ⚠ WARNING: Initial connection failed, investigating..."
+              
+              echo "\n  Diagnostics:"
+              echo "  - Tailscale status:"
+              sudo tailscale status | head -20
+              
+              echo "\n  - Attempting direct curl to API server:"
+              timeout 5 curl -k "$CLUSTER_SERVER/healthz" 2>&1 || echo "  Direct API connection failed"
+              
+              echo "\n  - Waiting 20 more seconds for Tailscale routes..."
+              sleep 20
+              
+              # Final retry
+              echo "  Retrying kubectl connection..."
+              if timeout 15 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
+                echo "  ✓ Successfully connected to $CONTEXT after extended wait"
+              else
+                echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
+                echo "\n  Final diagnostics:"
+                echo "  - Tailscale peers:"
+                sudo tailscale status
+                echo "\n  - Network routes:"
+                ip route | grep -E '100\.' || echo "  No Tailscale routes found"
+                exit 1
+              fi
+            fi
           done
           
+          echo "\n======================================"
           echo "✓ All spoke clusters are reachable"
+          echo "======================================"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -295,12 +351,33 @@ jobs:
       - name: Wait for Tailscale Connection
         run: |
           echo "Waiting for Tailscale to establish VPN connection..."
-          sleep 10
+          sleep 15
           
-          echo "Verifying Tailscale status..."
+          echo "======================================"
+          echo "Tailscale Diagnostics"
+          echo "======================================"
+          
+          echo "\n1. Tailscale Status:"
           sudo tailscale status
           
-          echo "Tailscale is ready"
+          echo "\n2. Tailscale IP:"
+          sudo tailscale ip -4
+          
+          echo "\n3. Tailscale Routes:"
+          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          
+          echo "\n4. Checking route acceptance..."
+          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
+          
+          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          sleep 10
+          
+          echo "\n6. Final Tailscale status:"
+          sudo tailscale status
+          
+          echo "\n======================================"
+          echo "Tailscale setup complete"
+          echo "======================================"
 
       - name: Setup Kubeconfig
         run: |
@@ -598,12 +675,33 @@ jobs:
       - name: Wait for Tailscale Connection
         run: |
           echo "Waiting for Tailscale to establish VPN connection..."
-          sleep 10
+          sleep 15
           
-          echo "Verifying Tailscale status..."
+          echo "======================================"
+          echo "Tailscale Diagnostics"
+          echo "======================================"
+          
+          echo "\n1. Tailscale Status:"
           sudo tailscale status
           
-          echo "Tailscale is ready"
+          echo "\n2. Tailscale IP:"
+          sudo tailscale ip -4
+          
+          echo "\n3. Tailscale Routes:"
+          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          
+          echo "\n4. Checking route acceptance..."
+          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
+          
+          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          sleep 10
+          
+          echo "\n6. Final Tailscale status:"
+          sudo tailscale status
+          
+          echo "\n======================================"
+          echo "Tailscale setup complete"
+          echo "======================================"
 
       - name: Setup Kubeconfig
         run: |
