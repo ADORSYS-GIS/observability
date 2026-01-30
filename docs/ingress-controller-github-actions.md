@@ -2,7 +2,7 @@
 
 Automated Layer 7 load balancing deployment using GitHub Actions CI/CD workflows.
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | **Helm Chart**: [artifacthub.io/packages/helm/ingress-nginx/ingress-nginx](https://artifacthub.io/packages/helm/ingress-nginx/ingress-nginx) | **Version**: `4.14.2`
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **Helm Repository**: `https://helm.nginx.com/stable` | **Chart**: `nginx-ingress` | **Version**: `2.4.2`
 
 ---
 
@@ -139,7 +139,7 @@ Three workflows are available in `.github/workflows/`:
 1. Authenticates to GKE cluster
 2. Configures GCS backend for Terraform state
 3. Runs `terraform plan` to preview changes
-4. On `main` push or manual apply: deploys NGINX Ingress v4.14.2
+4. On `main` push or manual apply: deploys NGINX Ingress v2.4.2
 5. Provisions cloud LoadBalancer with external IP
 6. Verifies IngressClass creation and pod readiness
 
@@ -263,13 +263,13 @@ vim .github/workflows/deploy-ingress-controller-gke.yaml
 **Step 2: Update version parameter**
 ```yaml
 # Locate this line (approximately line 154):
-ingress_nginx_version = "4.14.2"
+ingress_nginx_version = "2.4.2"
 
 # Update to newer version:
-ingress_nginx_version = "4.15.0"
+ingress_nginx_version = "2.5.0"
 ```
 
-Check [Artifact Hub](https://artifacthub.io/packages/helm/ingress-nginx/ingress-nginx) for the latest version.
+Check [NGINX Helm Repository](https://helm.nginx.com/stable) or run `helm search repo nginx-stable/nginx-ingress --versions` for the latest version.
 
 **Step 3: Commit and push**
 ```bash
@@ -366,7 +366,7 @@ To customize deployment parameters, edit the `terraform.tfvars` generation secti
     cloud_provider        = "${{ env.CLOUD_PROVIDER }}"
     install_ingress_nginx = true
     release_name          = "nginx-monitoring"
-    ingress_nginx_version = "4.14.2"
+    ingress_nginx_version = "2.4.2"
     namespace             = "ingress-nginx"
     ingress_class_name    = "nginx"
     replica_count         = 2
@@ -392,4 +392,4 @@ For advanced Helm values, modify the Terraform module inputs in `ingress-control
 
 ---
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **Helm Repository**: `https://helm.nginx.com/stable`

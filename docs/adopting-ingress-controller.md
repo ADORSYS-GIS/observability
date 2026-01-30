@@ -32,7 +32,7 @@ helm list -A | grep ingress
 
 # Expected output format:
 # RELEASE_NAME         NAMESPACE       REVISION  UPDATED                   STATUS    CHART                    APP_VERSION
-# nginx-monitoring     ingress-nginx   1         2025-12-08 11:23:11...    deployed  ingress-nginx-4.14.1     1.11.3
+# nginx-monitoring     ingress-nginx   1         2025-12-08 11:23:11...    deployed  nginx-ingress-2.4.2      5.3.2
 
 # 2. Check the namespace
 kubectl get ns | grep ingress
@@ -51,7 +51,7 @@ kubectl get svc -n ingress-nginx
 **Record these values**:
 - Release name (e.g., `nginx-monitoring`)
 - Namespace (e.g., `ingress-nginx`)
-- Chart version (e.g., `4.14.1`)
+- Chart version (e.g., `2.4.2`)
 - IngressClass name (e.g., `nginx`)
 - Number of controller replicas
 
@@ -88,7 +88,7 @@ gke_ca_certificate   = ""  # Will be auto-populated by workflow, leave empty for
 install_nginx_ingress = true
 
 # Match your existing installation
-nginx_ingress_version = "4.14.2"        # From helm list
+nginx_ingress_version = "2.4.2"         # From helm list
 namespace             = "ingress-nginx"  # From helm list
 release_name          = "nginx-monitoring"  # From helm list (adjust if different)
 

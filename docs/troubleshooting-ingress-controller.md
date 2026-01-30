@@ -37,7 +37,7 @@ bind: address already in use
 kubectl get svc -A -o wide | grep -E "80|443"
 
 # Change to different ports
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.service.ports.http=8080 \
   --set controller.service.ports.https=8443
@@ -49,7 +49,7 @@ helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
 
 **Fix**: Increase resources
 ```bash
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.resources.requests.cpu=200m \
   --set controller.resources.requests.memory=256Mi \
@@ -147,7 +147,7 @@ kind: IngressClass
 metadata:
   name: nginx
 spec:
-  controller: k8s.io/ingress-nginx
+  controller: nginx.org/ingress-controller
 EOF
 ```
 
@@ -179,7 +179,7 @@ kubectl delete ingressclass nginx
 # Let Terraform/Helm recreate
 terraform apply
 # or
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx -n ingress-nginx
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress -n ingress-nginx
 ```
 
 ---
@@ -268,7 +268,7 @@ spec:
 
 **Fix**: Configure default backend
 ```bash
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set defaultBackend.enabled=true
 ```
@@ -492,7 +492,7 @@ kubectl top pods -n ingress-nginx
 kubectl scale deployment -n ingress-nginx nginx-monitoring-ingress-nginx-controller --replicas=3
 
 # Or use Helm
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.replicaCount=3
 ```
@@ -569,7 +569,7 @@ kubectl get configmap -n ingress-nginx nginx-monitoring-ingress-nginx-controller
 kubectl edit configmap -n ingress-nginx nginx-monitoring-ingress-nginx-controller
 
 # Or via Helm
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.config.proxy-buffer-size="16k" \
   --set controller.config.proxy-body-size="100m"
@@ -589,7 +589,7 @@ kubectl get ingress <n> -n <namespace> -o yaml
 - Wrong annotation prefix (should be `nginx.ingress.kubernetes.io/`)
 - Invalid annotation values
 
-**Fix**: Verify annotation names from [official docs](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/)
+**Fix**: Verify annotation names from [official docs](https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-annotations/)
 
 ---
 
@@ -708,7 +708,7 @@ Enable debug logging for troubleshooting:
 
 ```bash
 # Increase log verbosity (0-5, higher = more verbose)
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.extraArgs.v=5
 ```
@@ -746,7 +746,7 @@ kubectl exec -n ingress-nginx <controller-pod> -- curl -v http://localhost:10254
 
 **Fix**: Adjust probe settings
 ```bash
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   -n ingress-nginx \
   --set controller.readinessProbe.initialDelaySeconds=30 \
   --set controller.readinessProbe.periodSeconds=10
@@ -756,7 +756,7 @@ helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
 
 ## Additional Resources
 
-- [Official NGINX Ingress Troubleshooting Guide](https://kubernetes.github.io/ingress-nginx/troubleshooting/)
-- [Annotations Reference](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/)
-- [Configuration Options](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/)
+- [Official NGINX Ingress Troubleshooting Guide](https://docs.nginx.com/nginx-ingress-controller/troubleshooting/)
+- [Annotations Reference](https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-annotations/)
+- [Configuration Reference](https://docs.nginx.com/nginx-ingress-controller/configuration/global-configuration/configmap-resource/)
 - [GitHub Issues](https://github.com/kubernetes/ingress-nginx/issues)

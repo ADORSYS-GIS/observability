@@ -143,7 +143,7 @@ jobs:
           eks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
-          nginx_ingress_version = "4.14.2"
+          nginx_ingress_version = "2.4.2"
           namespace             = "ingress-nginx"
           ingress_class_name    = "nginx"
           replica_count         = 2
@@ -270,7 +270,7 @@ jobs:
           eks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
-          nginx_ingress_version = "4.14.2"
+          nginx_ingress_version = "2.4.2"
           namespace             = "ingress-nginx"
           ingress_class_name    = "nginx"
           replica_count         = 2
@@ -336,7 +336,7 @@ jobs:
           # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ingress-nginx
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=300s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-ingress -n ingress-nginx --timeout=300s
           
           # Confirm IngressClass resource is created
           echo "Checking IngressClass..."

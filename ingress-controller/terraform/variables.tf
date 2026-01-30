@@ -45,9 +45,9 @@ variable "install_nginx_ingress" {
 }
 
 variable "nginx_ingress_version" {
-  description = "Version of ingress-nginx chart"
+  description = "Version of nginx-ingress chart (NGINX Inc. official from helm.nginx.com/stable)"
   type        = string
-  default     = "4.14.2"
+  default     = "2.4.2"
 }
 
 variable "release_name" {

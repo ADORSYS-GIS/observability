@@ -238,7 +238,7 @@ jobs:
           cloud_provider        = "${{ inputs.cloud_provider }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
-          nginx_ingress_version = "4.14.2"
+          nginx_ingress_version = "2.5.0"
           namespace             = "ingress-nginx"
           ingress_class_name    = "nginx"
           replica_count         = 2

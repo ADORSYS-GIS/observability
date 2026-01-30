@@ -4,7 +4,7 @@ Layer 7 load balancing and external traffic routing for Kubernetes clusters.
 
 NGINX Ingress Controller provisions cloud LoadBalancers, routes HTTP/HTTPS traffic based on domain and path rules, and handles TLS termination for internet-facing applications.
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | **GitHub**: [kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx) | **Version**: `4.14.2`
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **GitHub**: [nginxinc/kubernetes-ingress](https://github.com/nginxinc/kubernetes-ingress) | **Helm Repository**: `https://helm.nginx.com/stable` | **Version**: `2.4.2`
 
 ---
 
@@ -39,37 +39,6 @@ Select a deployment method based on your requirements:
 
 - [Adopting Existing Installation](../docs/adopting-ingress-controller.md) - Migrate existing NGINX Ingress deployment
 - [Troubleshooting Guide](../docs/troubleshooting-ingress-controller.md) - LoadBalancer issues, DNS problems, routing failures
-
----
-
-## Directory Structure
-
-```
-ingress-controller/
-├── terraform/              # Terraform modules and configuration
-│   ├── main.tf            # Main Terraform configuration
-│   ├── variables.tf       # Input variables
-│   ├── outputs.tf         # Output values (includes LoadBalancer IP)
-│   └── terraform.tfvars.template  # Template for variables
-└── README.md              # This file
-```
-
----
-
-## Quick Start
-
-**Deployment Order:** Install ingress controller before cert-manager. cert-manager depends on the ingress controller for ACME HTTP-01 challenges.
-
-### GitHub Actions Deployment
-
-1. Configure GitHub Secrets ([configuration guide](../docs/ingress-controller-github-actions.md#step-1-configure-github-secrets))
-2. Push to repository to trigger workflow
-3. Verify deployment: `kubectl get svc -n ingress-nginx` (check for external IP)
-
-### Manual Deployment
-
-1. Follow the [Manual Deployment Guide](../docs/ingress-controller-manual-deployment.md)
-2. Verify LoadBalancer: `kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller`
 
 ---
 
@@ -149,17 +118,7 @@ After deployment:
 
 ---
 
-## Next Steps
-
-After deploying the ingress controller:
-
-1. Verify LoadBalancer has an external IP assigned
-2. Configure DNS A records pointing to the LoadBalancer IP
-3. Deploy cert-manager for automatic TLS certificates ([cert-manager Guide](../cert-manager/README.md))
-4. Create Ingress resources to route traffic to your services
-
----
-
 ## Additional Resources
 
-- [Official Documentation](https://kubernetes.github.io/ingress-nginx/) - Comprehensive NGINX Ingress documentation
+- [Official Documentation](https://docs.nginx.com/nginx-ingress-controller/) - Comprehensive NGINX Inc. Ingress Controller documentation
+- [Helm Repository](https://helm.nginx.com/stable) - NGINX Inc. stable Helm charts

@@ -9,7 +9,7 @@ install_nginx_ingress = false
 # Helm Release
 release_name          = "nginx-monitoring"
 namespace             = "ingress-nginx"
-nginx_ingress_version = "4.14.1"
+nginx_ingress_version = "2.4.2"
 
 # Controller Configuration
 replica_count      = 1

@@ -138,7 +138,7 @@ jobs:
           gke_ca_certificate    = "${{ steps.cluster_info.outputs.ca_cert }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
-          nginx_ingress_version = "4.14.2"
+          nginx_ingress_version = "2.4.2"
           namespace             = "ingress-nginx"
           ingress_class_name    = "nginx"
           replica_count         = 2
@@ -269,7 +269,7 @@ jobs:
           gke_ca_certificate    = "${{ steps.cluster_info.outputs.ca_cert }}"
           install_nginx_ingress = true
           release_name          = "nginx-monitoring"
-          nginx_ingress_version = "4.14.2"
+          nginx_ingress_version = "2.4.2"
           namespace             = "ingress-nginx"
           ingress_class_name    = "nginx"
           replica_count         = 2
@@ -306,6 +306,32 @@ jobs:
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
+        continue-on-error: true
+        id: apply
+
+      # Debug Helm release and pods on failure
+      - name: Debug deployment on failure
+        if: steps.apply.outcome == 'failure'
+        run: |
+          echo "=== Helm Release Status ==="
+          helm list -n ingress-nginx || true
+          helm status nginx-monitoring -n ingress-nginx || true
+          
+          echo "=== Pods in ingress-nginx namespace ==="
+          kubectl get pods -n ingress-nginx || true
+          
+          echo "=== Pod Descriptions ==="
+          kubectl describe pods -n ingress-nginx || true
+          
+          echo "=== Pod Logs ==="
+          kubectl logs -n ingress-nginx -l app.kubernetes.io/name=nginx-ingress --tail=100 || true
+          
+          echo "=== Events ==="
+          kubectl get events -n ingress-nginx --sort-by='.lastTimestamp' || true
+
+      - name: Fail workflow if apply failed
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
 
       # Extract deployment outputs (LoadBalancer IP, service info, etc.)
       - name: Output deployment info
@@ -333,7 +359,7 @@ jobs:
           # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ingress-nginx
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=300s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-ingress -n ingress-nginx --timeout=300s
           
           # Confirm IngressClass resource is created
           echo "Checking IngressClass..."

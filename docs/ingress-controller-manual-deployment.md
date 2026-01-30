@@ -4,7 +4,7 @@ Direct Helm-based deployment for command-line control.
 
 Recommended for local development environments, learning, or clusters without CI/CD infrastructure. This method provides step-by-step control over Layer 7 load balancing deployment.
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | **GitHub**: [kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx) | **Version**: `4.14.2`
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **GitHub**: [nginxinc/kubernetes-ingress](https://github.com/nginxinc/kubernetes-ingress) | **Helm Repository**: `https://helm.nginx.com/stable` | **Version**: `2.4.2`
 
 ---
 
@@ -50,16 +50,16 @@ kubectl config use-context <context-name>
 
 ### Step 2: Add Helm Repository
 
-Add the official NGINX Ingress Controller Helm repository:
+Add the official NGINX Inc. stable Helm repository:
 
 ```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add nginx-stable https://helm.nginx.com/stable
 helm repo update
 ```
 
 Verify repository addition:
 ```bash
-helm search repo ingress-nginx/ingress-nginx
+helm search repo nginx-stable/nginx-ingress
 ```
 
 ---
@@ -69,15 +69,12 @@ helm search repo ingress-nginx/ingress-nginx
 Deploy with recommended configuration:
 
 ```bash
-helm install nginx-monitoring ingress-nginx/ingress-nginx \
+helm install nginx-monitoring nginx-stable/nginx-ingress \
   --namespace ingress-nginx \
   --create-namespace \
-  --version 4.14.2 \
-  --set controller.ingressClassResource.name=nginx \
-  --set controller.ingressClass=nginx \
-  --set controller.ingressClassResource.controllerValue=k8s.io/ingress-nginx \
-  --set controller.ingressClassResource.enabled=true \
-  --set controller.ingressClassByName=true
+  --version 2.4.2 \
+  --set controller.ingressClass.name=nginx \
+  --set controller.service.type=LoadBalancer
 ```
 
 This command:
@@ -111,7 +108,7 @@ nginx-monitoring-ingress-nginx-controller-yyyyy     1/1     Running   0         
 Wait for pods to reach ready state:
 ```bash
 kubectl wait --for=condition=ready pod \
-  -l app.kubernetes.io/name=ingress-nginx \
+  -l app.kubernetes.io/name=nginx-ingress \
   -n ingress-nginx \
   --timeout=300s
 ```
@@ -157,7 +154,7 @@ kubectl get ingressclass nginx
 Expected output:
 ```
 NAME    CONTROLLER                      PARAMETERS   AGE
-nginx   k8s.io/ingress-nginx            <none>       2m
+nginx   nginx.org/ingress-controller    <none>       2m
 ```
 
 ---
@@ -214,12 +211,12 @@ Update to a newer version:
 helm repo update
 
 # Check available versions
-helm search repo ingress-nginx/ingress-nginx --versions
+helm search repo nginx-stable/nginx-ingress --versions
 
 # Upgrade to new version
-helm upgrade nginx-monitoring ingress-nginx/ingress-nginx \
+helm upgrade nginx-monitoring nginx-stable/nginx-ingress \
   --namespace ingress-nginx \
-  --version 4.15.0
+  --version 2.5.0
 ```
 
 Helm performs a rolling update with zero downtime.
@@ -265,4 +262,4 @@ kubectl get ingress -A
 
 ---
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **Helm Repository**: `https://helm.nginx.com/stable`

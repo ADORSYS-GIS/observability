@@ -4,7 +4,7 @@ Infrastructure as Code deployment using Terraform for reproducible, version-cont
 
 Recommended for teams using infrastructure as code workflows, multi-environment deployments, or requiring reproducible configurations. This method provides full control over Terraform execution from your local machine or CI/CD pipeline.
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | **GitHub**: [kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx) | **Version**: `4.14.2`
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **GitHub**: [nginxinc/kubernetes-ingress](https://github.com/nginxinc/kubernetes-ingress) | **Helm Repository**: `https://helm.nginx.com/stable` | **Version**: `2.4.2`
 
 ---
 
@@ -148,7 +148,7 @@ cloud_provider = "gke"
 install_nginx_ingress = true
 
 # Optional: Version override
-nginx_ingress_version = "4.14.2"
+nginx_ingress_version = "2.4.2"
 ```
 
 **Full configuration options:**
@@ -174,7 +174,7 @@ install_nginx_ingress = true  # Set false to manage existing installation
 # Helm Release
 release_name          = "nginx-monitoring"
 namespace             = "ingress-nginx"
-nginx_ingress_version = "4.14.2"
+nginx_ingress_version = "2.4.2"
 
 # Controller Configuration
 replica_count      = 2  # Number of controller replicas for high availability
@@ -187,7 +187,7 @@ ingress_class_name = "nginx"
 |----------|-------------|---------|----------|
 | `cloud_provider` | Target platform (gke/eks/aks/generic) | `gke` | Yes |
 | `install_nginx_ingress` | Install ingress controller or manage existing | `false` | Yes |
-| `nginx_ingress_version` | Chart version to install | `4.14.2` | No |
+| `nginx_ingress_version` | Chart version to install | `2.4.2` | No |
 | `replica_count` | Number of controller replicas | `1` | No |
 | `ingress_class_name` | IngressClass name for routing | `nginx` | No |
 | `release_name` | Helm release name | `nginx-monitoring` | No |
@@ -265,9 +265,9 @@ Terraform will perform the following actions:
 
   # helm_release.nginx_ingress[0] will be created
   + resource "helm_release" "nginx_ingress" {
-      + chart            = "ingress-nginx"
+      + chart            = "nginx-ingress"
       + namespace        = "ingress-nginx"
-      + version          = "4.14.2"
+      + version          = "2.4.2"
       ...
     }
 
@@ -342,7 +342,7 @@ kubectl get ingressclass nginx
 Expected output:
 ```
 NAME    CONTROLLER                      PARAMETERS   AGE
-nginx   k8s.io/ingress-nginx            <none>       3m
+nginx   nginx.org/ingress-controller    <none>       3m
 ```
 
 ---
@@ -382,7 +382,7 @@ nslookup myapp.example.com
 Update the version in `terraform.tfvars`:
 
 ```hcl
-nginx_ingress_version = "4.15.0"
+nginx_ingress_version = "2.5.0"
 ```
 
 Plan and apply the upgrade:
@@ -484,4 +484,4 @@ For ingress-specific issues, see [Troubleshooting Guide](troubleshooting-ingress
 
 ---
 
-**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)
+**Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **Helm Repository**: `https://helm.nginx.com/stable`

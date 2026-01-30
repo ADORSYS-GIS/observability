@@ -161,7 +161,7 @@ All components use Terraform for infrastructure-as-code:
 
 ### Infrastructure
 - **cert-manager**: [cert-manager.io/docs](https://cert-manager.io/docs/)
-- **NGINX Ingress**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)
+- **NGINX Ingress**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | [Helm Repo](https://helm.nginx.com/stable)
 - **Kubernetes**: [kubernetes.io/docs](https://kubernetes.io/docs/home/)
 
 ### Terraform

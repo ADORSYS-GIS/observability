@@ -61,8 +61,8 @@ resource "helm_release" "nginx_ingress" {
   count = var.install_nginx_ingress ? 1 : 0
 
   name             = var.release_name
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
+  repository       = "https://helm.nginx.com/stable"
+  chart            = "nginx-ingress"
   namespace        = var.namespace
   create_namespace = true
   version          = var.nginx_ingress_version
@@ -73,29 +73,19 @@ resource "helm_release" "nginx_ingress" {
   }
 
   set {
-    name  = "controller.ingressClassResource.name"
+    name  = "controller.ingressClass.name"
     value = var.ingress_class_name
   }
 
   set {
-    name  = "controller.ingressClass"
-    value = var.ingress_class_name
-  }
-
-  set {
-    name  = "controller.ingressClassResource.controllerValue"
-    value = "k8s.io/${var.ingress_class_name}"
-  }
-  set {
-    name  = "controller.ingressClassResource.enabled"
+    name  = "controller.ingressClass.create"
     value = "true"
   }
 
   set {
-    name  = "controller.ingressClassByName"
-    value = "true"
+    name  = "controller.ingressClass.setAsDefaultIngress"
+    value = "false"
   }
-
 
   # Wait for the LoadBalancer to be ready
   wait    = true
