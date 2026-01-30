@@ -454,11 +454,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
-      - name: Configure kubectl (GKE)
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
+
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -776,11 +772,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
-      - name: Configure kubectl (GKE)
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
+
 
       - name: Verify kubectl connection
         run: |
