@@ -61,39 +61,42 @@ jobs:
     env:
       KUBECONFIG: /home/runner/.kube/config
     steps:
-      - name: Setup Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci --accept-routes
-          hostname: github-runner-plan-${{ github.run_id }}
-
-      - name: Wait for Tailscale Connection
+      - name: Setup NetBird
         run: |
-          echo "Waiting for Tailscale to establish VPN connection..."
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --management-url https://netbird.observev.camer.digital:443 \
+            --hostname github-runner-plan-${{ github.run_id }}
+          
+          echo "Waiting for NetBird connection to establish..."
           sleep 15
           
           echo "======================================"
-          echo "Tailscale Diagnostics"
+          echo "NetBird Diagnostics"
           echo "======================================"
           
-          echo "\n1. Tailscale Status:"
-          sudo tailscale status
+          echo "\n1. NetBird Status:"
+          sudo netbird status
           
-          echo "\n2. Tailscale IP:"
-          sudo tailscale ip -4
+          echo "\n2. NetBird Interface:"
+          ip addr show wt0 || echo "NetBird interface not found"
           
-          echo "\n3. Tailscale Routes:"
-          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          echo "\n3. NetBird IP:"
+          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
+          echo "NetBird IP: $NETBIRD_IP"
           
-          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
+          echo "\n4. Waiting additional 10 seconds for peers to sync..."
           sleep 10
           
-          echo "\n5. Final Tailscale status:"
-          sudo tailscale status
+          echo "\n5. Final NetBird status:"
+          sudo netbird status
           
           echo "\n======================================"
-          echo "Tailscale setup complete"
+          echo "NetBird setup complete"
           echo "======================================"
 
       - name: Setup Kubeconfig
@@ -338,39 +341,42 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
     
     steps:
-      - name: Setup Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci --accept-routes
-          hostname: github-runner-${{ github.run_id }}
-
-      - name: Wait for Tailscale Connection
+      - name: Setup NetBird
         run: |
-          echo "Waiting for Tailscale to establish VPN connection..."
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --management-url https://netbird.observe.camer.digital:443 \
+            --hostname github-runner-${{ github.run_id }}
+          
+          echo "Waiting for NetBird connection to establish..."
           sleep 15
           
           echo "======================================"
-          echo "Tailscale Diagnostics"
+          echo "NetBird Diagnostics"
           echo "======================================"
           
-          echo "\n1. Tailscale Status:"
-          sudo tailscale status
+          echo "\n1. NetBird Status:"
+          sudo netbird status
           
-          echo "\n2. Tailscale IP:"
-          sudo tailscale ip -4
+          echo "\n2. NetBird Interface:"
+          ip addr show wt0 || echo "NetBird interface not found"
           
-          echo "\n3. Tailscale Routes:"
-          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          echo "\n3. NetBird IP:"
+          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
+          echo "NetBird IP: $NETBIRD_IP"
           
-          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
+          echo "\n4. Waiting additional 10 seconds for peers to sync..."
           sleep 10
           
-          echo "\n5. Final Tailscale status:"
-          sudo tailscale status
+          echo "\n5. Final NetBird status:"
+          sudo netbird status
           
           echo "\n======================================"
-          echo "Tailscale setup complete"
+          echo "NetBird setup complete"
           echo "======================================"
 
       - name: Setup Kubeconfig
@@ -383,7 +389,7 @@ jobs:
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          echo "Verifying spoke cluster connectivity via Tailscale..."
+          echo "Verifying spoke cluster connectivity via NetBird..."
           
           if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
             echo "No workload clusters configured, skipping connectivity check"
@@ -659,39 +665,42 @@ jobs:
     env:
       KUBECONFIG: /home/runner/.kube/config
     steps:
-      - name: Setup Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci --accept-routes
-          hostname: github-runner-${{ github.run_id }}
-
-      - name: Wait for Tailscale Connection
+      - name: Setup NetBird
         run: |
-          echo "Waiting for Tailscale to establish VPN connection..."
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --management-url https://netbird.observe.camer.digital:443 \
+            --hostname github-runner-${{ github.run_id }}
+          
+          echo "Waiting for NetBird connection to establish..."
           sleep 15
           
           echo "======================================"
-          echo "Tailscale Diagnostics"
+          echo "NetBird Diagnostics"
           echo "======================================"
           
-          echo "\n1. Tailscale Status:"
-          sudo tailscale status
+          echo "\n1. NetBird Status:"
+          sudo netbird status
           
-          echo "\n2. Tailscale IP:"
-          sudo tailscale ip -4
+          echo "\n2. NetBird Interface:"
+          ip addr show wt0 || echo "NetBird interface not found"
           
-          echo "\n3. Tailscale Routes:"
-          sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
+          echo "\n3. NetBird IP:"
+          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
+          echo "NetBird IP: $NETBIRD_IP"
           
-          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
+          echo "\n4. Waiting additional 10 seconds for peers to sync..."
           sleep 10
           
-          echo "\n5. Final Tailscale status:"
-          sudo tailscale status
+          echo "\n5. Final NetBird status:"
+          sudo netbird status
           
           echo "\n======================================"
-          echo "Tailscale setup complete"
+          echo "NetBird setup complete"
           echo "======================================"
 
       - name: Setup Kubeconfig
@@ -704,7 +713,7 @@ jobs:
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          echo "Verifying spoke cluster connectivity via Tailscale..."
+          echo "Verifying spoke cluster connectivity via NetBird..."
           
           if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
             echo "No workload clusters configured, skipping connectivity check"
