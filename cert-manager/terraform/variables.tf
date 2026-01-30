@@ -4,7 +4,7 @@ variable "cloud_provider" {
   default     = "gke"
   validation {
     condition     = contains(["gke", "eks", "aks", "generic"], var.cloud_provider)
-    error_message = "Cloud provider must be one of: gke, eks, aks, generic"
+    error_message = "Cloud provider must be one of: gke, eks, aks, generic."
   }
 }
 
