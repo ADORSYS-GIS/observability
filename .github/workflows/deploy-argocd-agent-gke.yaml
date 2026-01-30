@@ -155,7 +155,7 @@ jobs:
             echo "✅ appended workload_clusters to terraform.tfvars"
           fi
 
-          echo "✅ Created terraform.tfvars" 
+          echo "✅ Created terraform.tfvars"
 
       - name: Terraform Plan
         id: plan
