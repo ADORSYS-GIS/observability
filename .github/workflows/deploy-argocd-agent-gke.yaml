@@ -162,15 +162,16 @@ jobs:
               echo "  ✓ Successfully connected to $CONTEXT"
             else
               echo "  ⚠ WARNING: Initial connection failed, investigating..."
-              
-              echo "\n  Diagnostics:"
-              echo "  - Tailscale status:"
-              sudo tailscale status | head -20
-              
-              echo "\n  - Attempting direct curl to API server:"
+            echo ""
+            echo "  Diagnostics:"
+            echo "  - NetBird status:"
+            sudo netbird status || echo "NetBird not running"
+            
+            echo ""
+            echo "  - Attempting direct curl to API server:"
               timeout 5 curl -k "$CLUSTER_SERVER/healthz" 2>&1 || echo "  Direct API connection failed"
               
-              echo "\n  - Waiting 20 more seconds for Tailscale routes..."
+              echo "\n  - Waiting 20 more seconds for NetBird routes..."
               sleep 20
               
               # Final retry
@@ -180,10 +181,10 @@ jobs:
               else
                 echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
                 echo "\n  Final diagnostics:"
-                echo "  - Tailscale peers:"
-                sudo tailscale status
+                echo "  - NetBird peers:"
+                sudo netbird status || echo "NetBird not running"
                 echo "\n  - Network routes:"
-                ip route | grep -E '100\.' || echo "  No Tailscale routes found"
+                ip route | grep -E '100\.' || echo "  No NetBird routes found"
                 exit 1
               fi
             fi
