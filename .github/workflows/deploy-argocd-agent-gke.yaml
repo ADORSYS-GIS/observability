@@ -65,7 +65,7 @@ jobs:
         uses: tailscale/github-action@v2
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci
+          args: --advertise-tags=tag:ci --accept-routes
           hostname: github-runner-plan-${{ github.run_id }}
 
       - name: Wait for Tailscale Connection
@@ -86,13 +86,10 @@ jobs:
           echo "\n3. Tailscale Routes:"
           sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
           
-          echo "\n4. Checking route acceptance..."
-          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
-          
-          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
           sleep 10
           
-          echo "\n6. Final Tailscale status:"
+          echo "\n5. Final Tailscale status:"
           sudo tailscale status
           
           echo "\n======================================"
@@ -345,7 +342,7 @@ jobs:
         uses: tailscale/github-action@v2
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci
+          args: --advertise-tags=tag:ci --accept-routes
           hostname: github-runner-${{ github.run_id }}
 
       - name: Wait for Tailscale Connection
@@ -366,13 +363,10 @@ jobs:
           echo "\n3. Tailscale Routes:"
           sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
           
-          echo "\n4. Checking route acceptance..."
-          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
-          
-          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
           sleep 10
           
-          echo "\n6. Final Tailscale status:"
+          echo "\n5. Final Tailscale status:"
           sudo tailscale status
           
           echo "\n======================================"
@@ -669,7 +663,7 @@ jobs:
         uses: tailscale/github-action@v2
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          args: --advertise-tags=tag:ci
+          args: --advertise-tags=tag:ci --accept-routes
           hostname: github-runner-${{ github.run_id }}
 
       - name: Wait for Tailscale Connection
@@ -690,13 +684,10 @@ jobs:
           echo "\n3. Tailscale Routes:"
           sudo tailscale status --json | jq -r '.Peer[] | select(.TailscaleIPs != null) | "Peer: \(.HostName) - IPs: \(.TailscaleIPs[])"' || sudo tailscale status
           
-          echo "\n4. Checking route acceptance..."
-          sudo tailscale up --accept-routes --authkey="${{ secrets.TAILSCALE_AUTHKEY }}" || echo "Route acceptance may have failed"
-          
-          echo "\n5. Waiting additional 10 seconds for routes to propagate..."
+          echo "\n4. Waiting additional 10 seconds for routes to stabilize..."
           sleep 10
           
-          echo "\n6. Final Tailscale status:"
+          echo "\n5. Final Tailscale status:"
           sudo tailscale status
           
           echo "\n======================================"
