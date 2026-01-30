@@ -260,6 +260,8 @@ jobs:
 
       - name: Create terraform.tfvars
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
           # Get the actual current kubectl context name
           KUBE_CONTEXT=$(kubectl config current-context)
@@ -291,6 +293,14 @@ jobs:
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
           EOF
+          
+          # Append workload_clusters if secret exists
+          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "" >> terraform.tfvars
+            echo "workload_clusters = $WORKLOAD_CLUSTERS_JSON" >> terraform.tfvars
+            echo "✅ appended workload_clusters to terraform.tfvars"
+          fi
+
           echo "✅ Created terraform.tfvars"
 
       - name: Install argocd-agentctl
@@ -451,9 +461,203 @@ jobs:
           kubectl config current-context
           echo "Available contexts:"
           kubectl config get-contexts
+      - name: Install argocd-agentctl
+        run: |
+          curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
+          chmod +x argocd-agentctl
+          sudo mv argocd-agentctl /usr/local/bin/
+
       - name: Run Verification
         env:
           NAMESPACE: argocd
+          HUB_CONTEXT: ${{ secrets.CLUSTER_NAME }}
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          chmod +x $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
-          $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+          set -e
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "ArgoCD Agent Deployment Verification"
+          echo "═══════════════════════════════════════════════════════════════"
+          
+          # Get current context
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          echo "✓ Current kubectl context: $CURRENT_CONTEXT"
+          echo ""
+          
+          # ================================================================
+          # 1. VERIFY HUB CLUSTER (PRINCIPAL) DEPLOYMENT
+          # ================================================================
+          echo "[1/5] Verifying Principal (Hub) Deployment..."
+          echo "───────────────────────────────────────────────────────────────"
+          
+          # Check principal pods
+          echo "Checking principal pods..."
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal
+          
+          PRINCIPAL_READY=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+          if [[ "$PRINCIPAL_READY" == *"True"* ]]; then
+            echo "✓ Principal pod is running and ready"
+          else
+            echo "✗ ERROR: Principal pod is not ready"
+            kubectl describe pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal
+            exit 1
+          fi
+          
+          # Check principal service
+          echo ""
+          echo "Checking principal service..."
+          kubectl get svc -n $NAMESPACE argocd-agent-principal
+          
+          PRINCIPAL_IP=$(kubectl get svc -n $NAMESPACE argocd-agent-principal -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -z "$PRINCIPAL_IP" ] || [ "$PRINCIPAL_IP" = "null" ]; then
+            echo "⚠ WARNING: Principal LoadBalancer IP not yet assigned (may still be provisioning)"
+            PRINCIPAL_IP="pending"
+          else
+            echo "✓ Principal LoadBalancer IP: $PRINCIPAL_IP"
+          fi
+          
+          # Check principal logs for errors
+          echo ""
+          echo "Recent principal logs:"
+          kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal --tail=20 || echo "⚠ Could not fetch logs"
+          echo ""
+          
+          # ================================================================
+          # 2. VERIFY SPOKE CLUSTERS CONFIGURATION
+          # ================================================================
+          echo "[2/5] Checking Workload Clusters Configuration..."
+          echo "───────────────────────────────────────────────────────────────"
+          
+          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo "⚠ WARNING: WORKLOAD_CLUSTERS_JSON is not configured"
+            echo "Spoke agents will NOT be deployed automatically"
+            echo "To enable spoke deployments, set the WORKLOAD_CLUSTERS_JSON secret"
+            SKIP_SPOKE_VERIFICATION="true"
+          else
+            echo "✓ Workload clusters configured:"
+            echo "$WORKLOAD_CLUSTERS_JSON" | jq . || echo "$WORKLOAD_CLUSTERS_JSON"
+            SKIP_SPOKE_VERIFICATION="false"
+          fi
+          echo ""
+          
+          # ================================================================
+          # 3. VERIFY SPOKE AGENT DEPLOYMENTS (if configured)
+          # ================================================================
+          if [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
+            echo "[3/5] Verifying Spoke Agent Deployments..."
+            echo "───────────────────────────────────────────────────────────────"
+            
+            # Extract agent names from JSON (expecting format: {"agent-1": "spoke-1", ...})
+            AGENT_NAMES=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'keys[]' 2>/dev/null || echo "")
+            
+            if [ -z "$AGENT_NAMES" ]; then
+              echo "⚠ WARNING: Could not parse agent names from WORKLOAD_CLUSTERS_JSON"
+              echo "Skipping spoke verification"
+            else
+              for AGENT in $AGENT_NAMES; do
+                SPOKE_CONTEXT=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r ".\"$AGENT\"" 2>/dev/null || echo "")
+                
+                echo ""
+                echo "Checking agent: $AGENT (context: $SPOKE_CONTEXT)"
+                
+                # Check if context exists
+                if ! kubectl config get-contexts "$SPOKE_CONTEXT" &>/dev/null; then
+                  echo "  ⚠ WARNING: Context '$SPOKE_CONTEXT' not found in kubeconfig"
+                  echo "  Skipping verification for $AGENT"
+                  continue
+                fi
+                
+                # Check agent deployment
+                if kubectl get deployment argocd-agent-agent -n $NAMESPACE --context "$SPOKE_CONTEXT" &>/dev/null; then
+                  AGENT_READY=$(kubectl get deployment argocd-agent-agent -n $NAMESPACE --context "$SPOKE_CONTEXT" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
+                  if [ "$AGENT_READY" = "True" ]; then
+                    echo "  ✓ Agent deployment is ready"
+                  else
+                    echo "  ✗ Agent deployment exists but is not ready"
+                    kubectl get pods -n $NAMESPACE --context "$SPOKE_CONTEXT" -l app.kubernetes.io/name=argocd-agent-agent
+                  fi
+                else
+                  echo "  ✗ Agent deployment not found"
+                  echo "  This may indicate the spoke was not deployed by Terraform"
+                fi
+              done
+            fi
+          else
+            echo "[3/5] Skipping Spoke Agent Verification (not configured)"
+          fi
+          echo ""
+          
+          # ================================================================
+          # 4. VERIFY AGENT REGISTRATION ON HUB
+          # ================================================================
+          echo "[4/5] Verifying Agent Registration on Hub..."
+          echo "───────────────────────────────────────────────────────────────"
+          
+          # Check if agent CRD exists
+          if kubectl get crd agents.argoproj.io &>/dev/null; then
+            echo "✓ Agent CRD exists"
+            
+            # List registered agents
+            echo ""
+            echo "Registered agents:"
+            if kubectl get agents -n $NAMESPACE &>/dev/null; then
+              kubectl get agents -n $NAMESPACE
+              
+              AGENT_COUNT=$(kubectl get agents -n $NAMESPACE --no-headers 2>/dev/null | wc -l)
+              echo ""
+              echo "✓ Found $AGENT_COUNT registered agent(s)"
+              
+              # Show agent details
+              if [ "$AGENT_COUNT" -gt 0 ]; then
+                echo ""
+                echo "Agent details:"
+                kubectl get agents -n $NAMESPACE -o wide
+              fi
+            else
+              echo "⚠ No agents registered yet"
+              echo "This is normal if spokes haven't connected to principal yet"
+            fi
+          else
+            echo "⚠ Agent CRD not found (may not be installed yet)"
+          fi
+          echo ""
+          
+          # ================================================================
+          # 5. VERIFY ARGOCD CORE COMPONENTS
+          # ================================================================
+          echo "[5/5] Verifying ArgoCD Core Components..."
+          echo "───────────────────────────────────────────────────────────────"
+          
+          # Run existing verification script if it exists
+          if [ -f "$GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh" ]; then
+            chmod +x $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
+            $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
+          else
+            echo "Basic ArgoCD component check:"
+            kubectl get pods -n $NAMESPACE
+          fi
+          
+          echo ""
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "Verification Summary"
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "✓ Principal pod status: $PRINCIPAL_READY"
+          echo "✓ Principal LoadBalancer IP: $PRINCIPAL_IP"
+          if [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
+            echo "✓ Workload clusters configuration present"
+            echo "  Note: Individual spoke status shown above"
+          else
+            echo "⚠ Workload clusters not configured"
+          fi
+          echo ""
+          echo "Next steps:"
+          if [ "$PRINCIPAL_IP" = "pending" ]; then
+            echo "  1. Wait for Principal LoadBalancer IP to be assigned"
+            echo "  2. Re-run this workflow to complete spoke deployment"
+          elif [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
+            echo "  1. Verify spoke agents are connecting to principal"
+            echo "  2. Deploy test applications to workload clusters"
+          else
+            echo "  1. Configure WORKLOAD_CLUSTERS_JSON secret"
+            echo "  2. Re-run workflow to deploy spoke agents"
+          fi
+          echo "═══════════════════════════════════════════════════════════════"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
