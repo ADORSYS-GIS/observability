@@ -69,7 +69,6 @@ jobs:
           echo "Connecting to NetBird network..."
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
-            --management-url https://netbird.observev.camer.digital:443 \
             --hostname github-runner-plan-${{ github.run_id }}
           
           echo "Waiting for NetBird connection to establish..."
@@ -349,7 +348,6 @@ jobs:
           echo "Connecting to NetBird network..."
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
-            --management-url https://netbird.observe.camer.digital:443 \
             --hostname github-runner-${{ github.run_id }}
           
           echo "Waiting for NetBird connection to establish..."
@@ -673,7 +671,6 @@ jobs:
           echo "Connecting to NetBird network..."
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
-            --management-url https://netbird.observe.camer.digital:443 \
             --hostname github-runner-${{ github.run_id }}
           
           echo "Waiting for NetBird connection to establish..."
