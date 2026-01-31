@@ -556,16 +556,22 @@ jobs:
 
           # 1. Get Access Token (from master realm)
           echo "Authenticating to Keycloak..."
-          TOKEN=$(curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
+          TOKEN_RESPONSE=$(curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
             -d "client_id=admin-cli" \
             -d "username=$KC_USER" \
             -d "password=$KC_PASS" \
-            -d "grant_type=password" | jq -r '.access_token')
+            -d "grant_type=password" 2>&1)
+          
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty' 2>/dev/null || echo "")
 
-          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
-            echo "⚠ Failed to get Keycloak token. Skipping imports (Keycloak might not be up yet)."
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "⚠ Failed to get Keycloak token. This is expected for fresh deployments."
+            echo "   Terraform will create all resources from scratch."
+            echo "   Skipping import step."
             exit 0
           fi
+          
+          echo "✓ Successfully authenticated to Keycloak"
           
           # Helper function for import
           import_resource() {
@@ -582,22 +588,35 @@ jobs:
 
           # 2. Import Realm
           # Realm import uses just the realm name
-          if curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM" | grep -q "\"realm\":\"$REALM\""; then
+          echo "Checking if realm '$REALM' exists..."
+          REALM_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM" 2>&1)
+          if echo "$REALM_RESPONSE" | grep -q "\"realm\":\"$REALM\""; then
+            echo "✓ Realm '$REALM' found, importing..."
             import_resource "module.hub_cluster[0].keycloak_realm.argocd[0]" "$REALM"
+          else
+            echo "Realm '$REALM' not found (fresh deployment)"
           fi
 
           # 3. Import Client (argocd)
           echo "Looking up Client 'argocd'..."
-          CLIENT_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/clients?clientId=argocd" | jq -r '.[0].id')
-          if [ "$CLIENT_UUID" != "null" ]; then
+          CLIENT_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/clients?clientId=argocd" 2>&1)
+          CLIENT_UUID=$(echo "$CLIENT_RESPONSE" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
+          if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
+             echo "✓ Client 'argocd' found, importing..."
              import_resource "module.hub_cluster[0].keycloak_openid_client.argocd[0]" "$REALM/$CLIENT_UUID"
+          else
+             echo "Client 'argocd' not found (fresh deployment)"
           fi
 
           # 4. Import Client Scope (groups)
           echo "Looking up Client Scope 'groups'..."
-          SCOPE_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes" | jq -r '.[] | select(.name=="groups") | .id')
-          if [ -n "$SCOPE_UUID" ]; then
+          SCOPE_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes" 2>&1)
+          SCOPE_UUID=$(echo "$SCOPE_RESPONSE" | jq -r '.[] | select(.name=="groups") | .id // empty' 2>/dev/null || echo "")
+          if [ -n "$SCOPE_UUID" ] && [ "$SCOPE_UUID" != "null" ]; then
+             echo "✓ Client Scope 'groups' found, importing..."
              import_resource "module.hub_cluster[0].keycloak_openid_client_scope.groups[0]" "$REALM/$SCOPE_UUID"
+          else
+             echo "Client Scope 'groups' not found (fresh deployment)"
           fi
 
           # 5. Import Groups
@@ -608,24 +627,32 @@ jobs:
           for GROUP_NAME in "${!KC_GROUPS[@]}"; do
              RESOURCE_NAME="${KC_GROUPS[$GROUP_NAME]}"
              echo "Looking up Group '$GROUP_NAME'..."
-             GROUP_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/groups?search=$GROUP_NAME" | jq -r ".[0] | select(.name==\"$GROUP_NAME\") | .id")
+             GROUP_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/groups?search=$GROUP_NAME" 2>&1)
+             GROUP_UUID=$(echo "$GROUP_RESPONSE" | jq -r ".[0] | select(.name==\"$GROUP_NAME\") | .id // empty" 2>/dev/null || echo "")
              
-             if [ "$GROUP_UUID" != "null" ] && [ -n "$GROUP_UUID" ]; then
+             if [ -n "$GROUP_UUID" ] && [ "$GROUP_UUID" != "null" ]; then
+                echo "✓ Group '$GROUP_NAME' found, importing..."
                 import_resource "module.hub_cluster[0].keycloak_group.${RESOURCE_NAME}[0]" "$REALM/$GROUP_UUID"
              else
-                echo "Group $GROUP_NAME not found via API."
+                echo "Group '$GROUP_NAME' not found (fresh deployment)"
              fi
           done
 
           # 6. Import Protocol Mapper (group-membership)
           echo "Looking up Protocol Mapper 'group-membership'..."
           # The mapper is attached to the Client Scope 'groups' (SCOPE_UUID), NOT the Client.
-          if [ "$SCOPE_UUID" != "null" ]; then
-             MAPPER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes/$SCOPE_UUID/protocol-mappers/models" | jq -r '.[] | select(.name=="group-membership") | .id')
+          if [ -n "$SCOPE_UUID" ] && [ "$SCOPE_UUID" != "null" ]; then
+             MAPPER_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes/$SCOPE_UUID/protocol-mappers/models" 2>&1)
+             MAPPER_UUID=$(echo "$MAPPER_RESPONSE" | jq -r '.[] | select(.name=="group-membership") | .id // empty' 2>/dev/null || echo "")
              if [ -n "$MAPPER_UUID" ] && [ "$MAPPER_UUID" != "null" ]; then
+                echo "✓ Protocol Mapper 'group-membership' found, importing..."
                 # Import ID Format: realm/client-scope/client_scope_id/mapper_id
                 import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/client-scope/$SCOPE_UUID/$MAPPER_UUID"
+             else
+                echo "Protocol Mapper 'group-membership' not found (fresh deployment)"
              fi
+          else
+             echo "Skipping Protocol Mapper import (Client Scope not found)"
           fi
 
           # 7. Import Ingress (argocd-server)
@@ -639,15 +666,25 @@ jobs:
           INGRESS_NAME="argocd-server"
           echo "Checking for existing Ingress '$INGRESS_NAME' in '$INGRESS_NS'..."
           if kubectl get ingress "$INGRESS_NAME" -n "$INGRESS_NS" >/dev/null 2>&1; then
+             echo "✓ Ingress '$INGRESS_NAME' found, importing..."
              import_resource "module.hub_cluster[0].kubernetes_ingress_v1.argocd_ui[0]" "$INGRESS_NS/$INGRESS_NAME"
+          else
+             echo "Ingress '$INGRESS_NAME' not found (fresh deployment)"
           fi
 
           # 8. Import User (argocd-admin)
           echo "Looking up User 'argocd-admin'..."
-          USER_UUID=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/users?username=argocd-admin" | jq -r '.[0].id')
-          if [ "$USER_UUID" != "null" ]; then
+          USER_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/users?username=argocd-admin" 2>&1)
+          USER_UUID=$(echo "$USER_RESPONSE" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
+          if [ -n "$USER_UUID" ] && [ "$USER_UUID" != "null" ]; then
+             echo "✓ User 'argocd-admin' found, importing..."
              import_resource "module.hub_cluster[0].keycloak_user.argocd_admin[0]" "$REALM/$USER_UUID"
+          else
+             echo "User 'argocd-admin' not found (fresh deployment)"
           fi
+          
+          echo ""
+          echo "✓ Import check complete. Proceeding with Terraform apply..."
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
