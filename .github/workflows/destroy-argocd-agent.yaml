@@ -27,20 +27,13 @@ on:
       confirm_destroy:
         description: 'Type "DESTROY" to confirm complete removal'
         required: true
-      # GKE specific
-      gcp_project_id:
-        description: '[GKE] GCP Project ID'
-        required: false
-      gcp_region:
-        description: '[GKE] GCP Region'
-        required: false
       # EKS specific
       aws_region:
         description: '[EKS] AWS Region'
         required: false
-      # Generic
-      cluster_name:
-        description: 'Cluster Name (for updating kubeconfig locally)'
+
+      hub_cluster_context:
+        description: 'Kubectl context for hub cluster'
         required: false
 
 permissions:
@@ -80,6 +73,15 @@ jobs:
           chmod 600 ~/.kube/config
           echo "Kubeconfig contexts:"
           kubectl config get-contexts
+
+      - name: Resolve Hub Cluster Context
+        run: |
+          if [ -n "${{ inputs.hub_cluster_context }}" ]; then
+            HUB_CLUSTER_CONTEXT="${{ inputs.hub_cluster_context }}"
+          else
+            HUB_CLUSTER_CONTEXT="$(kubectl config current-context)"
+          fi
+          echo "HUB_CLUSTER_CONTEXT=$HUB_CLUSTER_CONTEXT" >> $GITHUB_ENV
 
       # GKE Authentication (Required for Terraform modules even for push triggers)
       - name: Authenticate to Google Cloud
@@ -153,8 +155,8 @@ jobs:
       - name: Fetch GKE Cluster Details
         if: inputs.cloud_provider == 'gke'
         run: |
-          CLUSTER_ENDPOINT=$(gcloud container clusters describe "${{ inputs.cluster_name }}" --zone "${{ inputs.gcp_region }}" --format="value(endpoint)")
-          CLUSTER_CA=$(gcloud container clusters describe "${{ inputs.cluster_name }}" --zone "${{ inputs.gcp_region }}" --format="value(masterAuth.clusterCaCertificate)")
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe "${{ secrets.CLUSTER_NAME }}" --zone "${{ secrets.REGION }}" --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe "${{ secrets.CLUSTER_NAME }}" --zone "${{ secrets.REGION }}" --format="value(masterAuth.clusterCaCertificate)")
           echo "CLUSTER_ENDPOINT=$CLUSTER_ENDPOINT" >> $GITHUB_ENV
           echo "CLUSTER_CA=$CLUSTER_CA" >> $GITHUB_ENV
 
@@ -163,13 +165,14 @@ jobs:
         env:
           # Pass basic input vars if needed, though tfvars or state usually suffice for destroy.
           # We just need to authorize and init state.
-          TF_VAR_gcp_project_id: ${{ inputs.gcp_project_id }}
-          TF_VAR_gcp_region: ${{ inputs.gcp_region }}
+          TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_gcp_region: ${{ secrets.REGION }}
           TF_VAR_aws_region: ${{ inputs.aws_region }}
-          TF_VAR_cluster_name: ${{ inputs.cluster_name }}
+          TF_VAR_cluster_name: ${{ secrets.CLUSTER_NAME }}
           TF_VAR_environment: ${{ inputs.environment || 'prod' }}
           TF_VAR_cluster_ca_certificate: ${{ env.CLUSTER_CA }}
           TF_VAR_cluster_endpoint: ${{ env.CLUSTER_ENDPOINT }}
+          TF_VAR_hub_cluster_context: ${{ env.HUB_CLUSTER_CONTEXT }}
         run: terraform destroy -auto-approve
 
 
