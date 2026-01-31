@@ -162,16 +162,23 @@ jobs:
 
       - name: Create terraform.tfvars for Destroy
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        env:
+          CLUSTER_ENDPOINT: ${{ env.CLUSTER_ENDPOINT }}
+          CLUSTER_CA: ${{ env.CLUSTER_CA }}
         run: |
           # Get the actual current kubectl context name
           KUBE_CONTEXT=$(kubectl config current-context)
+          
+          # Fetch cluster details using gcloud
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
           
           cat > terraform.tfvars <<EOF
           project_id               = "${{ secrets.GCP_PROJECT_ID }}"
           cluster_name             = "${{ secrets.CLUSTER_NAME }}"
           region                   = "${{ secrets.REGION }}"
-          cluster_endpoint         = "${{ env.CLUSTER_ENDPOINT }}"
-          cluster_ca_certificate   = "${{ env.CLUSTER_CA }}"
+          cluster_endpoint         = "$CLUSTER_ENDPOINT"
+          cluster_ca_certificate   = "$CLUSTER_CA"
           hub_cluster_context      = "$KUBE_CONTEXT"
           hub_namespace            = "argocd"
           spoke_namespace          = "argocd"
@@ -191,6 +198,7 @@ jobs:
           EOF
 
           echo "✅ Created terraform.tfvars for destroy operation"
+          echo "Cluster Endpoint: $CLUSTER_ENDPOINT"
 
       - name: Terraform Destroy
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
