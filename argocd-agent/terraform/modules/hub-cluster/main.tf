@@ -570,6 +570,10 @@ data "external" "hub_principal_address" {
       exit 0
     fi
 
+    # Give LoadBalancer a moment to start provisioning
+    echo "Waiting for LoadBalancer to provision..." >&2
+    sleep 10
+
     PRINCIPAL_IP=""
     RETRY_COUNT=0
     MAX_RETRIES=$((${var.principal_loadbalancer_wait_timeout} / 5))
