@@ -675,14 +675,32 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
       fi
       
       echo "Issuing updated Principal server certificate..." | tee -a "$LOG_FILE"
-      if ! ${var.argocd_agentctl_path} pki issue principal \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} \
-        --ip "127.0.0.1,$PRINCIPAL_IP" \
-        --dns "${local.principal_dns}" \
-        --upsert 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Failed to update Principal certificate. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
+      
+      # Determine if PRINCIPAL_IP is an IP address or hostname
+      if echo "$PRINCIPAL_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        # It's an IP address - use --ip flag
+        echo "Using IP address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+        if ! ${var.argocd_agentctl_path} pki issue principal \
+          --principal-context ${var.hub_cluster_context} \
+          --principal-namespace ${var.hub_namespace} \
+          --ip "127.0.0.1,$PRINCIPAL_IP" \
+          --dns "${local.principal_dns}" \
+          --upsert 2>&1 | tee -a "$LOG_FILE"; then
+          echo "✗ ERROR: Failed to update Principal certificate. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+          exit 1
+        fi
+      else
+        # It's a hostname - add to DNS names instead
+        echo "Using hostname: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+        if ! ${var.argocd_agentctl_path} pki issue principal \
+          --principal-context ${var.hub_cluster_context} \
+          --principal-namespace ${var.hub_namespace} \
+          --ip "127.0.0.1" \
+          --dns "${local.principal_dns},$PRINCIPAL_IP" \
+          --upsert 2>&1 | tee -a "$LOG_FILE"; then
+          echo "✗ ERROR: Failed to update Principal certificate. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+          exit 1
+        fi
       fi
       
       echo "Restarting ${var.principal_service_name} deployment..." | tee -a "$LOG_FILE"
