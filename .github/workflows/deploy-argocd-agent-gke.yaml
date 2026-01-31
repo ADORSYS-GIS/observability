@@ -840,6 +840,10 @@ jobs:
           echo "ArgoCD Agent Deployment Verification"
           echo "═══════════════════════════════════════════════════════════════"
           
+          # CRITICAL: Switch to hub cluster context for verification
+          echo "Switching to hub cluster context for verification..."
+          kubectl config use-context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}
+          
           # Get current context
           CURRENT_CONTEXT=$(kubectl config current-context)
           echo "✓ Current kubectl context: $CURRENT_CONTEXT"
