@@ -180,8 +180,8 @@ jobs:
           cluster_endpoint         = "$CLUSTER_ENDPOINT"
           cluster_ca_certificate   = "$CLUSTER_CA"
           hub_cluster_context      = "$KUBE_CONTEXT"
-          hub_namespace            = "argocd"
-          spoke_namespace          = "argocd"
+          hub_namespace            = "argocd-agent"
+          spoke_namespace          = "argocd-agent"
           create_default_admin_user = true
           default_admin_password   = "${{ secrets.PASSWORD }}"
           
