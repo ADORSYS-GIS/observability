@@ -160,19 +160,40 @@ jobs:
           echo "CLUSTER_ENDPOINT=$CLUSTER_ENDPOINT" >> $GITHUB_ENV
           echo "CLUSTER_CA=$CLUSTER_CA" >> $GITHUB_ENV
 
+      - name: Create terraform.tfvars for Destroy
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        run: |
+          # Get the actual current kubectl context name
+          KUBE_CONTEXT=$(kubectl config current-context)
+          
+          cat > terraform.tfvars <<EOF
+          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
+          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
+          region                   = "${{ secrets.REGION }}"
+          cluster_endpoint         = "${{ env.CLUSTER_ENDPOINT }}"
+          cluster_ca_certificate   = "${{ env.CLUSTER_CA }}"
+          hub_cluster_context      = "$KUBE_CONTEXT"
+          hub_namespace            = "argocd"
+          spoke_namespace          = "argocd"
+          create_default_admin_user = true
+          default_admin_password   = "${{ secrets.PASSWORD }}"
+          
+          # Keycloak
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          argocd_url               = "${{ secrets.ARGOCD_URL }}"
+
+          # Ingress/Cert
+          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          argocd_host              = "${{ secrets.ARGOCD_HOST }}"
+          EOF
+
+          echo "✅ Created terraform.tfvars for destroy operation"
+
       - name: Terraform Destroy
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
-        env:
-          # Pass basic input vars if needed, though tfvars or state usually suffice for destroy.
-          # We just need to authorize and init state.
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_region: ${{ secrets.REGION }}
-          TF_VAR_cluster_name: ${{ secrets.CLUSTER_NAME }}
-          TF_VAR_cluster_ca_certificate: ${{ env.CLUSTER_CA }}
-          TF_VAR_cluster_endpoint: ${{ env.CLUSTER_ENDPOINT }}
-          TF_VAR_hub_cluster_context: ${{ env.HUB_CLUSTER_CONTEXT }}
-          TF_VAR_hub_namespace: argocd
-          TF_VAR_spoke_namespace: argocd
         run: terraform destroy -auto-approve
 
 
