@@ -570,9 +570,9 @@ data "external" "hub_principal_address" {
       exit 0
     fi
 
-    # Give LoadBalancer a moment to start provisioning
+    # Give LoadBalancer time to start provisioning (GCP typically takes 30-60 seconds)
     echo "Waiting for LoadBalancer to provision..." >&2
-    sleep 10
+    sleep 30
 
     PRINCIPAL_IP=""
     RETRY_COUNT=0
