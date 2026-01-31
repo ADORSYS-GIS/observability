@@ -169,6 +169,7 @@ jobs:
           TF_VAR_cluster_name: ${{ inputs.cluster_name }}
           TF_VAR_environment: ${{ inputs.environment || 'prod' }}
           TF_VAR_cluster_ca_certificate: ${{ env.CLUSTER_CA }}
+          TF_VAR_cluster_endpoint: ${{ env.CLUSTER_ENDPOINT }}
         run: terraform destroy -auto-approve
 
 
