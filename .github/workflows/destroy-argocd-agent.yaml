@@ -165,14 +165,14 @@ jobs:
         env:
           # Pass basic input vars if needed, though tfvars or state usually suffice for destroy.
           # We just need to authorize and init state.
-          TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_gcp_region: ${{ secrets.REGION }}
-          TF_VAR_aws_region: ${{ inputs.aws_region }}
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.REGION }}
           TF_VAR_cluster_name: ${{ secrets.CLUSTER_NAME }}
-          TF_VAR_environment: ${{ inputs.environment || 'prod' }}
           TF_VAR_cluster_ca_certificate: ${{ env.CLUSTER_CA }}
           TF_VAR_cluster_endpoint: ${{ env.CLUSTER_ENDPOINT }}
           TF_VAR_hub_cluster_context: ${{ env.HUB_CLUSTER_CONTEXT }}
+          TF_VAR_hub_namespace: argocd
+          TF_VAR_spoke_namespace: argocd
         run: terraform destroy -auto-approve
 
 
