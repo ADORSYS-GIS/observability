@@ -265,22 +265,10 @@ jobs:
           cluster_endpoint         = "$CLUSTER_ENDPOINT"
           cluster_ca_certificate   = "$CLUSTER_CA"
           hub_cluster_context      = "$KUBE_CONTEXT"
-          hub_namespace            = "argocd"
-          spoke_namespace          = "argocd"
+          hub_namespace            = "argocd-agent"
+          spoke_namespace          = "argocd-agent"
           create_default_admin_user = true
           default_admin_password   = "${{ secrets.PASSWORD }}"
-          
-          # Exposure Method - Use ingress with existing nginx controller
-          ui_expose_method         = "ingress"
-          principal_expose_method  = "ingress"
-          principal_ingress_host   = "${{ secrets.PRINCIPAL_HOST }}"
-          
-          # Infrastructure - Don't install nginx/cert-manager (already exist)
-          install_nginx_ingress    = false
-          install_cert_manager     = false
-          nginx_ingress_namespace  = "ingress-nginx"
-          ingress_class_name       = "nginx"
-          cert_manager_namespace   = "cert-manager"
           
           # Keycloak
           enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
@@ -292,8 +280,6 @@ jobs:
           # Ingress/Cert
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
-          cert_issuer_name         = "letsencrypt-prod"
-          cert_issuer_kind         = "ClusterIssuer"
           EOF
           
           # Append workload_clusters if secret exists
@@ -518,22 +504,10 @@ jobs:
           cluster_endpoint         = "$CLUSTER_ENDPOINT"
           cluster_ca_certificate   = "$CLUSTER_CA"
           hub_cluster_context      = "$KUBE_CONTEXT"
-          hub_namespace            = "argocd"
-          spoke_namespace          = "argocd"
+          hub_namespace            = "argocd-agent"
+          spoke_namespace          = "argocd-agent"
           create_default_admin_user = true
           default_admin_password   = "${{ secrets.PASSWORD }}"
-          
-          # Exposure Method - Use ingress with existing nginx controller
-          ui_expose_method         = "ingress"
-          principal_expose_method  = "ingress"
-          principal_ingress_host   = "${{ secrets.PRINCIPAL_HOST }}"
-          
-          # Infrastructure - Don't install nginx/cert-manager (already exist)
-          install_nginx_ingress    = false
-          install_cert_manager     = false
-          nginx_ingress_namespace  = "ingress-nginx"
-          ingress_class_name       = "nginx"
-          cert_manager_namespace   = "cert-manager"
           
           # Keycloak
           enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
@@ -545,8 +519,6 @@ jobs:
           # Ingress/Cert
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
-          cert_issuer_name         = "letsencrypt-prod"
-          cert_issuer_kind         = "ClusterIssuer"
           EOF
           
           # Append workload_clusters if secret exists
