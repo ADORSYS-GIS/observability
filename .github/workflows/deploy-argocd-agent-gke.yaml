@@ -67,7 +67,7 @@ jobs:
           echo "Installing NetBird client..."
           curl -fsSL https://pkgs.netbird.io/install.sh | sh
           
-          echo "Connecting to NetBird network..."
+          echo "Connecting to NetBird network..." 
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
             --hostname github-runner-plan-${{ github.run_id }}
