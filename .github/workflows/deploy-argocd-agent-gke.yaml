@@ -16,6 +16,7 @@ on:
         options:
           - plan
           - apply
+          - destroy
         default: 'plan'
       environment:
         description: 'Target Environment'
@@ -338,7 +339,7 @@ jobs:
       KUBECONFIG: /home/runner/.kube/config
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
+      (github.event_name == 'workflow_dispatch' && (inputs.terraform_action == 'apply' || inputs.terraform_action == 'destroy'))
     
     steps:
       - name: Setup NetBird
@@ -650,7 +651,12 @@ jobs:
 
       - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        run: terraform apply -auto-approve
+        run: |
+          if [ "${{ inputs.terraform_action }}" == "destroy" ]; then
+            terraform destroy -auto-approve
+          else
+            terraform apply -auto-approve
+          fi
 
   verify-deployment:
     name: Verify Deployment
