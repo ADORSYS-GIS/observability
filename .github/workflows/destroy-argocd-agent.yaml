@@ -36,6 +36,10 @@ on:
         description: 'Kubectl context for hub cluster'
         required: false
 
+      hub_cluster_context:
+        description: 'Kubectl context for hub cluster'
+        required: false
+
 permissions:
   contents: read
   id-token: write
