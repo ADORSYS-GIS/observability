@@ -280,6 +280,8 @@ jobs:
           # Ingress/Cert
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
+          cert_issuer_name         = "letsencrypt-prod"
+          cert_issuer_kind         = "ClusterIssuer"
           EOF
           
           # Append workload_clusters if secret exists
@@ -524,6 +526,8 @@ jobs:
           # Ingress/Cert
           letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
           argocd_host              = "${{ secrets.ARGOCD_HOST }}"
+          cert_issuer_name         = "letsencrypt-prod"
+          cert_issuer_kind         = "ClusterIssuer"
           EOF
           
           # Append workload_clusters if secret exists
