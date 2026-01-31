@@ -142,6 +142,27 @@ jobs:
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
         run: terraform init
 
+      - name: Fetch GKE Cluster Details
+        if: inputs.cloud_provider == 'gke'
+        run: |
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe "${{ inputs.cluster_name }}" --zone "${{ inputs.gcp_region }}" --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe "${{ inputs.cluster_name }}" --zone "${{ inputs.gcp_region }}" --format="value(masterAuth.clusterCaCertificate)")
+          echo "CLUSTER_ENDPOINT=$CLUSTER_ENDPOINT" >> $GITHUB_ENV
+          echo "CLUSTER_CA=$CLUSTER_CA" >> $GITHUB_ENV
+
+      - name: Terraform Destroy
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        env:
+          # Pass basic input vars if needed, though tfvars or state usually suffice for destroy.
+          # We just need to authorize and init state.
+          TF_VAR_gcp_project_id: ${{ inputs.gcp_project_id }}
+          TF_VAR_gcp_region: ${{ inputs.gcp_region }}
+          TF_VAR_aws_region: ${{ inputs.aws_region }}
+          TF_VAR_cluster_name: ${{ inputs.cluster_name }}
+          TF_VAR_environment: ${{ inputs.environment || 'prod' }}
+          TF_VAR_cluster_ca_certificate: ${{ env.CLUSTER_CA }}
+        run: terraform destroy -auto-approve
+
       - name: Terraform Destroy
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
         env:
