@@ -229,7 +229,6 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     namespace = var.hub_namespace
     annotations = {
       "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/force-ssl-redirect"                                           = "true"
       "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
     }
   }
