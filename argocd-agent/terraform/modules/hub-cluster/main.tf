@@ -229,6 +229,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     namespace = var.hub_namespace
     annotations = {
       "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
+      "nginx.ingress.kubernetes.io/ssl-redirect"                                                 = "false"
       "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
     }
   }
@@ -236,10 +237,13 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   spec {
     ingress_class_name = var.ingress_class_name
 
-    tls {
-      hosts       = [var.argocd_host]
-      secret_name = "argocd-server-tls"
-    }
+    # TLS section commented out to allow initial certificate issuance
+    # The cert-manager annotation will handle certificate creation
+    # Once certificate is issued, TLS will be automatically configured
+    # tls {
+    #   hosts       = [var.argocd_host]
+    #   secret_name = "argocd-server-tls"
+    # }
 
     rule {
       host = var.argocd_host
