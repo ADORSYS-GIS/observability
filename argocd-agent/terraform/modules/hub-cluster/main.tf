@@ -220,7 +220,62 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
-# 1.4 Expose ArgoCD UI via Ingress
+# 1.4.1 Create Certificate Resource First (for NGINX Inc. compatibility)
+# NGINX Inc. controller doesn't allow multiple ingresses per hostname,
+# so we create the certificate separately before creating the main ingress with TLS
+resource "null_resource" "argocd_certificate" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      
+      echo "Creating Certificate resource for ArgoCD..."
+      
+      cat <<EOF | kubectl apply -f - --context ${var.hub_cluster_context}
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: argocd-server-tls
+        namespace: ${var.hub_namespace}
+      spec:
+        secretName: argocd-server-tls
+        issuerRef:
+          name: ${var.cert_issuer_name}
+          kind: ${var.cert_issuer_kind}
+        dnsNames:
+        - ${var.argocd_host}
+      EOF
+      
+      echo "Waiting for certificate to be issued (max 5 minutes)..."
+      
+      # Wait for certificate to be ready
+      for i in {1..60}; do
+        STATUS=$(kubectl get certificate argocd-server-tls -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+        
+        if [ "$STATUS" = "True" ]; then
+          echo "✓ Certificate issued successfully!"
+          exit 0
+        fi
+        
+        echo "Waiting for certificate... (attempt $i/60)"
+        sleep 5
+      done
+      
+      echo "⚠ WARNING: Certificate not issued within 5 minutes. Continuing anyway..."
+      echo "You may need to manually troubleshoot: kubectl describe certificate argocd-server-tls -n ${var.hub_namespace}"
+    EOT
+  }
+
+  depends_on = [
+    null_resource.hub_argocd_server_insecure
+  ]
+}
+
+# 1.4.2 Expose ArgoCD UI via Ingress (with TLS after certificate is issued)
 resource "kubernetes_ingress_v1" "argocd_ui" {
   count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
 
@@ -237,13 +292,10 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   spec {
     ingress_class_name = var.ingress_class_name
 
-    # TLS section commented out to allow initial certificate issuance
-    # The cert-manager annotation will handle certificate creation
-    # Once certificate is issued, TLS will be automatically configured
-    # tls {
-    #   hosts       = [var.argocd_host]
-    #   secret_name = "argocd-server-tls"
-    # }
+    tls {
+      hosts       = [var.argocd_host]
+      secret_name = "argocd-server-tls"
+    }
 
     rule {
       host = var.argocd_host
@@ -265,7 +317,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   }
 
   depends_on = [
-    null_resource.hub_argocd_server_insecure
+    null_resource.argocd_certificate
   ]
 }
 
