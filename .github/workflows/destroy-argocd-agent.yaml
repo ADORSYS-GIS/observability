@@ -204,6 +204,137 @@ jobs:
         working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
         run: terraform destroy -auto-approve
 
+      - name: Force Delete Stuck Namespaces (All Clusters)
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
+        run: |
+          echo "======================================"
+          echo "Force Cleaning Up Stuck Namespaces"
+          echo "======================================"
+          
+          # Function to force delete stuck namespace
+          force_delete_namespace() {
+            local NS=$1
+            local CTX=$2
+            
+            echo ""
+            echo "Checking namespace '$NS' in context '$CTX'..."
+            
+            # Check if namespace exists
+            if ! kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+              echo "  ✓ Namespace does not exist (clean state)"
+              return 0
+            fi
+            
+            # Get namespace status
+            NS_STATUS=$(kubectl get namespace "$NS" --context "$CTX" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            echo "  Current status: $NS_STATUS"
+            
+            if [ "$NS_STATUS" = "Terminating" ] || [ "$NS_STATUS" = "Active" ]; then
+              echo "  → Force deleting namespace..."
+              
+              # Step 1: Remove finalizers from all resources
+              echo "    [1/5] Removing finalizers from resources..."
+              kubectl api-resources --verbs=list --namespaced=true -o name 2>/dev/null | while read resource; do
+                kubectl get "$resource" -n "$NS" --context "$CTX" -o name 2>/dev/null | while read item; do
+                  kubectl patch "$item" -n "$NS" --context "$CTX" \
+                    -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+                done
+              done
+              
+              # Step 2: Remove namespace finalizers
+              echo "    [2/5] Removing namespace finalizers..."
+              kubectl patch namespace "$NS" --context "$CTX" \
+                -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+              
+              # Step 3: Force delete
+              echo "    [3/5] Force deleting namespace..."
+              kubectl delete namespace "$NS" --context "$CTX" \
+                --grace-period=0 --force --ignore-not-found=true 2>/dev/null || true
+              
+              # Step 4: Use API to finalize
+              echo "    [4/5] Finalizing via Kubernetes API..."
+              TMP_FILE="/tmp/ns-${NS}-${CTX}-$$.json"
+              if kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | jq 'del(.spec.finalizers)' > "$TMP_FILE" 2>/dev/null; then
+                kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE" --context "$CTX" >/dev/null 2>&1 || true
+                rm -f "$TMP_FILE"
+              fi
+              
+              # Step 5: Verify deletion
+              echo "    [5/5] Verifying deletion..."
+              sleep 3
+              if kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+                echo "    ⚠ Namespace still exists, attempting final cleanup..."
+                
+                # Final attempt with API finalize
+                TMP_FILE2="/tmp/ns-${NS}-${CTX}-final-$$.json"
+                kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | \
+                  jq 'del(.spec.finalizers) | del(.metadata.finalizers)' > "$TMP_FILE2" 2>/dev/null || true
+                kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE2" --context "$CTX" 2>&1 || true
+                rm -f "$TMP_FILE2"
+                
+                sleep 2
+                if kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+                  echo "    ⚠ WARNING: Namespace still exists after all cleanup attempts"
+                  echo "    This is non-fatal - it may clean up eventually"
+                else
+                  echo "    ✓ Namespace successfully deleted"
+                fi
+              else
+                echo "    ✓ Namespace successfully deleted"
+              fi
+            else
+              echo "  ⚠ Namespace in unexpected state: $NS_STATUS"
+            fi
+          }
+          
+          # Clean up spoke clusters first
+          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo ""
+            echo "Cleaning up spoke clusters..."
+            CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
+            
+            for CONTEXT in $CONTEXTS; do
+              echo ""
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "Processing spoke cluster: $CONTEXT"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              
+              # Check if context is reachable
+              if ! kubectl config get-contexts "$CONTEXT" &>/dev/null; then
+                echo "  ⚠ Context not found in kubeconfig, skipping"
+                continue
+              fi
+              
+              if ! timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null 2>&1; then
+                echo "  ⚠ Context not reachable, skipping cleanup"
+                continue
+              fi
+              
+              # Force delete argocd namespace
+              force_delete_namespace "argocd" "$CONTEXT"
+            done
+          else
+            echo "No spoke clusters configured in WORKLOAD_CLUSTERS_JSON"
+          fi
+          
+          # Clean up hub cluster
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Processing hub cluster"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          HUB_CONTEXT=$(kubectl config current-context)
+          echo "Hub context: $HUB_CONTEXT"
+          
+          # Clean up both argocd and argocd-agent namespaces on hub
+          force_delete_namespace "argocd" "$HUB_CONTEXT"
+          force_delete_namespace "argocd-agent" "$HUB_CONTEXT"
+          
+          echo ""
+          echo "======================================"
+          echo "✓ Namespace cleanup complete"
+          echo "======================================"
 
       - name: Verify Cleanup
         env:
