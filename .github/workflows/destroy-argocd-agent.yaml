@@ -44,7 +44,7 @@ jobs:
   destroy-argocd-agent:
     name: Destroy ArgoCD Agent
     runs-on: ubuntu-latest
-    # Removed 'environment' reference to avoid GitHub environment protection rules
+    # Removed 'environment' reference to avoid GitHub environment protection rules 
     
     steps:
       - name: Checkout
