@@ -475,7 +475,7 @@ jobs:
           kubectl config current-context
           echo "Available contexts:"
           kubectl config get-contexts
-          echo "Cluster info:"
+          echo "Cluster info:" 
           kubectl cluster-info
           echo "Testing connection to hub cluster... "
           kubectl get nodes
