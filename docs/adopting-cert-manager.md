@@ -32,7 +32,7 @@ helm list -A | grep cert-manager
 
 # Expected output format:
 # RELEASE_NAME    NAMESPACE           REVISION  UPDATED                   STATUS    CHART                 APP_VERSION
-# cert-manager    cert-manager 1         2025-12-08 11:23:11...    deployed  cert-manager-v1.16.2  v1.16.2
+# cert-manager    cert-manager 1         2025-12-08 11:23:11...    deployed  cert-manager-v1.19.2  v1.19.2
 
 # 2. Check the namespace
 kubectl get ns | grep cert-manager
@@ -48,7 +48,7 @@ kubectl get clusterissuers,issuers -A
 **Record these values**:
 - Release name (e.g., `cert-manager`)
 - Namespace (e.g., `cert-manager`)
-- Chart version (e.g., `v1.16.2`)
+- Chart version (e.g., `v1.19.2`)
 - Issuer names and types (ClusterIssuer vs Issuer)
 
 ---

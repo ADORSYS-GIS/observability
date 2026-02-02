@@ -272,7 +272,7 @@ variable "install_nginx_ingress" {
 variable "cert_manager_version" {
   description = "cert-manager Helm chart version"
   type        = string
-  default     = "v1.16.2"
+  default     = "v1.19.2"
 }
 
 variable "nginx_ingress_version" {

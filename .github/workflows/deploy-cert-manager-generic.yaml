@@ -104,7 +104,7 @@ jobs:
           install_cert_manager = true
           create_issuer        = true
           release_name         = "cert-manager"
-          cert_manager_version = "v1.15.5"
+          cert_manager_version = "v1.19.2"
           namespace            = "cert-manager"
           letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
           cert_issuer_name     = "letsencrypt-prod"
@@ -188,7 +188,7 @@ jobs:
           install_cert_manager = true
           create_issuer        = true
           release_name         = "cert-manager"
-          cert_manager_version = "v1.15.5"
+          cert_manager_version = "v1.19.2"
           namespace            = "cert-manager"
           letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
           cert_issuer_name     = "letsencrypt-prod"
