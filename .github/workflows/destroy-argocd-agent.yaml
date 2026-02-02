@@ -205,6 +205,7 @@ jobs:
         run: terraform destroy -auto-approve
 
       - name: Force Delete Stuck Namespaces (All Clusters)
+        timeout-minutes: 10
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
@@ -235,46 +236,50 @@ jobs:
               
               # Step 1: Remove finalizers from all resources
               echo "    [1/5] Removing finalizers from resources..."
-              kubectl api-resources --verbs=list --namespaced=true -o name 2>/dev/null | while read resource; do
-                kubectl get "$resource" -n "$NS" --context "$CTX" -o name 2>/dev/null | while read item; do
-                  kubectl patch "$item" -n "$NS" --context "$CTX" \
-                    -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+              timeout 120 bash -c '
+                kubectl api-resources --verbs=list --namespaced=true -o name 2>/dev/null | while read resource; do
+                  timeout 10 kubectl get "$resource" -n "'"$NS"'" --context "'"$CTX"'" -o name 2>/dev/null | while read item; do
+                    timeout 5 kubectl patch "$item" -n "'"$NS"'" --context "'"$CTX"'" \
+                      -p '"'"'{"metadata":{"finalizers":null}}'"'"' --type=merge 2>/dev/null || true
+                  done
                 done
-              done
+              ' || echo "    ⚠ Step 1 timed out after 120s, continuing..."
               
               # Step 2: Remove namespace finalizers
               echo "    [2/5] Removing namespace finalizers..."
-              kubectl patch namespace "$NS" --context "$CTX" \
-                -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+              timeout 10 kubectl patch namespace "$NS" --context "$CTX" \
+                -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || echo "    ⚠ Step 2 timed out, continuing..."
               
               # Step 3: Force delete
               echo "    [3/5] Force deleting namespace..."
-              kubectl delete namespace "$NS" --context "$CTX" \
-                --grace-period=0 --force --ignore-not-found=true 2>/dev/null || true
+              timeout 10 kubectl delete namespace "$NS" --context "$CTX" \
+                --grace-period=0 --force --ignore-not-found=true 2>/dev/null || echo "    ⚠ Step 3 timed out, continuing..."
               
               # Step 4: Use API to finalize
               echo "    [4/5] Finalizing via Kubernetes API..."
               TMP_FILE="/tmp/ns-${NS}-${CTX}-$$.json"
-              if kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | jq 'del(.spec.finalizers)' > "$TMP_FILE" 2>/dev/null; then
-                kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE" --context "$CTX" >/dev/null 2>&1 || true
+              if timeout 10 kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | jq 'del(.spec.finalizers)' > "$TMP_FILE" 2>/dev/null; then
+                timeout 10 kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE" --context "$CTX" >/dev/null 2>&1 || true
                 rm -f "$TMP_FILE"
+              else
+                echo "    ⚠ Step 4 timed out, continuing..."
               fi
               
               # Step 5: Verify deletion
               echo "    [5/5] Verifying deletion..."
               sleep 3
-              if kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+              if timeout 10 kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
                 echo "    ⚠ Namespace still exists, attempting final cleanup..."
                 
                 # Final attempt with API finalize
                 TMP_FILE2="/tmp/ns-${NS}-${CTX}-final-$$.json"
-                kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | \
+                timeout 10 kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | \
                   jq 'del(.spec.finalizers) | del(.metadata.finalizers)' > "$TMP_FILE2" 2>/dev/null || true
-                kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE2" --context "$CTX" 2>&1 || true
+                timeout 10 kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE2" --context "$CTX" 2>&1 || true
                 rm -f "$TMP_FILE2"
                 
                 sleep 2
-                if kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+                if timeout 10 kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
                   echo "    ⚠ WARNING: Namespace still exists after all cleanup attempts"
                   echo "    This is non-fatal - it may clean up eventually"
                 else
