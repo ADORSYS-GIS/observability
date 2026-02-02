@@ -292,6 +292,11 @@ resource "null_resource" "argocd_certificate" {
 }
 
 # 1.4.2 Expose ArgoCD UI via Ingress (with TLS after certificate is issued)
+# CRITICAL: We create the Certificate separately BEFORE this Ingress to avoid NGINX Inc conflicts
+# NGINX Inc controller doesn't allow multiple ingresses per hostname, so we:
+# 1. Create Certificate resource separately (above) which handles ACME validation
+# 2. Create Ingress WITHOUT cert-manager annotation to avoid duplicate cert creation
+# 3. Reference the TLS secret created by the Certificate resource
 resource "kubernetes_ingress_v1" "argocd_ui" {
   count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
 
@@ -299,9 +304,10 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     name      = "argocd-server"
     namespace = var.hub_namespace
     annotations = {
-      "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/ssl-redirect"                                                 = "false"
-      "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
+      # DO NOT add cert-manager annotation here - Certificate is created separately above
+      # to prevent NGINX Inc from rejecting the ingress due to hostname conflicts during ACME validation
+      "nginx.ingress.kubernetes.io/ssl-redirect"     = "false"
+      "nginx.ingress.kubernetes.io/backend-protocol" = "HTTP"
     }
   }
 
