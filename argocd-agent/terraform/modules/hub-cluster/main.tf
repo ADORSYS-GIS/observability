@@ -660,7 +660,7 @@ data "external" "hub_principal_address" {
           -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
       fi
       
-      if [ -n "$PRINCIPAL_IP" ]; then
+      if [ -n "$PRINCIPAL_IP" ] && [ "$PRINCIPAL_IP" != "null" ]; then
         echo "{\"address\": \"$PRINCIPAL_IP\", \"port\": \"$SERVICE_PORT\"}"
         exit 0
       fi
@@ -669,8 +669,10 @@ data "external" "hub_principal_address" {
       sleep 5
     done
     
-    echo "{\"address\": \"pending\", \"port\": \"443\"}"
-    exit 1
+    # LoadBalancer not ready - return pending but DON'T fail (exit 0)
+    # This allows Terraform to continue and spoke config will detect "pending" and skip
+    echo "{\"address\": \"pending\", \"port\": \"$SERVICE_PORT\"}"
+    exit 0
   EOT
   ]
 
