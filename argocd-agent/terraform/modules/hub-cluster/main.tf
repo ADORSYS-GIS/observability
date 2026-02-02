@@ -728,8 +728,9 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
       echo "Updating Principal certificate with external address..." | tee -a "$LOG_FILE"
       
       # Wait for LoadBalancer IP to be ready
-      echo "Waiting for LoadBalancer IP to be ready..." | tee -a "$LOG_FILE"
-      MAX_RETRIES=60  # Wait up to 5 minutes (60 x 5 seconds)
+      # Use the configured timeout variable (default 300s, max 600s)
+      echo "Waiting for LoadBalancer IP to be ready (timeout: ${var.principal_loadbalancer_wait_timeout}s)..." | tee -a "$LOG_FILE"
+      MAX_RETRIES=$((${var.principal_loadbalancer_wait_timeout} / 5))
       RETRY_COUNT=0
       
       while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
@@ -749,14 +750,16 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
         fi
         
         RETRY_COUNT=$((RETRY_COUNT + 1))
-        echo "Waiting for LoadBalancer... (attempt $RETRY_COUNT/$MAX_RETRIES)" | tee -a "$LOG_FILE"
+        echo "Waiting for LoadBalancer... (attempt $RETRY_COUNT/$MAX_RETRIES, elapsed: $((RETRY_COUNT * 5))s)" | tee -a "$LOG_FILE"
         sleep 5
       done
       
       if [ -z "$PRINCIPAL_IP" ]; then
-        echo "✗ ERROR: LoadBalancer IP not ready after $MAX_RETRIES attempts" | tee -a "$LOG_FILE"
+        echo "✗ ERROR: LoadBalancer IP not ready after ${var.principal_loadbalancer_wait_timeout}s" | tee -a "$LOG_FILE"
+        echo "⚠ This is common in cloud environments where LB provisioning takes time" | tee -a "$LOG_FILE"
+        echo "⚠ You can increase 'principal_loadbalancer_wait_timeout' variable (current: ${var.principal_loadbalancer_wait_timeout}s, max: 600s)" | tee -a "$LOG_FILE"
         echo "⚠ WARNING: Skipping certificate update (will retry on next apply)" | tee -a "$LOG_FILE"
-        exit 0  # Don't fail, just skip
+        exit 0  # Don't fail, just skip - this allows the deployment to continue
       fi
       
       echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
