@@ -735,13 +735,31 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
-      set -e
+      # CRITICAL: Disable strict error handling for LoadBalancer wait
+      # We want to gracefully handle timeout without failing the entire deployment
+      set +e  # Don't exit on error
       set -o pipefail
       
       LOG_FILE="/tmp/argocd-pki-principal-cert-update-$(date +%Y%m%d-%H%M%S).log"
       PRINCIPAL_IP=""
       
+      echo "======================================"
+      echo "Principal Certificate Update"
+      echo "======================================"
       echo "Updating Principal certificate with external address..." | tee -a "$LOG_FILE"
+      echo ""
+      
+      # First, verify the service exists
+      echo "Checking if Principal service exists..." | tee -a "$LOG_FILE"
+      if ! kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} &>/dev/null; then
+        echo "⚠ WARNING: Principal service not found" | tee -a "$LOG_FILE"
+        echo "This might indicate the principal_expose_method is not 'loadbalancer'" | tee -a "$LOG_FILE"
+        echo "Skipping certificate update" | tee -a "$LOG_FILE"
+        exit 0
+      fi
+      echo "✓ Principal service found" | tee -a "$LOG_FILE"
+      echo ""
       
       # Wait for LoadBalancer IP to be ready
       # Use the configured timeout variable (default 300s, max 600s)
@@ -752,33 +770,55 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
       while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         PRINCIPAL_IP=$(kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
-          -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+          -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
         
         if [ -z "$PRINCIPAL_IP" ]; then
           PRINCIPAL_IP=$(kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
             --context ${var.hub_cluster_context} \
-            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
         fi
         
-        if [ -n "$PRINCIPAL_IP" ]; then
+        if [ -n "$PRINCIPAL_IP" ] && [ "$PRINCIPAL_IP" != "null" ]; then
           echo "✓ LoadBalancer IP ready: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
           break
         fi
         
         RETRY_COUNT=$((RETRY_COUNT + 1))
-        echo "Waiting for LoadBalancer... (attempt $RETRY_COUNT/$MAX_RETRIES, elapsed: $((RETRY_COUNT * 5))s)" | tee -a "$LOG_FILE"
+        if [ $((RETRY_COUNT % 12)) -eq 0 ]; then  # Log every minute
+          echo "Still waiting for LoadBalancer... (attempt $RETRY_COUNT/$MAX_RETRIES, elapsed: $((RETRY_COUNT * 5))s)" | tee -a "$LOG_FILE"
+        fi
         sleep 5
       done
       
-      if [ -z "$PRINCIPAL_IP" ]; then
-        echo "✗ ERROR: LoadBalancer IP not ready after ${var.principal_loadbalancer_wait_timeout}s" | tee -a "$LOG_FILE"
-        echo "⚠ This is common in cloud environments where LB provisioning takes time" | tee -a "$LOG_FILE"
-        echo "⚠ You can increase 'principal_loadbalancer_wait_timeout' variable (current: ${var.principal_loadbalancer_wait_timeout}s, max: 600s)" | tee -a "$LOG_FILE"
-        echo "⚠ WARNING: Skipping certificate update (will retry on next apply)" | tee -a "$LOG_FILE"
-        exit 0  # Don't fail, just skip - this allows the deployment to continue
+      if [ -z "$PRINCIPAL_IP" ] || [ "$PRINCIPAL_IP" = "null" ]; then
+        echo ""
+        echo "======================================"
+        echo "⚠ LoadBalancer Timeout"
+        echo "======================================"
+        echo "LoadBalancer IP not ready after ${var.principal_loadbalancer_wait_timeout}s" | tee -a "$LOG_FILE"
+        echo ""
+        echo "This is NORMAL for GCP LoadBalancers on first deployment." | tee -a "$LOG_FILE"
+        echo "GCP LoadBalancers typically take 5-10 minutes to provision." | tee -a "$LOG_FILE"
+        echo ""
+        echo "Solutions:" | tee -a "$LOG_FILE"
+        echo "  1. Wait a few more minutes and run 'terraform apply' again" | tee -a "$LOG_FILE"
+        echo "  2. Increase timeout: principal_loadbalancer_wait_timeout=600" | tee -a "$LOG_FILE"
+        echo ""
+        echo "Current service status:" | tee -a "$LOG_FILE"
+        kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} | tee -a "$LOG_FILE" || true
+        echo ""
+        echo "Skipping certificate update (will retry on next apply)" | tee -a "$LOG_FILE"
+        echo "======================================"
+        exit 0  # Don't fail - this is expected on first deployment
       fi
       
-      echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+      echo ""
+      echo "Principal LoadBalancer address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+      echo ""
+      
+      # Re-enable strict error handling for critical operations
+      set -e
       
       echo "Issuing updated Principal server certificate..." | tee -a "$LOG_FILE"
       if ! ${var.argocd_agentctl_path} pki issue principal \
@@ -810,8 +850,10 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
         exit 1
       fi
       
+      echo ""
       echo "✓ Principal certificate updated successfully" | tee -a "$LOG_FILE"
       echo "Update logs saved to: $LOG_FILE"
+      echo "======================================"
     EOT
   }
 
