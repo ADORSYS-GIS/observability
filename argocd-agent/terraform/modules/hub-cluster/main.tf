@@ -29,12 +29,28 @@ resource "null_resource" "hub_argocd_base_install" {
       echo "Installing base Argo CD on Hub cluster..." | tee -a "$LOG_FILE"
       echo "Installation URL: ${local.argocd_base_install_url}" | tee -a "$LOG_FILE"
       
+      # CRITICAL FIX: Clean up CRD annotations that may have grown too large
+      # This prevents "metadata.annotations: Too long: may not be more than 262144 bytes" error
+      echo "Cleaning up CRD annotations to prevent size limit errors..." | tee -a "$LOG_FILE"
+      for crd in applications.argoproj.io applicationsets.argoproj.io appprojects.argoproj.io; do
+        if kubectl get crd $crd --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+          echo "  Removing last-applied-configuration annotation from $crd..." | tee -a "$LOG_FILE"
+          kubectl annotate crd $crd \
+            --context ${var.hub_cluster_context} \
+            kubectl.kubernetes.io/last-applied-configuration- \
+            --overwrite 2>&1 | tee -a "$LOG_FILE" || echo "  (annotation may not exist, continuing...)" | tee -a "$LOG_FILE"
+        fi
+      done
+      
       while [ $RETRY -lt $MAX_RETRIES ]; do
         echo "[Attempt $((RETRY+1))/$MAX_RETRIES] Applying ArgoCD manifests (principal-specific, no app controller)..." | tee -a "$LOG_FILE"
         
-        # Use kubectl apply with -k flag for kustomize directory
+        # Use server-side apply to avoid storing large configurations in annotations
+        # This is the recommended approach for large manifests and prevents the 262144 byte limit error
         if kubectl apply -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
+          --server-side \
+          --force-conflicts \
           -k ${local.argocd_base_install_url} 2>&1 | tee -a "$LOG_FILE"; then
           echo "✓ Principal-specific Argo CD manifests applied successfully" | tee -a "$LOG_FILE"
           echo "  Components: server, dex, redis, repo-server, applicationset-controller" | tee -a "$LOG_FILE"
