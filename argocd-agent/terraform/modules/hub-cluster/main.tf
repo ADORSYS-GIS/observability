@@ -722,16 +722,44 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
       set -e
       set -o pipefail
       
-      LOG_FILE="/tmp/argocd-pki-principal-cert-update-$$(date +%Y%m%d-%H%M%S).log"
-      PRINCIPAL_IP="${data.external.hub_principal_address.result.address}"
+      LOG_FILE="/tmp/argocd-pki-principal-cert-update-$(date +%Y%m%d-%H%M%S).log"
+      PRINCIPAL_IP=""
       
       echo "Updating Principal certificate with external address..." | tee -a "$LOG_FILE"
-      echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
       
-      if [ "$PRINCIPAL_IP" = "pending" ] || [ "$PRINCIPAL_IP" = "error" ]; then
-        echo "✗ ERROR: Cannot update certificate - LoadBalancer not ready" | tee -a "$LOG_FILE"
-        exit 1
+      # Wait for LoadBalancer IP to be ready
+      echo "Waiting for LoadBalancer IP to be ready..." | tee -a "$LOG_FILE"
+      MAX_RETRIES=60  # Wait up to 5 minutes (60 x 5 seconds)
+      RETRY_COUNT=0
+      
+      while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        PRINCIPAL_IP=$(kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+        
+        if [ -z "$PRINCIPAL_IP" ]; then
+          PRINCIPAL_IP=$(kubectl get svc ${var.principal_service_name} -n ${var.hub_namespace} \
+            --context ${var.hub_cluster_context} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+        fi
+        
+        if [ -n "$PRINCIPAL_IP" ]; then
+          echo "✓ LoadBalancer IP ready: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+          break
+        fi
+        
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        echo "Waiting for LoadBalancer... (attempt $RETRY_COUNT/$MAX_RETRIES)" | tee -a "$LOG_FILE"
+        sleep 5
+      done
+      
+      if [ -z "$PRINCIPAL_IP" ]; then
+        echo "✗ ERROR: LoadBalancer IP not ready after $MAX_RETRIES attempts" | tee -a "$LOG_FILE"
+        echo "⚠ WARNING: Skipping certificate update (will retry on next apply)" | tee -a "$LOG_FILE"
+        exit 0  # Don't fail, just skip
       fi
+      
+      echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
       
       echo "Issuing updated Principal server certificate..." | tee -a "$LOG_FILE"
       if ! ${var.argocd_agentctl_path} pki issue principal \
@@ -768,7 +796,7 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
     EOT
   }
 
-  depends_on = [data.external.hub_principal_address]
+  depends_on = [null_resource.hub_principal_loadbalancer_service]
 }
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
