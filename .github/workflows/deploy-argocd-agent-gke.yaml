@@ -497,7 +497,7 @@ jobs:
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          # Get the actual current kubectl context name
+          # Get the actual current  kubectl context name
           KUBE_CONTEXT=$(kubectl config current-context)
           
           # Fetch cluster details using gcloud (bypasses terraform data source permissions issue)
