@@ -445,7 +445,7 @@ jobs:
           echo "Switching back to hub cluster context..."
           kubectl config use-context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}
           echo "✓ Context switched back to hub cluster"
-
+ 
       - uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
