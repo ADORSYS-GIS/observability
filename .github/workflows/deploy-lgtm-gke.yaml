@@ -376,9 +376,6 @@ jobs:
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
           retention-days: 30
 
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
