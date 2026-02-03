@@ -1,391 +1,443 @@
-# Cert-Manager Terraform Deployment
+# cert-manager Terraform CLI Deployment
 
-Automated TLS certificate management deployment using Terraform and Helm.
+Infrastructure as Code deployment using Terraform for reproducible, version-controlled deployments.
 
-**Official Documentation**: [cert-manager.io/docs](https://cert-manager.io/docs/)  
-**GitHub Repository**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
+Recommended for teams using infrastructure as code workflows, multi-environment deployments, or requiring reproducible configurations. This method provides full control over Terraform execution from your local machine or CI/CD pipeline.
 
-## Overview
+**Official Documentation**: [cert-manager.io](https://cert-manager.io/docs/) | **GitHub**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager) | **Version**: `v1.19.2`
 
-This deployment configures cert-manager with:
+> **Already have cert-manager installed?** If you want to manage an existing cert-manager deployment with Terraform, see [Adopting Existing Installation](adopting-cert-manager.md).
 
-- **Automated Certificate Issuance**: Let's Encrypt integration via ACME protocol
-- **Automatic Renewal**: Certificates renewed before expiration
-- **ClusterIssuer Configuration**: Cluster-wide certificate authority for all namespaces
-- **HTTP-01 Challenge Solver**: Ingress-based domain validation
-- **CRD Management**: Custom Resource Definitions for certificate lifecycle
+---
 
 ## Prerequisites
 
-| Requirement | Version | Purpose |
-|-------------|---------|---------|
-| **Terraform** | ≥ 1.5.0 | Infrastructure provisioning |
-| **kubectl** | ≥ 1.24 | Kubernetes cluster access |
-| **Kubernetes Cluster** | ≥ 1.24 | Target platform |
+Required tools and versions:
 
-### Required Infrastructure
+| Tool | Version | Verification Command |
+|------|---------|---------------------|
+| Terraform | ≥ 1.0 | `terraform version` |
+| kubectl | ≥ 1.24 | `kubectl version --client` |
+| Kubernetes cluster | ≥ 1.24 | `kubectl version` |
 
-- **Ingress Controller**: NGINX Ingress Controller for HTTP-01 challenges
-- **Public DNS**: Domain names must resolve publicly for Let's Encrypt validation
+**Cloud Provider Requirements:**
+- GKE: gcloud CLI authenticated (`gcloud auth login`)
+- EKS: AWS CLI authenticated (`aws configure`)
+- AKS: Azure CLI authenticated (`az login`)
+- Generic: kubectl configured with cluster access
 
-> **Don't have Ingress Controller?** See [Ingress Controller Setup](ingress-controller-terraform-deployment.md)
+**Dependencies:**
+- NGINX Ingress Controller must be deployed first ([deployment guide](ingress-controller-terraform-deployment.md))
+- Cluster access configured (`kubectl cluster-info`)
+
+---
+
+## Important: Multi-Cluster Environments
+
+For deployments with multiple clusters, explicitly configure the target cluster in `terraform.tfvars` rather than relying on kubectl context.
+
+**For GKE clusters:**
+```bash
+# Get cluster endpoint and CA certificate
+gcloud container clusters describe CLUSTER_NAME \
+  --region REGION \
+  --project PROJECT_ID \
+  --format='value(endpoint)' > endpoint.txt
+
+gcloud container clusters describe CLUSTER_NAME \
+  --region REGION \
+  --project PROJECT_ID \
+  --format='value(masterAuth.clusterCaCertificate)' > ca_cert.txt
+```
+
+Then configure in `terraform.tfvars`:
+```hcl
+gke_endpoint       = "34.123.45.67"      # From endpoint.txt
+gke_ca_certificate = "LS0tLS1CRUdJ..."  # From ca_cert.txt
+project_id         = "your-project-id"
+```
+
+This approach eliminates context switching and clearly specifies the target cluster in your configuration.
+
+---
+
+## Terraform State Management
+
+**Remote state backends are recommended** for team collaboration and state persistence, though local state is supported for development environments.
+
+**Supported Backend Configurations:**
+
+| Provider | Backend | State Path |
+|----------|---------|-----------|
+| GKE | Google Cloud Storage (GCS) | `gs://<bucket>/terraform/cert-manager/terraform.tfstate` |
+| EKS | AWS S3 + DynamoDB locking | `s3://<bucket>/terraform/cert-manager/terraform.tfstate` |
+| AKS | Azure Blob Storage | `azurerm://<container>/terraform/cert-manager/terraform.tfstate` |
+| Generic | Local or custom remote backend | `./terraform.tfstate` (local) |
+
+The backend configuration is generated automatically by the `configure-backend.sh` script or manually created. **For production deployments, always use remote state.**
+
+For detailed state management documentation, see [Terraform State Management Guide](terraform-state-management.md).
+
+---
 
 ## Installation
 
-> **Existing Installation?** If you already have cert-manager deployed and want to manage it with Terraform, see the [Adoption Guide](adopting-cert-manager.md) before proceeding.
-
-### Step 1: Clone Repository
+### Step 1: Navigate to Terraform Directory
 
 ```bash
-git clone https://github.com/Adorsys-gis/observability.git
-cd observability/cert-manager/terraform
+cd cert-manager/terraform
 ```
 
-### Step 2: Verify Kubernetes Context
+---
 
+### Step 2: Configure Backend (Required for Remote State)
+
+**Option A: Using the configuration script (recommended)**
+
+For GKE:
 ```bash
-kubectl config current-context
+../../.github/scripts/configure-backend.sh gke cert-manager
 ```
 
-Ensure you're pointing to the correct cluster.
+For EKS:
+```bash
+export TF_STATE_BUCKET="your-s3-bucket"
+export AWS_REGION="us-east-1"
+export TF_STATE_LOCK_TABLE="terraform-state-lock"  # Optional
+../../.github/scripts/configure-backend.sh eks cert-manager
+```
 
-### Step 3: Configure Variables
+For AKS:
+```bash
+export AZURE_STORAGE_ACCOUNT="yourstorageaccount"
+export AZURE_STORAGE_CONTAINER="terraform-state"
+../../.github/scripts/configure-backend.sh aks cert-manager
+```
+
+For generic Kubernetes (local state):
+```bash
+../../.github/scripts/configure-backend.sh generic cert-manager
+```
+
+This creates `backend-config.tf` with the appropriate backend configuration.
+
+**Option B: Manual backend configuration**
+
+Create `backend-config.tf`:
+
+For GKE (GCS backend):
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "your-gcs-bucket"
+    prefix = "terraform/cert-manager"
+  }
+}
+```
+
+For EKS (S3 backend):
+```hcl
+terraform {
+  backend "s3" {
+    bucket         = "your-s3-bucket"
+    key            = "terraform/cert-manager/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-state-lock"  # Optional, for state locking
+  }
+}
+```
+
+For AKS (Azure Blob backend):
+```hcl
+terraform {
+  backend "azurerm" {
+    storage_account_name = "yourstorageaccount"
+    container_name       = "terraform-state"
+    key                  = "terraform/cert-manager/terraform.tfstate"
+  }
+}
+```
+
+---
+
+### Step 3: Create Configuration File
+
+Copy the template and customize:
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
 ```
 
-Edit `terraform.tfvars` with your environment values:
+**Variable Configuration Guide**
 
+| Variable | Purpose | Configuration |
+|----------|---------|---------------|
+| `gke_endpoint` | Cluster API endpoint | Leave empty to use kubectl context, or specify for explicit cluster targeting |
+| `gke_ca_certificate` | Cluster CA certificate | Leave empty to use kubectl context, or specify for explicit cluster targeting |
+| `cloud_provider` | Target cloud platform | `gke`, `eks`, `aks`, or `generic` |
+| `project_id` | GCP Project ID | Required for GKE |
+
+**Two approaches:**
+
+1. **Using kubectl context (simpler for single cluster):**
+   ```hcl
+   gke_endpoint       = ""
+   gke_ca_certificate = ""
+   ```
+
+2. **Explicit configuration (recommended for multi-cluster):**
+   ```hcl
+   gke_endpoint       = "34.123.45.67"
+   gke_ca_certificate = "LS0tLS1CRUdJTi0t..."
+   ```
+   
+   Use the commands in the Multi-Cluster Environments section to retrieve these values.
+
+Edit `terraform.tfvars`:
+
+**Minimal configuration:**
 ```hcl
-# Enable cert-manager installation
+# Cloud Provider (gke, eks, aks, or generic)
+cloud_provider = "gke"
+
+# Installation Control
 install_cert_manager = true
+create_issuer        = true
 
 # Let's Encrypt Configuration
-letsencrypt_email = "admin@example.com"
+letsencrypt_email = "admin@yourcompany.com"
 
-# Certificate Issuer
-cert_issuer_name = "letsencrypt-prod"
-cert_issuer_kind = "ClusterIssuer"
+# Optional: Version override
+cert_manager_version = "v1.19.2"
+```
 
-# Deployment Configuration
-cert_manager_version = "v1.16.2"
-namespace            = "cert-manager"
+**Full configuration options:**
+
+```hcl
+# ==============================================================================
+# Cert-Manager Terraform Configuration
+# ==============================================================================
+
+# Cloud Provider
+cloud_provider = "gke"  # Options: gke, eks, aks, generic
+
+# GKE-specific (required for GKE)
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# EKS-specific (required for EKS)
+aws_region = "us-east-1"
+
+# Installation Control
+install_cert_manager = true   # Set false to manage existing installation
+create_issuer        = true   # Set false to create issuer separately
+
+# Helm Release
 release_name         = "cert-manager"
+namespace            = "cert-manager"
+cert_manager_version = "v1.19.2"
 
-# Challenge Solver
+# Certificate Issuer Configuration
+letsencrypt_email  = "admin@yourcompany.com"
+cert_issuer_kind   = "ClusterIssuer"  # or "Issuer" for namespace-scoped
+cert_issuer_name   = "letsencrypt-prod"
+issuer_namespace   = ""               # Required if cert_issuer_kind = "Issuer"
+
+# ACME Configuration
 ingress_class_name = "nginx"
+issuer_server      = "https://acme-v02.api.letsencrypt.org/directory"
 
-# Optional: Use staging for testing
+# For testing, use staging server to avoid rate limits:
 # issuer_server = "https://acme-staging-v02.api.letsencrypt.org/directory"
 ```
 
-### Complete Variable Reference
-
-For all available variables, see [variables.tf](../cert-manager/terraform/variables.tf).
+**Configuration Variables:**
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `install_cert_manager` | Enable cert-manager installation | `false` | |
-| `letsencrypt_email` | Email for Let's Encrypt notifications | - | ✓ |
-| `cert_manager_version` | Helm chart version | `v1.16.2` | |
-| `namespace` | Kubernetes namespace | `cert-manager` | |
-| `release_name` | Helm release name | `cert-manager` | |
-| `cert_issuer_name` | Issuer resource name | `letsencrypt-prod` | |
-| `cert_issuer_kind` | Issuer type | `ClusterIssuer` | |
-| `issuer_namespace` | Namespace for Issuer (if not ClusterIssuer) | `""` | |
-| `issuer_server` | ACME server URL | Let's Encrypt Production | |
-| `ingress_class_name` | Ingress class for HTTP-01 challenges | `nginx` | |
+| `cloud_provider` | Target platform (gke/eks/aks/generic) | `gke` | Yes |
+| `install_cert_manager` | Install cert-manager or manage existing | `false` | Yes |
+| `letsencrypt_email` | Email for Let's Encrypt notifications | - | Yes |
+| `cert_manager_version` | Chart version to install | `v1.19.2` | No |
+| `create_issuer` | Create ClusterIssuer/Issuer | `true` | No |
+| `cert_issuer_kind` | ClusterIssuer or Issuer | `ClusterIssuer` | No |
+| `cert_issuer_name` | Name of issuer resource | `letsencrypt-prod` | No |
+| `ingress_class_name` | Ingress class for HTTP-01 challenges | `nginx` | No |
+| `issuer_server` | ACME server URL | Let's Encrypt prod | No |
 
-### ACME Server URLs
+---
 
-| Environment | URL | Rate Limits |
-|-------------|-----|-------------|
-| **Production** | `https://acme-v02.api.letsencrypt.org/directory` | 50 certs/week per domain |
-| **Staging** | `https://acme-staging-v02.api.letsencrypt.org/directory` | Higher limits, invalid certs |
+### Step 4: Verify Configuration
 
-> **Recommendation**: Use staging for testing, then switch to production.
+Before deploying, verify your configuration:
 
-### Step 4: Initialize Terraform
+```bash
+# Review your terraform.tfvars
+cat terraform.tfvars | grep -E "cloud_provider|project_id|gke_endpoint|install_cert_manager"
+```
+
+---
+
+### Step 5: Initialize Terraform
+
 
 ```bash
 terraform init
 ```
 
-### Step 5: Plan Deployment
+You should see:
+```
+Terraform has been successfully initialized!
+```
+
+---
+
+### Step 6: Plan Deployment
+
+Review changes before applying:
 
 ```bash
 terraform plan
 ```
 
-Review the planned changes.
+Review the planned changes to verify cert-manager installation, namespace creation, and ClusterIssuer configuration.
 
-### Step 6: Apply Configuration
+> **Note:** You should see resources to be created including the cert-manager Helm release, namespace, and ClusterIssuer manifest.
+
+---
+
+### Step 7: Apply Configuration
+
+Deploy cert-manager:
 
 ```bash
 terraform apply
 ```
 
-Type `yes` when prompted.
+Review the plan and type `yes` when prompted.
 
-**Expected deployment time**: 2-3 minutes.
+Installation typically completes in 2-3 minutes.
 
-> **Warning**: If you see errors about resources already existing (CRDs, Helm releases), **STOP** and follow the [Adoption Guide](adopting-cert-manager.md) to import existing resources.
+**To skip confirmation prompt:**
+```bash
+terraform apply -auto-approve
+```
 
-## Verification
+---
 
-### Check Pod Status
+### Step 8: Verify Deployment
+
+Check cert-manager pods:
 
 ```bash
 kubectl get pods -n cert-manager
 ```
 
-Expected pods:
-- `cert-manager` - Controller
-- `cert-manager-webhook` - Validation webhook
-- `cert-manager-cainjector` - CA certificate injector
+All three pods should be in Running status:
 
-All should be `Running` with `1/1` ready.
+![cert-manager pods running](img/cert-manager-pods.png)
 
-### Verify CRDs
+Verify ClusterIssuer:
 
 ```bash
-kubectl get crd | grep cert-manager
+kubectl get clusterissuer letsencrypt-prod
 ```
 
-Expected CRDs:
-- `certificaterequests.cert-manager.io`
-- `certificates.cert-manager.io`
-- `challenges.acme.cert-manager.io`
-- `clusterissuers.cert-manager.io`
-- `issuers.cert-manager.io`
-- `orders.acme.cert-manager.io`
+The ClusterIssuer should show READY status:
 
-### Check ClusterIssuer Status
+![ClusterIssuer ready status](img/cert-manager-clusterissuer.png)
 
-```bash
-kubectl get clusterissuer
-```
-
-Output should show:
-```
-NAME                 READY   AGE
-letsencrypt-prod     True    1m
-```
-
-Verify details:
+Check detailed status:
 ```bash
 kubectl describe clusterissuer letsencrypt-prod
 ```
 
-The issuer should show `Ready: True` in the status conditions.
+---
 
-### Test Certificate Issuance
+## Upgrading cert-manager
 
-Create a test certificate:
-
-```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: test-cert
-  namespace: default
-spec:
-  secretName: test-tls-cert
-  issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
-  dnsNames:
-    - test.example.com
-```
-
-Apply and check status:
-
-```bash
-kubectl apply -f test-cert.yaml
-kubectl get certificate test-cert -n default
-kubectl describe certificate test-cert -n default
-```
-
-Certificate should eventually show `Ready: True`.
-
-## Usage
-
-### Configure Ingress for Automatic TLS
-
-Add annotations to your Ingress resource:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: example-ingress
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - example.com
-      secretName: example-tls-cert
-  rules:
-    - host: example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: example-service
-                port:
-                  number: 80
-```
-
-Cert-manager will automatically:
-1. Create a Certificate resource
-2. Initiate ACME challenge
-3. Obtain certificate from Let's Encrypt
-4. Store certificate in the specified Secret
-
-### Monitor Certificate Lifecycle
-
-```bash
-# List all certificates
-kubectl get certificates -A
-
-# Check certificate details
-kubectl describe certificate <name> -n <namespace>
-
-# View certificate requests
-kubectl get certificaterequests -A
-
-# Check ACME challenges
-kubectl get challenges -A
-```
-
-## Operations
-
-### Upgrade Cert-Manager
-
-Update version in `terraform.tfvars`:
+Update the version in `terraform.tfvars`:
 
 ```hcl
-cert_manager_version = "v1.17.0"
+cert_manager_version = "v1.20.0"
 ```
 
-Apply changes:
+Plan and apply the upgrade:
 
 ```bash
+terraform plan
 terraform apply
 ```
 
-### View Logs
+Terraform performs a rolling update with zero downtime.
+
+---
+
+## Managing Existing Installation
+
+If cert-manager is already installed and you want Terraform to manage it:
+
+1. Set `install_cert_manager = true` in `terraform.tfvars`
+2. Import the existing Helm release:
 
 ```bash
-# Controller logs
-kubectl logs -n cert-manager -l app=cert-manager --tail=100
-
-# Webhook logs
-kubectl logs -n cert-manager -l app=webhook --tail=100
-
-# CA injector logs
-kubectl logs -n cert-manager -l app=cainjector --tail=100
+terraform import 'helm_release.cert_manager[0]' cert-manager/cert-manager
 ```
 
-### Switch Between Staging and Production
+3. Run `terraform plan` to verify no changes are detected
 
-Edit `terraform.tfvars`:
+For detailed adoption procedures, see [Adopting Existing cert-manager Installation](adopting-cert-manager.md).
 
-```hcl
-# For staging (testing)
-issuer_server = "https://acme-staging-v02.api.letsencrypt.org/directory"
+---
 
-# For production
-issuer_server = "https://acme-v02.api.letsencrypt.org/directory"
-```
+## Uninstalling
 
-Apply changes:
-
-```bash
-terraform apply
-```
-
-### Uninstall
+**Warning:** Uninstalling deletes all certificates. Applications will lose TLS functionality.
 
 ```bash
 terraform destroy
 ```
 
-**Note**: CRDs are retained by default. To remove them manually:
+Review the destruction plan and type `yes` when prompted.
 
-```bash
-kubectl delete crd certificaterequests.cert-manager.io
-kubectl delete crd certificates.cert-manager.io
-kubectl delete crd challenges.acme.cert-manager.io
-kubectl delete crd clusterissuers.cert-manager.io
-kubectl delete crd issuers.cert-manager.io
-kubectl delete crd orders.acme.cert-manager.io
-```
+This removes:
+- Helm release `cert-manager`
+- ClusterIssuer `letsencrypt-prod`
+- Namespace `cert-manager`
+- Custom Resource Definitions (CRDs)
 
-> **Warning**: Deleting CRDs removes all Certificate resources!
+---
 
 ## Troubleshooting
 
-### Webhook Not Ready
+### Terraform-Specific Issues
 
+**Backend initialization fails:**
 ```bash
-# Check webhook pod status
-kubectl get pods -n cert-manager -l app=webhook
-
-# Check webhook logs
-kubectl logs -n cert-manager -l app=webhook
+# Authenticate with cloud provider
+# GKE: gcloud auth application-default login
+# EKS: aws configure
+# AKS: az login
 ```
+Verify `backend-config.tf` configuration and state bucket exists.
 
-Common cause: CRDs not installed. Fix:
+**State locking errors:**
+- GCS: Check bucket permissions
+- S3: Verify DynamoDB table exists
+- Azure: Verify storage account access
 
-```bash
-helm upgrade cert-manager jetstack/cert-manager \
-  -n cert-manager --set installCRDs=true
-```
+For cert-manager-specific issues, see [Troubleshooting Guide](troubleshooting-cert-manager.md).
 
-### Certificate Stuck in Pending
+---
 
-```bash
-# Check certificate status
-kubectl describe certificate <name> -n <namespace>
+## Related Documentation
 
-# Check challenges
-kubectl get challenges -A
-kubectl describe challenge <name> -n <namespace>
-```
+- [Manual Helm Deployment](cert-manager-manual-deployment.md) - Direct Helm command-line deployment
+- [GitHub Actions Deployment](cert-manager-github-actions.md) - Automated CI/CD workflow
+- [Terraform State Management](terraform-state-management.md) - Remote state configuration
+- [Troubleshooting Guide](troubleshooting-cert-manager.md) - Common issues and resolutions
+- [Adopting Existing Installation](adopting-cert-manager.md) - Migration guide
 
-Common causes:
-- Ingress not publicly accessible
-- DNS not resolving correctly
-- Firewall blocking HTTP traffic
+---
 
-### ClusterIssuer Not Ready
-
-```bash
-kubectl describe clusterissuer letsencrypt-prod
-```
-
-Common causes:
-- Invalid email address
-- Wrong ACME server URL
-- Incorrect ingress class name
-
-For detailed troubleshooting, see [Troubleshooting Guide](troubleshooting-cert-manager.md).
-
-## API Documentation
-
-- **Cert-Manager API**: [cert-manager.io/docs/reference/api-docs](https://cert-manager.io/docs/reference/api-docs/)
-- **Let's Encrypt Rate Limits**: [letsencrypt.org/docs/rate-limits](https://letsencrypt.org/docs/rate-limits/)
-- **ACME Protocol**: [datatracker.ietf.org/doc/html/rfc8555](https://datatracker.ietf.org/doc/html/rfc8555)
-
-## Additional Resources
-
-- [Adoption Guide](adopting-cert-manager.md) - Import existing installations into Terraform
-- [Troubleshooting Guide](troubleshooting-cert-manager.md)
-- [Official Cert-Manager Documentation](https://cert-manager.io/docs/)
-- [Certificate Configuration Guide](https://cert-manager.io/docs/usage/certificate/)
+**Official Documentation**: [cert-manager.io/docs](https://cert-manager.io/docs/)

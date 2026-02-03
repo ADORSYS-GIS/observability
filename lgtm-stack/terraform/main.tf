@@ -140,11 +140,6 @@ resource "kubernetes_service_account" "observability_sa" {
 
 # Cert-Manager Module
 module "cert_manager" {
-  providers = {
-    kubernetes = kubernetes
-    helm       = helm
-  }
-
   source = "../../cert-manager/terraform"
 
   install_cert_manager = var.install_cert_manager

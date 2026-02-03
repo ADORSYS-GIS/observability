@@ -1,0 +1,291 @@
+# Automated deployment of NGINX ingress controller to Generic Kubernetes Cluster
+# Designed for local clusters (kind, k3s, minikube) or any Kubernetes cluster with kubeconfig
+# Uses Kubernetes backend for state storage (Secret in kube-system namespace)
+# Perfect for development, testing, and non-cloud deployments
+name: Deploy ingress-controller (Generic K8s)
+
+on:
+  # Manual trigger with plan/apply option
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      adopt_existing_resources:
+        description: 'Import existing ingress-controller resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
+  # Auto-trigger on push to main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'ingress-controller/terraform/**'
+      - '.github/workflows/deploy-ingress-controller-generic.yaml'
+
+# Required permissions for workflow operations
+permissions:
+  contents: read           # Read repository content
+
+# Global environment variables used across all jobs
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  WORKING_DIR: 'ingress-controller/terraform'
+  CLOUD_PROVIDER: 'generic'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
+  NGINX_INGRESS_NAMESPACE: ${{ vars.NGINX_INGRESS_NAMESPACE || 'ingress-nginx' }}
+  NGINX_INGRESS_RELEASE_NAME: ${{ vars.NGINX_INGRESS_RELEASE_NAME || 'nginx-monitoring' }}
+
+jobs:
+  # Job 1: Generate and review Terraform infrastructure plan
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install kubectl for Kubernetes backend and provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          # Decode kubeconfig from GitHub Secret (base64 encoded)
+          # To create: cat ~/.kube/config | base64 -w 0
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          
+          # Test cluster connectivity
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✅ Connected to Kubernetes cluster"
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Remove stale backend configuration files
+      # IMPORTANT: State Secrets in kube-system are NEVER deleted - only local config regenerated
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          rm -f backend.tf backend-config.tf
+
+      # Generate backend-config.tf for Kubernetes backend
+      # State stored as Secret: tfstate-default-ingress-controller in kube-system namespace
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "ingress-controller"
+
+      # Initialize Terraform: download providers, configure backend, load state from Secret
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing ingress-controller resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          # Check if Helm release exists
+          if helm list -n ${{ env.NGINX_INGRESS_NAMESPACE }} 2>/dev/null | grep -q "${{ env.NGINX_INGRESS_RELEASE_NAME }}"; then
+            echo "✓ Found existing Helm release: ${{ env.NGINX_INGRESS_RELEASE_NAME }} in ${{ env.NGINX_INGRESS_NAMESPACE }} namespace"
+            echo "Importing into Terraform state..."
+            terraform import 'helm_release.nginx_ingress[0]' ${{ env.NGINX_INGRESS_NAMESPACE }}/${{ env.NGINX_INGRESS_RELEASE_NAME }} || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing ingress-controller Helm release found"
+          fi
+          
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
+
+      # Validate Terraform syntax and configuration
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # Generate terraform.tfvars with deployment configuration
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider    = "${{ env.CLOUD_PROVIDER }}"
+          install_ingress   = true
+          release_name      = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          chart_version     = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace         = "${{ env.NGINX_INGRESS_NAMESPACE }}"
+          replica_count     = 2
+          enable_metrics    = true
+          service_type      = "LoadBalancer"
+          EOF
+
+      # Execute Terraform plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          
+          terraform show tfplan > plan.txt
+          exit 0
+
+      # Save plan artifacts for apply job
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-ingress-controller-generic
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+  # Job 2: Apply Terraform plan and verify deployment
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment:
+      name: production
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Install kubectl and configure cluster access
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          
+          kubectl cluster-info
+          echo "✅ Connected to cluster"
+
+      # Recreate terraform.tfvars (must match plan job)
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider    = "${{ env.CLOUD_PROVIDER }}"
+          install_ingress   = true
+          release_name      = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          chart_version     = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace         = "${{ env.NGINX_INGRESS_NAMESPACE }}"
+          replica_count     = 2
+          enable_metrics    = true
+          service_type      = "LoadBalancer"
+          EOF
+
+      # Remove stale backend configs
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          rm -f backend.tf backend-config.tf
+
+      # Regenerate backend configuration
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "ingress-controller"
+
+      # Re-initialize Terraform
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Download the plan artifact
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-ingress-controller-generic
+          path: ${{ env.WORKING_DIR }}
+
+      # Execute the plan to deploy ingress-controller
+      # Updates state in Kubernetes Secret: kube-system/tfstate-default-ingress-controller
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # Extract Terraform outputs
+      - name: Output deployment info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform output -json > terraform-outputs.json
+
+      # Save outputs as artifact
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-ingress-controller-generic
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+      # Verify successful deployment
+      - name: Verify ingress-controller deployment
+        run: |
+          echo "🔍 Verifying ingress-controller deployment..."
+          
+          # Check namespace
+          echo "Checking ingress-nginx namespace..."
+          kubectl get namespace ${{ env.NGINX_INGRESS_NAMESPACE }}
+          
+          # Check pods
+          echo "Checking ingress-controller pods..."
+          kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
+          
+          # Check service
+          echo "Checking ingress-controller service..."
+          kubectl get svc -n ${{ env.NGINX_INGRESS_NAMESPACE }}
+          
+          # Check IngressClass
+          echo "Checking IngressClass..."
+          kubectl get ingressclass
+          
+          echo "✅ ingress-controller deployment verified successfully"

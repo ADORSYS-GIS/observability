@@ -1,3 +1,43 @@
+variable "cloud_provider" {
+  description = "Cloud provider (gke, eks, aks, or generic)"
+  type        = string
+  default     = "gke"
+  validation {
+    condition     = contains(["gke", "eks", "aks", "generic"], var.cloud_provider)
+    error_message = "Cloud provider must be one of: gke, eks, aks, generic."
+  }
+}
+
+variable "project_id" {
+  description = "GCP Project ID (required for GKE)"
+  type        = string
+  default     = ""
+}
+
+variable "region" {
+  description = "GCP Region"
+  type        = string
+  default     = "us-central1"
+}
+
+variable "aws_region" {
+  description = "AWS Region (for EKS)"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "gke_endpoint" {
+  description = "GKE Cluster Endpoint"
+  type        = string
+  default     = ""
+}
+
+variable "gke_ca_certificate" {
+  description = "GKE Cluster CA Certificate"
+  type        = string
+  default     = ""
+}
+
 variable "install_cert_manager" {
   description = "Whether to install cert-manager"
   type        = bool
@@ -19,7 +59,7 @@ variable "release_name" {
 variable "cert_manager_version" {
   description = "Version of cert-manager chart"
   type        = string
-  default     = "v1.15.0"
+  default     = "v1.19.2"
 }
 
 variable "namespace" {

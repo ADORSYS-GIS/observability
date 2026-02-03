@@ -1,0 +1,379 @@
+# Workflow: Deploy NGINX Ingress Controller (AKS)
+# This workflow handles:
+# - Infrastructure planning with Terraform
+# - NGINX Ingress Controller deployment for external traffic routing
+# - Remote state management in Azure Blob Storage
+# - Deployment verification
+name: Deploy ingress-controller (AKS)
+
+on:
+  # Manual trigger with plan/apply option
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      adopt_existing_resources:
+        description: 'Import existing ingress-controller resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
+  # Auto-trigger on push to main branch for production deployments
+  push:
+    branches:
+      - main
+    paths:
+      - 'ingress-controller/terraform/**'
+      - '.github/workflows/deploy-ingress-controller-aks.yaml'
+
+# Required permissions for workflow operations
+permissions:
+  contents: read           # Read repository content
+  id-token: write         # Azure Workload Identity (optional)
+
+# Global environment variables used across all jobs
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  KUBELOGIN_VERSION: '0.1.4'
+  WORKING_DIR: 'ingress-controller/terraform'
+  CLOUD_PROVIDER: 'aks'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
+  NGINX_INGRESS_NAMESPACE: ${{ vars.NGINX_INGRESS_NAMESPACE || 'ingress-nginx' }}
+  NGINX_INGRESS_RELEASE_NAME: ${{ vars.NGINX_INGRESS_RELEASE_NAME || 'nginx-monitoring' }}
+
+jobs:
+  # Job 1: Generate and review Terraform infrastructure plan
+  # Includes cluster connectivity verification
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Authenticate to Azure using Service Principal
+      # For production: Consider using Azure Workload Identity (OIDC)
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Install Azure CLI for AKS cluster operations
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # Install kubectl for Kubernetes provider configuration
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      # Install kubelogin (required for AAD-enabled AKS clusters)
+      # kubelogin enables kubectl authentication with Azure Active Directory
+      - name: Setup kubelogin
+        run: |
+          curl -LO "https://github.com/Azure/kubelogin/releases/download/v${KUBELOGIN_VERSION}/kubelogin-linux-amd64.zip"
+          unzip kubelogin-linux-amd64.zip
+          sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+          kubelogin --version
+
+      # Configure AKS cluster access using Azure CLI
+      # kubelogin handles AAD authentication for kubectl commands
+      - name: Configure cluster access
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --overwrite-existing
+          
+          # Convert kubeconfig to use kubelogin for AAD auth
+          kubelogin convert-kubeconfig -l azurecli
+
+      # Verify cluster connectivity before proceeding
+      - name: Verify cluster access
+        run: |
+          echo "Testing AKS cluster connectivity..."
+          kubectl cluster-info
+          kubectl get nodes
+
+      # Install Terraform CLI for infrastructure operations
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Remove stale local backend configuration files
+      # State files in Azure Blob Storage remain intact and accessible
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      # Generate backend configuration for Azure Blob Storage state storage
+      # State file location: https://<storage-account>.blob.core.windows.net/<container>/terraform/ingress-controller/terraform.tfstate
+      # Script generates backend-config.tf but never deletes state files
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "ingress-controller"
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+
+      # Initialize Terraform and sync with remote state
+      # Downloads provider plugins and existing state
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Validate Terraform configuration syntax and structure
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing ingress-controller resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          # Check if Helm release exists
+          if helm list -n ${{ env.NGINX_INGRESS_NAMESPACE }} 2>/dev/null | grep -q "${{ env.NGINX_INGRESS_RELEASE_NAME }}"; then
+            echo "✓ Found existing Helm release: ${{ env.NGINX_INGRESS_RELEASE_NAME }} in ${{ env.NGINX_INGRESS_NAMESPACE }} namespace"
+            echo "Importing into Terraform state..."
+            terraform import 'helm_release.nginx_ingress[0]' ${{ env.NGINX_INGRESS_NAMESPACE }}/${{ env.NGINX_INGRESS_RELEASE_NAME }} || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing ingress-controller Helm release found"
+          fi
+          
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
+
+      # Catches configuration errors before planning
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # Create Terraform variables file with ingress-controller configuration
+      # Includes cluster info for Kubernetes provider and NGINX settings
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider        = "${{ env.CLOUD_PROVIDER }}"
+          azure_resource_group  = "${{ secrets.AZURE_RESOURCE_GROUP }}"
+          aks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
+          install_nginx_ingress = true
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
+          ingress_class_name    = "nginx"
+          replica_count         = 2
+          EOF
+
+      # Generate deployment plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
+      # Plan saved to tfplan binary file for apply job
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          
+          terraform show tfplan > plan.txt
+          exit 0
+
+      # Upload plan artifacts for apply job and PR comments
+      # Binary plan ensures apply executes exactly what was reviewed
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-ingress-controller-aks
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+
+  # Job 2: Execute approved deployment and verify
+  # Only runs on main branch pushes or manual apply trigger
+  # Requires production environment approval
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment:
+      name: production  # Requires approval before execution
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Authenticate to Azure
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Install Azure CLI
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # Install kubectl for Kubernetes provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      # Install kubelogin (critical for AAD-enabled AKS clusters)
+      # Without kubelogin, kubectl cannot authenticate to AKS
+      - name: Setup kubelogin
+        run: |
+          curl -LO "https://github.com/Azure/kubelogin/releases/download/v${KUBELOGIN_VERSION}/kubelogin-linux-amd64.zip"
+          unzip kubelogin-linux-amd64.zip
+          sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+          kubelogin --version
+
+      # Configure cluster access
+      - name: Configure cluster access
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --overwrite-existing
+          
+          # Convert kubeconfig to use kubelogin for AAD auth
+          kubelogin convert-kubeconfig -l azurecli
+
+      # Verify cluster connectivity
+      - name: Verify cluster access
+        run: |
+          echo "Testing AKS cluster connectivity..."
+          kubectl cluster-info
+          kubectl get nodes
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Recreate terraform.tfvars identical to plan job
+      # Ensures variables match what was planned
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider        = "${{ env.CLOUD_PROVIDER }}"
+          azure_resource_group  = "${{ secrets.AZURE_RESOURCE_GROUP }}"
+          aks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
+          install_nginx_ingress = true
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
+          ingress_class_name    = "nginx"
+          replica_count         = 2
+          EOF
+
+      # Remove stale backend configs before regenerating
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      # Configure backend to access remote state
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "ingress-controller"
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+
+      # Initialize Terraform with remote state
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Download plan artifact from plan job
+      # Ensures we apply exactly what was reviewed
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-ingress-controller-aks
+          path: ${{ env.WORKING_DIR }}
+
+      # Execute deployment using saved plan
+      # -auto-approve: Safe because plan was already reviewed
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # Extract deployment outputs (LoadBalancer IP, service info, etc.)
+      - name: Output deployment info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform output -json > terraform-outputs.json
+
+      # Store outputs as artifact for reference and troubleshooting
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-ingress-controller-aks
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+      # Verify all ingress-controller components are healthy
+      # Checks: namespace, pods, IngressClass, LoadBalancer service
+      - name: Verify ingress-controller deployment
+        run: |
+          echo "Verifying ingress-controller deployment..."
+          
+          # Confirm namespace exists
+          echo "Checking ingress-nginx namespace..."
+          kubectl get namespace ${{ env.NGINX_INGRESS_NAMESPACE }}
+          
+          # Verify controller pods are running and ready
+          echo "Checking ingress-controller pods..."
+          kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
+          
+          # Confirm IngressClass resource is created
+          echo "Checking IngressClass..."
+          kubectl get ingressclass nginx
+          kubectl describe ingressclass nginx
+          
+          # Verify LoadBalancer service has external IP
+          echo "Checking LoadBalancer service..."
+          kubectl get svc -n ${{ env.NGINX_INGRESS_NAMESPACE }}
+          
+          echo "✅ ingress-controller deployment verified successfully"

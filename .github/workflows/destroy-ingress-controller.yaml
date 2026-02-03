@@ -1,0 +1,278 @@
+# Workflow: Destroy NGINX Ingress Controller (Multi-Cloud)
+# This workflow handles safe removal of ingress-controller from Kubernetes clusters
+# Features:
+# - Multi-cloud support (GKE, EKS, AKS)
+# - Requires explicit "DESTROY" confirmation to prevent accidental deletion
+# - Accesses remote state to properly destroy tracked resources
+# - Verifies complete cleanup after destruction
+# - Production environment approval required
+name: Destroy ingress-controller
+
+on:
+  # Manual-only trigger for safety
+  # User must explicitly choose cloud provider and type "DESTROY" to confirm
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud Provider'
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+          - aks
+        default: 'gke'
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm'
+        required: true
+        type: string
+
+# Required permissions for workflow operations
+permissions:
+  contents: read      # Read repository content
+  id-token: write    # Cloud provider OIDC authentication
+
+# Global environment variables
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  KUBELOGIN_VERSION: '0.1.4'
+  WORKING_DIR: 'ingress-controller/terraform'
+  # Configurable deployment settings (must match deployment workflow values)
+  NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
+  NGINX_INGRESS_NAMESPACE: ${{ vars.NGINX_INGRESS_NAMESPACE || 'ingress-nginx' }}
+  NGINX_INGRESS_RELEASE_NAME: ${{ vars.NGINX_INGRESS_RELEASE_NAME || 'nginx-monitoring' }}
+
+jobs:
+  # Job 1: Safety validation
+  # Prevents accidental destruction by requiring exact confirmation string
+  validate-confirmation:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      # Verify user typed "DESTROY" exactly (case-sensitive)
+      # Workflow fails immediately if confirmation doesn't match
+      - name: Check confirmation input
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "❌ Destroy confirmation failed. You must type 'DESTROY' to proceed."
+            exit 1
+          fi
+          echo "✅ Destroy confirmation validated"
+
+  # Job 2: Execute destruction with verification
+  # Runs only after successful confirmation validation
+  # Requires additional production environment approval for extra safety
+  terraform-destroy-and-verify:
+    name: Terraform Destroy & Verify
+    runs-on: ubuntu-latest
+    needs: validate-confirmation
+    environment:
+      name: production  # Requires GitHub environment approval
+    
+    steps:
+      # Fetch repository code containing Terraform configurations
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Terraform CLI for infrastructure destruction
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # ============================================
+      # GKE Setup (Google Cloud Platform)
+      # ============================================
+      
+      # Authenticate to Google Cloud
+      # Required for: cluster access, GCS state storage, resource deletion
+      - name: Setup GCP Credentials
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud CLI for GKE cluster operations
+      - name: Setup gcloud CLI
+        if: inputs.cloud_provider == 'gke'
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Install kubectl and GKE auth plugin for cluster access
+      - name: Setup kubectl (GKE)
+        if: inputs.cloud_provider == 'gke'
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          # Install GKE authentication plugin (required for kubectl 1.26+)
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+          
+          # Configure cluster access
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region=${{ secrets.CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      # ============================================
+      # EKS Setup (Amazon Web Services)
+      # ============================================
+      
+      # Authenticate to AWS using OIDC (best practice)
+      # Required for: cluster access, S3 state storage, resource deletion
+      - name: Setup AWS Credentials
+        if: inputs.cloud_provider == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Install AWS CLI v2 for EKS operations
+      # AWS CLI v2 includes native kubectl authentication via 'aws eks get-token'
+      - name: Setup AWS CLI
+        if: inputs.cloud_provider == 'eks'
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          aws --version
+
+      # Install kubectl and configure cluster access
+      # AWS CLI handles authentication automatically
+      - name: Setup kubectl (EKS)
+        if: inputs.cloud_provider == 'eks'
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          # Configure cluster access using AWS CLI
+          aws eks update-kubeconfig \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }}
+
+      # ============================================
+      # AKS Setup (Microsoft Azure)
+      # ============================================
+      
+      # Authenticate to Azure
+      # Required for: cluster access, Blob state storage, resource deletion
+      - name: Setup Azure Credentials
+        if: inputs.cloud_provider == 'aks'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Install Azure CLI for AKS operations
+      - name: Setup Azure CLI
+        if: inputs.cloud_provider == 'aks'
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # Install kubectl and kubelogin for cluster access
+      # kubelogin is required for AAD-enabled AKS clusters
+      - name: Setup kubectl and kubelogin (AKS)
+        if: inputs.cloud_provider == 'aks'
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          
+          # Install kubelogin (required for AAD authentication)
+          curl -LO "https://github.com/Azure/kubelogin/releases/download/v${KUBELOGIN_VERSION}/kubelogin-linux-amd64.zip"
+          unzip kubelogin-linux-amd64.zip
+          sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+          kubelogin --version
+          
+          # Configure cluster access
+          az aks get-credentials \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --overwrite-existing
+          
+          # Convert kubeconfig to use kubelogin for AAD auth
+          kubelogin convert-kubeconfig -l azurecli
+
+      # ============================================
+      # Terraform Destruction Process
+      # ============================================
+
+      # Remove stale local backend configuration files
+      # IMPORTANT: This only removes LOCAL config files, NOT remote state
+      # State files persist in cloud storage and are used for destruction
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      # Generate fresh backend configuration to access remote state
+      # State locations:
+      #   GKE: gs://<bucket>/terraform/ingress-controller/terraform.tfstate
+      #   EKS: s3://<bucket>/terraform/ingress-controller/terraform.tfstate
+      #   AKS: https://<account>.blob.core.windows.net/<container>/terraform/ingress-controller/terraform.tfstate
+      # Terraform needs this state to know which resources to destroy
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ inputs.cloud_provider }}" "ingress-controller"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+
+      # Initialize Terraform with backend configuration
+      # Downloads providers and connects to remote state storage
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Create Terraform variables file matching deployment configuration
+      # Must match original deployment settings for proper resource identification
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider        = "${{ inputs.cloud_provider }}"
+          install_nginx_ingress = true
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
+          ingress_class_name    = "nginx"
+          replica_count         = 2
+          EOF
+
+      # Execute Terraform destroy to remove all ingress-controller resources
+      # Uses remote state to identify and destroy resources
+      # -auto-approve: Safe because confirmation was already validated
+      - name: Terraform Destroy
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform destroy -auto-approve
+
+      # Verify complete resource removal from cluster
+      # Ensures ingress-controller namespace and IngressClass are deleted
+      - name: Verify cleanup
+        run: |
+          echo "🔍 Verifying ingress-controller cleanup..."
+          
+          # Check namespace removal
+          if kubectl get namespace ${{ env.NGINX_INGRESS_NAMESPACE }} 2>/dev/null; then
+            echo "⚠️ Warning: ${{ env.NGINX_INGRESS_NAMESPACE }} namespace still exists"
+          else
+            echo "✅ Namespace removed"
+          fi
+          
+          # Check IngressClass removal
+          if kubectl get ingressclass nginx 2>/dev/null; then
+            echo "⚠️ Warning: IngressClass nginx still exists"
+          else
+            echo "✅ IngressClass removed"
+          fi
+          
+          echo "✅ ingress-controller destruction complete"

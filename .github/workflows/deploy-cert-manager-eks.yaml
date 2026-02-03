@@ -1,0 +1,320 @@
+# Automated deployment of cert-manager to Amazon Elastic Kubernetes Service (EKS)
+# Optimized 2-job workflow: terraform-plan + terraform-apply-and-verify
+# - Infrastructure planning with Terraform
+# - Automated TLS certificate management setup
+# - Remote state management in AWS S3 with DynamoDB locking
+# - Integrated deployment verification
+name: Deploy cert-manager (EKS)
+
+on:
+  # Manual trigger with plan/apply option
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      adopt_existing_resources:
+        description: 'Import existing cert-manager resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
+  # Auto-trigger on push to main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'cert-manager/terraform/**'
+      - '.github/workflows/deploy-cert-manager-eks.yaml'
+
+# Required permissions for workflow operations
+permissions:
+  contents: read           # Read repository content
+
+# Global environment variables used across all jobs
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+  WORKING_DIR: 'cert-manager/terraform'
+  CLOUD_PROVIDER: 'eks'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  CERT_MANAGER_VERSION: ${{ vars.CERT_MANAGER_VERSION || 'v1.19.2' }}
+  CERT_MANAGER_NAMESPACE: ${{ vars.CERT_MANAGER_NAMESPACE || 'cert-manager' }}
+  CERT_MANAGER_RELEASE_NAME: ${{ vars.CERT_MANAGER_RELEASE_NAME || 'cert-manager' }}
+
+jobs:
+  # Job 1: Generate and review Terraform infrastructure plan
+  # Creates deployment plan for review
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Authenticate to AWS (needed for S3 state bucket access)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Install kubectl and configure cluster access for Terraform kubernetes provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          # Configure kubeconfig for Terraform kubernetes provider
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      # Remove stale backend configuration files to ensure clean regeneration
+      # IMPORTANT: State files in S3 are NEVER deleted - only local config files
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      # Generate backend-config.tf for remote state storage in S3
+      # State file location: s3://<bucket>/terraform/cert-manager/terraform.tfstate
+      # DynamoDB table used for state locking to prevent concurrent modifications
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "cert-manager"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # Initialize Terraform: download providers, configure backend, migrate/load state
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing cert-manager resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          # Check if Helm release exists
+          if helm list -n ${{ env.CERT_MANAGER_NAMESPACE }} 2>/dev/null | grep -q "${{ env.CERT_MANAGER_RELEASE_NAME }}"; then
+            echo "✓ Found existing Helm release: ${{ env.CERT_MANAGER_RELEASE_NAME }}"
+            echo "Importing into Terraform state..."
+            terraform import 'helm_release.cert_manager[0]' ${{ env.CERT_MANAGER_NAMESPACE }}/${{ env.CERT_MANAGER_RELEASE_NAME }} || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing cert-manager Helm release found"
+          fi
+          
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
+
+      # Validate Terraform syntax and configuration
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # Generate terraform.tfvars with deployment configuration
+      # Includes EKS-specific settings and cert-manager configuration
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider       = "${{ env.CLOUD_PROVIDER }}"
+          aws_region           = "${{ secrets.AWS_REGION }}"
+          install_cert_manager = true
+          create_issuer        = true
+          release_name         = "${{ env.CERT_MANAGER_RELEASE_NAME }}"
+          cert_manager_version = "${{ env.CERT_MANAGER_VERSION }}"
+          namespace            = "${{ env.CERT_MANAGER_NAMESPACE }}"
+          letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
+          cert_issuer_name     = "letsencrypt-prod"
+          cert_issuer_kind     = "ClusterIssuer"
+          issuer_server        = "https://acme-v02.api.letsencrypt.org/directory"
+          ingress_class_name   = "nginx"
+          EOF
+
+      # Execute Terraform plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e  # Don't exit on non-zero status
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+          
+          # Save exit code for downstream jobs
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Fail only if plan had errors (exit code 1)
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          
+          # Generate human-readable plan output for PR comments
+          terraform show tfplan > plan.txt
+          exit 0
+
+      # Save plan artifacts for apply job (tfplan binary + human-readable output)
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-cert-manager-eks
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+
+  # Job 2: Apply Terraform plan and verify deployment
+  # Only runs on: push to main OR manual workflow_dispatch with 'apply' action
+  # Combines infrastructure deployment with verification for efficiency
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment:
+      name: production  # Requires approval if environment protection rules are configured
+    
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Authenticate to AWS for cluster and state bucket access
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Install kubectl and configure cluster access
+      # AWS CLI v2 includes native authentication for EKS (no additional plugin needed)
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          # Configure kubeconfig for Terraform provider and verification
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      # Recreate terraform.tfvars (must match plan job configuration)
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider       = "${{ env.CLOUD_PROVIDER }}"
+          aws_region           = "${{ secrets.AWS_REGION }}"
+          install_cert_manager = true
+          create_issuer        = true
+          release_name         = "${{ env.CERT_MANAGER_RELEASE_NAME }}"
+          cert_manager_version = "${{ env.CERT_MANAGER_VERSION }}"
+          namespace            = "${{ env.CERT_MANAGER_NAMESPACE }}"
+          letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
+          cert_issuer_name     = "letsencrypt-prod"
+          cert_issuer_kind     = "ClusterIssuer"
+          issuer_server        = "https://acme-v02.api.letsencrypt.org/directory"
+          ingress_class_name   = "nginx"
+          EOF
+
+      # Remove stale backend configs
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f backend.tf backend-config.tf
+
+      # Regenerate backend configuration (must match plan job)
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "cert-manager"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # Re-initialize Terraform with backend configuration
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Download the plan artifact generated in terraform-plan job
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-cert-manager-eks
+          path: ${{ env.WORKING_DIR }}
+
+      # Execute the plan to deploy cert-manager
+      # Updates remote state in S3: s3://<bucket>/terraform/cert-manager/terraform.tfstate
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # Extract Terraform outputs (deployment metadata, resource IDs, etc.)
+      - name: Output deployment info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform output -json > terraform-outputs.json
+
+      # Save outputs as artifact for potential downstream jobs or auditing
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-cert-manager-eks
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+      # Verify successful deployment
+      # kubectl and cluster access already configured in previous steps
+      # 1. Verify namespace exists
+      # 2. Verify all pods are ready (5-minute timeout)
+      # 3. Verify ClusterIssuer is configured and ready
+      - name: Verify cert-manager deployment
+        run: |
+          echo "🔍 Verifying cert-manager deployment..."
+          
+          # Check namespace creation
+          echo "Checking cert-manager namespace..."
+          kubectl get namespace ${{ env.CERT_MANAGER_NAMESPACE }}
+          
+          # Check pod status and wait for ready state
+          echo "Checking cert-manager pods..."
+          kubectl get pods -n ${{ env.CERT_MANAGER_NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${{ env.CERT_MANAGER_RELEASE_NAME }} -n ${{ env.CERT_MANAGER_NAMESPACE }} --timeout=300s
+          
+          # Verify ClusterIssuer configuration
+          echo "Checking ClusterIssuer..."
+          kubectl get clusterissuer letsencrypt-prod
+          kubectl describe clusterissuer letsencrypt-prod
+          
+          echo "✅ cert-manager deployment verified successfully"

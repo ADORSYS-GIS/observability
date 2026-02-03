@@ -103,6 +103,9 @@ backend-config.tf
 backend.tf
 terraform.tfplan
 
+# Auto-generated backend configuration files
+backend-config.tf
+
 # Crash logs
 crash.log
 crash.*.log
@@ -140,3 +143,7 @@ pki-ca-backup*.yaml.gpg
 # Zencoder files
 .zencoder
 .zenflow
+
+# AI Protocols
+AI_SESSION_PROMPT.md
+AI_TASK_EXECUTION_PROTOCOL.md

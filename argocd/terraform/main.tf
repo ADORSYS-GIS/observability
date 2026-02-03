@@ -87,11 +87,6 @@ resource "helm_release" "argocd" {
 # Managing certificate signing and creation
 # Cert-Manager Module
 module "cert_manager" {
-  providers = {
-    kubernetes = kubernetes
-    helm       = helm
-  }
-
   source = "../../cert-manager/terraform"
 
   install_cert_manager = var.install_cert_manager

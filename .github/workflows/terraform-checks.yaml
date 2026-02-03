@@ -1,10 +1,10 @@
-name: Terraform CI
+name: Terraform Checks
 
 on:
   pull_request:
     paths:
       - '**/terraform/**'
-      - '.github/workflows/terraform-ci.yaml'
+      - '.github/workflows/terraform-checks.yaml'
   push:
     branches:
       - main

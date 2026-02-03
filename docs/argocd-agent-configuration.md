@@ -135,7 +135,7 @@ See [RBAC guide](argocd-agent-rbac.md).
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `install_cert_manager` | bool | `false` | Install cert-manager |
-| `cert_manager_version` | string | `"v1.16.2"` | Helm chart version |
+| `cert_manager_version` | string | `"v1.19.2"` | Helm chart version |
 | `cert_manager_namespace` | string | `"cert-manager"` | Namespace |
 | `cert_issuer_name` | string | `"letsencrypt-prod"` | Issuer name |
 | `cert_issuer_kind` | string | `"Issuer"` | `Issuer` or `ClusterIssuer` |
@@ -146,7 +146,7 @@ See [RBAC guide](argocd-agent-rbac.md).
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `install_nginx_ingress` | bool | `false` | Install ingress-nginx |
-| `nginx_ingress_version` | string | `"4.11.3"` | Helm chart version |
+| `nginx_ingress_version` | string | `"2.4.2"` | Helm chart version |
 | `nginx_ingress_namespace` | string | `"ingress-nginx"` | Namespace |
 | `ingress_class_name` | string | `"nginx"` | Ingress class |
 

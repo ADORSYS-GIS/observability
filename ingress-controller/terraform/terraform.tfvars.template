@@ -3,13 +3,23 @@
 # ==============================================================================
 # See: docs/adopting-ingress-controller.md | docs/troubleshooting-ingress-controller.md
 
+# Cloud Provider Configuration
+cloud_provider = "gke"  # Options: gke, eks, aks, generic
+project_id     = ""     # GCP Project ID (required for GKE)
+region         = "us-central1"  # GCP Region
+aws_region     = "us-east-1"    # AWS Region (for EKS)
+
+# GKE-specific (leave empty to use kubectl context, or populate for explicit targeting)
+gke_endpoint       = ""
+gke_ca_certificate = ""
+
 # Installation Control
 install_nginx_ingress = false
 
 # Helm Release
 release_name          = "nginx-monitoring"
 namespace             = "ingress-nginx"
-nginx_ingress_version = "4.14.1"
+nginx_ingress_version = "2.4.2"
 
 # Controller Configuration
 replica_count      = 1

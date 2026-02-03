@@ -42,7 +42,7 @@ resource "null_resource" "spoke_namespace" {
         --ignore-not-found=true \
         --timeout=120s 2>&1 | tee /tmp/ns-delete-${self.triggers.agent}.log; then
         
-        echo "⚠ Graceful deletion timed out, attempting force deletion..."
+        echo "WARNING: Graceful deletion timed out, attempting force deletion..."
         
         # Remove finalizers
         kubectl patch namespace ${self.triggers.namespace} \
@@ -98,7 +98,7 @@ resource "null_resource" "spoke_argocd_installation" {
         
         RETRY=$((RETRY+1))
         if [ $RETRY -lt $MAX_RETRIES ]; then
-          echo "⚠ Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$$LOG_FILE"
+          echo "WARNING: Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$$LOG_FILE"
           sleep $RETRY_DELAY
         else
           echo "✗ ERROR: Failed after $MAX_RETRIES attempts. Check logs: $$LOG_FILE" | tee -a "$$LOG_FILE"
@@ -170,7 +170,7 @@ resource "null_resource" "spoke_argocd_secret_patch" {
         --context ${each.value} \
         --type='json' \
         -p='[{"op": "add", "path": "/stringData", "value": {"server.secretkey": "'"$$SECRET_KEY"'"}}]' 2>&1 | tee -a "$$LOG_FILE"; then
-        echo "⚠ Warning: Secret patch failed - may not exist yet, will retry on next run" | tee -a "$$LOG_FILE"
+        echo "WARNING: Warning: Secret patch failed - may not exist yet, will retry on next run" | tee -a "$$LOG_FILE"
       else
         echo "✓ ArgoCD secret patched successfully for ${each.key}" | tee -a "$$LOG_FILE"
       fi
@@ -509,7 +509,7 @@ resource "null_resource" "spoke_agent_installation" {
         
         RETRY=$((RETRY+1))
         if [ $RETRY -lt $MAX_RETRIES ]; then
-          echo "⚠ Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
+          echo "WARNING: Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$LOG_FILE"
           sleep $RETRY_DELAY
         else
           echo "✗ ERROR: Failed after $MAX_RETRIES attempts. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
@@ -659,13 +659,13 @@ resource "null_resource" "spoke_agent_restart" {
         if echo "$$AGENT_LOGS" | grep -qi "authentication successful\|connected to\|connection established"; then
           echo "✓ Agent successfully connected to principal" | tee -a "$LOG_FILE"
         elif echo "$$AGENT_LOGS" | grep -qi "error\|failed\|EOF"; then
-          echo "⚠ WARNING: Agent may have connection issues. Check logs:" | tee -a "$LOG_FILE"
+          echo "WARNING: WARNING: Agent may have connection issues. Check logs:" | tee -a "$LOG_FILE"
           echo "  kubectl logs -l app.kubernetes.io/name=argocd-agent-agent -n ${var.spoke_namespace} --context ${each.value}" | tee -a "$LOG_FILE"
         else
-          echo "⚠ Agent connection status unclear. Manual verification recommended." | tee -a "$LOG_FILE"
+          echo "WARNING: Agent connection status unclear. Manual verification recommended." | tee -a "$LOG_FILE"
         fi
       else
-        echo "⚠ WARNING: Agent pod may not be healthy. Check with:" | tee -a "$LOG_FILE"
+        echo "WARNING: WARNING: Agent pod may not be healthy. Check with:" | tee -a "$LOG_FILE"
         echo "  kubectl logs -l app.kubernetes.io/name=argocd-agent-agent -n ${var.spoke_namespace} --context ${each.value}" | tee -a "$LOG_FILE"
       fi
       
