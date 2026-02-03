@@ -477,7 +477,7 @@ jobs:
           kubectl config get-contexts
           echo "Cluster info:" 
           kubectl cluster-info
-          echo "Testing connection  to hub cluster..."
+          echo "Testing connection  to hub cluster..." 
           kubectl get nodes
 
       - name: Config Backend
