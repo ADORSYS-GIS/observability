@@ -1,58 +1,40 @@
 # LGTM Stack GitHub Actions Deployment
 
-Automated CI/CD deployment using GitHub Actions workflows with Terraform backend.
-
-Recommended for teams requiring automated deployments, PR-based reviews, and production approval gates. This method provides fully automated infrastructure provisioning with GitOps practices.
+Automated observability stack deployment using GitHub Actions CI/CD workflows.
 
 **Official Documentation**: [Grafana Loki](https://grafana.com/docs/loki/latest/) | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | [Grafana](https://grafana.com/docs/grafana/latest/)
+
+> **Already have LGTM Stack installed?** If you want to manage an existing observability stack deployment with GitHub Actions, see [Adopting Existing Installation](adopting-lgtm-stack.md).
 
 ---
 
 ## Overview
 
-Automated deployment workflows for the LGTM observability stack supporting multiple cloud providers and Kubernetes platforms.
+This deployment method uses GitHub Actions workflows to automatically deploy the LGTM observability stack to Kubernetes clusters via Terraform. The workflows handle backend configuration, authentication, and deployment across GKE, EKS, and Generic Kubernetes.
 
-**Supported Platforms:**
-- **GKE** (Google Kubernetes Engine) - Full automation with GCS state backend
-- **EKS** (Amazon Elastic Kubernetes Service) - Full automation with S3 state backend
-- **Generic Kubernetes** (minikube, kind, on-premise) - Kubernetes backend for state
+**Key Features:**
+- Automated Terraform backend configuration (GCS/S3/Kubernetes)
+- Cloud provider authentication via GitHub Secrets
+- Terraform plan review with artifact storage
+- Storage bucket provisioning (GCS/S3) or PersistentVolumes
+- Deployment verification (pods, services, ingress endpoints)
+- Zero-downtime upgrades
+- Remote state management
 
-**Available Workflows:**
-- `deploy-lgtm-gke.yaml` - GKE-specific deployment with Workload Identity
-- `deploy-lgtm-eks.yaml` - EKS-specific deployment with IRSA
-- `deploy-lgtm-generic.yaml` - Generic Kubernetes deployment
-- `destroy-lgtm-stack.yaml` - Teardown workflow for all platforms
+---
 
-## Architecture
+## Workflows
 
-The deployment uses a modular Terraform architecture:
-
-```
-lgtm-stack/terraform/
-├── main.tf                    # Core LGTM Helm releases
-├── variables.tf               # Variables with cloud_provider support
-├── modules/
-│   ├── cloud-gke/            # GCS buckets + Workload Identity
-│   ├── eks-storage-buckets/  # S3 buckets + IRSA
-│   └── cloud-generic/        # PersistentVolumes
-
-.github/
-├── workflows/
-│   ├── deploy-lgtm-stack.yaml    # Main deployment workflow
-│   └── destroy-lgtm-stack.yaml   # Teardown workflow
-└── scripts/
-    ├── configure-backend.sh       # Dynamic Terraform backend config
-    ├── detect-cloud-provider.sh   # Auto-detect cloud from kubeconfig
-    ├── import-existing-resources.sh # Import existing K8s resources
-    ├── verify-deployment.sh       # Post-deployment validation
-    └── smoke-tests.sh            # Comprehensive component testing
-```
+| Workflow | Purpose | Cloud Provider |
+|----------|---------|----------------|
+| `deploy-lgtm-gke.yaml` | Deploy to GKE with Workload Identity | GKE |
+| `deploy-lgtm-eks.yaml` | Deploy to EKS with IRSA | EKS |
+| `deploy-lgtm-generic.yaml` | Deploy to any Kubernetes cluster | Generic |
+| `destroy-lgtm-stack.yaml` | Teardown deployment | All |
 
 ---
 
 ## Prerequisites
-
-### 1. Kubernetes Cluster
 
 An existing Kubernetes cluster is required:
 
@@ -67,360 +49,279 @@ An existing Kubernetes cluster is required:
 
 ---
 
-### 2. GitHub Repository Secrets
+## Setup
 
-Configure secrets in your repository: `Settings → Secrets and variables → Actions → New repository secret`
+### Step 1: Configure GitHub Secrets
 
-#### Required Secrets (All Platforms)
+Navigate to `Settings → Secrets and variables → Actions → New repository secret`
 
-| Secret Name | Description | Example Value |
-|-------------|-------------|---------------|
-| `KUBECONFIG` | Base64-encoded kubeconfig | `cat ~/.kube/config \| base64 -w 0` |
-| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SecureP@ssw0rd123!` |
-| `LETSENCRYPT_EMAIL` | Let's Encrypt email | `ops@example.com` |
-| `MONITORING_DOMAIN` | Base domain for services | `monitoring.example.com` |
-| `ENVIRONMENT` | Deployment environment | `production` or `staging` |
+#### Common Secrets (All Platforms)
 
-#### Cloud-Specific Secrets
+| Secret Name | Description |
+|-------------|-------------|
+| `KUBECONFIG` | Base64-encoded kubeconfig file |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
+| `LETSENCRYPT_EMAIL` | Email for Let's Encrypt certificate notifications |
+| `MONITORING_DOMAIN` | Base domain for monitoring services |
+| `ENVIRONMENT` | Environment name (production, staging, etc.) |
 
-**For GKE:**
-```
-CLOUD_PROVIDER=gke
-GCP_PROJECT_ID=my-gcp-project
-GCP_SA_KEY=<service-account-json-key>
-TF_STATE_BUCKET=my-terraform-state-bucket
-CLUSTER_NAME=my-gke-cluster
-CLUSTER_LOCATION=us-central1
-REGION=us-central1
+**Generate KUBECONFIG secret:**
+```bash
+cat ~/.kube/config | base64 -w 0
 ```
 
-**For EKS:**
+#### GKE (Google Kubernetes Engine)
+
+| Secret Name | Description |
+|-------------|-------------|
+| `CLOUD_PROVIDER` | Set to `gke` |
+| `GCP_PROJECT_ID` | GCP project ID |
+| `GCP_SA_KEY` | Service account JSON key (base64-encoded) |
+| `TF_STATE_BUCKET` | GCS bucket name for Terraform state |
+| `CLUSTER_NAME` | GKE cluster name |
+| `CLUSTER_LOCATION` | GKE cluster location/region |
+| `REGION` | GCP region for resources |
+
+**Create service account and encode key:**
+```bash
+gcloud iam service-accounts create github-actions \
+  --display-name "GitHub Actions Service Account"
+
+gcloud iam service-accounts keys create key.json \
+  --iam-account=github-actions@PROJECT_ID.iam.gserviceaccount.com
+
+# Encode key for GitHub Secrets
+cat key.json | base64 -w 0
 ```
-CLOUD_PROVIDER=eks
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
-TF_STATE_BUCKET=my-terraform-state-bucket
-CLUSTER_NAME=my-eks-cluster
-```
 
+#### EKS (Amazon Elastic Kubernetes Service)
 
+| Secret Name | Description |
+|-------------|-------------|
+| `CLOUD_PROVIDER` | Set to `eks` |
+| `AWS_ACCESS_KEY_ID` | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret access key |
+| `AWS_REGION` | AWS region |
+| `CLUSTER_NAME` | EKS cluster name |
+| `TF_STATE_BUCKET` | S3 bucket name for Terraform state |
 
-**For Generic Kubernetes:**
-```
-CLOUD_PROVIDER=generic
-CLUSTER_NAME=my-cluster
-# No additional cloud secrets required
-```
+#### Generic Kubernetes
 
-### 3. Cloud Provider Setup
+| Secret Name | Description |
+|-------------|-------------|
+| `CLOUD_PROVIDER` | Set to `generic` |
+| `CLUSTER_NAME` | Kubernetes cluster name |
 
-#### GKE Setup
+---
 
-1. **Create State Storage Bucket:**
-   ```bash
-   export PROJECT_ID="my-gcp-project"
-   export BUCKET_NAME="${PROJECT_ID}-terraform-state"
-   
-   gsutil mb -p $PROJECT_ID -l us-central1 gs://$BUCKET_NAME
-   gsutil versioning set on gs://$BUCKET_NAME
-   ```
+### Step 2: Configure Repository Variables (Optional)
 
-2. **Create Service Account:**
-   ```bash
-   gcloud iam service-accounts create github-actions \
-     --display-name "GitHub Actions Service Account"
-   
-   # Grant permissions
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:github-actions@${PROJECT_ID}.iam.gserviceaccount.com" \
-     --role="roles/container.admin"
-   
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:github-actions@${PROJECT_ID}.iam.gserviceaccount.com" \
-     --role="roles/storage.admin"
-   
-   # Create key
-   gcloud iam service-accounts keys create key.json \
-     --iam-account=github-actions@${PROJECT_ID}.iam.gserviceaccount.com
-   ```
+Navigate to `Settings → Secrets and variables → Actions → Variables`
 
-3. **Set GitHub Secret:**
-   ```bash
-   # Copy the contents of key.json to GCP_SA_KEY secret
-   cat key.json
-   ```
+| Variable Name | Description | Default |
+|---------------|-------------|---------|
+| `TERRAFORM_VERSION` | Terraform version to use | `1.5.0` |
+| `INSTALL_CERT_MANAGER` | Install cert-manager | `false` |
+| `INSTALL_NGINX_INGRESS` | Install NGINX Ingress | `false` |
 
-#### EKS Setup
+---
 
-1. **Create State Storage Bucket:**
-   ```bash
-   export BUCKET_NAME="my-terraform-state-bucket"
-   export AWS_REGION="us-east-1"
-   
-   aws s3api create-bucket \
-     --bucket $BUCKET_NAME \
-     --region $AWS_REGION
-   
-   aws s3api put-bucket-versioning \
-     --bucket $BUCKET_NAME \
-     --versioning-configuration Status=Enabled
-   ```
+### Step 3: Deploy LGTM Stack
 
-2. **Get OIDC Provider ARN:**
-   ```bash
-   export CLUSTER_NAME="my-eks-cluster"
-   
-   aws eks describe-cluster --name $CLUSTER_NAME \
-     --query "cluster.identity.oidc.issuer" --output text
-   
-   # Find the provider ARN in IAM console or use:
-   aws iam list-open-id-connect-providers
-   ```
-
-3. **Create IAM User for GitHub Actions:**
-   ```bash
-   aws iam create-user --user-name github-actions
-   
-   # Attach policies
-   aws iam attach-user-policy --user-name github-actions \
-     --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-   
-   # Create access key
-   aws iam create-access-key --user-name github-actions
-   ```
-
-#### Generic Kubernetes Setup
-
-No cloud-specific setup required. Just ensure:
-- `kubectl` can access your cluster
-- You have a valid kubeconfig file
-
-## Usage
-
-### Deploy LGTM Stack
-
-#### Manual Deployment
-
-1. Go to `Actions` tab in GitHub
-2. Select `Deploy LGTM Stack` workflow
+**Via GitHub UI:**
+1. Navigate to `Actions` tab
+2. Select `Deploy LGTM Stack (GKE/EKS/Generic)` workflow
 3. Click `Run workflow`
-4. Select your cloud provider (gke/eks/generic)
-5. Choose action: `apply` (to deploy)
-6. Click `Run workflow`
+4. Select branch and terraform action (`plan` or `apply`)
+5. Click `Run workflow`
 
-#### Automatic Deployment
+**Via Pull Request:**
+Workflows automatically run `terraform plan` on PR when changes are made to:
+- `lgtm-stack/terraform/**`
+- `.github/workflows/deploy-lgtm-*.yaml`
 
-Push changes to `main` branch:
+**Via Push to Main:**
+Automatic `terraform apply` on merge to `main` branch.
+
+---
+
+## Adopting Existing LGTM Stack Installation
+
+If you already have an LGTM stack deployed, the workflow automatically imports existing resources to avoid conflicts.
+
+### How It Works
+
+The workflow runs an import script before `terraform apply`:
+1. Detects existing Helm releases (loki, mimir, tempo, grafana, prometheus)
+2. Imports them into Terraform state
+3. Continues with deployment without recreating resources
+
+### What Gets Imported
+
+- Helm releases (loki, mimir, tempo, grafana, prometheus, alloy)
+- Kubernetes namespaces
+- Storage buckets (GCS/S3)
+- Service accounts and IAM bindings
+
+### Important Notes
+
+- Existing data in storage buckets is preserved
+- Configuration may be updated to match Terraform definitions
+- Review Terraform plan artifact before approving apply
+
+---
+
+## Verification
+
+After successful workflow completion, verify the deployment:
+
 ```bash
-git push origin main
+# Check pod status
+kubectl get pods -n lgtm
 ```
 
-The workflow will automatically:
-1. Detect your cloud provider (from `CLOUD_PROVIDER` secret)
-2. Import existing resources to avoid conflicts
-3. Run Terraform plan
-4. Apply changes (on main branch only)
-5. Verify deployment
-6. Run smoke tests
+All pods should be in `Running` status.
 
-### Verify Deployment
+```bash
+# Verify services
+kubectl get svc -n lgtm
+```
 
-After deployment completes:
+```bash
+# Check ingress endpoints
+kubectl get ingress -n lgtm
+```
 
-1. **Check workflow artifacts:**
-   - Download `verification-report.html` to see deployment status
-   - Download `smoke-test-results.json` for test results
+### Access Grafana
 
-2. **Access Grafana:**
+Navigate to `https://grafana.MONITORING_DOMAIN` and login with:
+- **Username**: `admin`
+- **Password**: Value from `GRAFANA_ADMIN_PASSWORD` secret
+
+---
+
+## DNS Configuration
+
+Configure DNS records to point to your LoadBalancer IP:
+
+1. **Get LoadBalancer IP:**
    ```bash
-   # If using domain:
-   https://grafana.${MONITORING_DOMAIN}
-   
-   # Or port-forward:
-   kubectl port-forward -n observability svc/monitoring-grafana 3000:80
-   # Then open: http://localhost:3000
+   kubectl get svc -n ingress-nginx ingress-nginx-controller \
+     -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
    ```
-   
-   Login: `admin` / `${GRAFANA_ADMIN_PASSWORD}`
 
-### Accessing the Stack
+2. **Create DNS A records:**
+   - `grafana.monitoring.example.com` → `LOAD_BALANCER_IP`
+   - `loki.monitoring.example.com` → `LOAD_BALANCER_IP`
+   - `mimir.monitoring.example.com` → `LOAD_BALANCER_IP`
+   - `tempo.monitoring.example.com` → `LOAD_BALANCER_IP`
+   - `prometheus.monitoring.example.com` → `LOAD_BALANCER_IP`
 
-After a successful deployment, the Ingress Controller creates a **LoadBalancer** with a public IP.
+   Or use wildcard:
+   - `*.monitoring.example.com` → `LOAD_BALANCER_IP`
 
-#### 1. Get the External IP
-The easiest way is to check the **Verification** job logs in GitHub Actions. It now automatically prints the IP. Or run manually:
-```bash
-kubectl get svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-```
+---
 
-#### 2. Configure DNS
-Create a wildcard A record (or individual records) pointing to this IP:
-- `*.monitoring.your-domain.com` -> `LOAD_BALANCER_IP`
+## Uninstalling
 
-#### 3. Access Grafana
-Once DNS propagates, open:
-`https://grafana.monitoring.your-domain.com`
+To remove the LGTM stack deployment:
 
-Login: `admin` / `${GRAFANA_ADMIN_PASSWORD}`
-
-### Component Health
-```bash
-kubectl get pods -n observability
-kubectl get svc -n observability
-kubectl get ingress -n observability
-```
-
-### Destroy Stack
-
-> [!CAUTION]
-> This will remove all LGTM stack components. Data in storage buckets can be preserved.
-
-1. Go to `Actions` tab
+1. Navigate to `Actions` tab
 2. Select `Destroy LGTM Stack` workflow
 3. Click `Run workflow`
-4. Select cloud provider
-5. Choose whether to delete storage buckets/volumes
-6. Type `DESTROY` to confirm
-7. Click `Run workflow`
+4. Confirm destruction
 
-## Workflow Details
+**Warning:** This removes all LGTM components. Storage buckets with `force_destroy = false` will be preserved with data intact.
 
-### Deploy Workflow Jobs
-
-1. **setup-environment**
-   - Configures cloud credentials
-   - Sets up kubectl access
-   - Validates cluster connectivity
-
-2. **import-existing-resources**
-   - Scans for existing resources (cert-manager, nginx-ingress, namespaces)
-   - Imports them into Terraform state
-   - Prevents resource conflicts
-
-3. **terraform-plan**
-   - Generates Terraform execution plan
-   - Posts plan to PR (if applicable)
-   - Creates plan artifact
-
-4. **terraform-apply**
-   - Applies Terraform changes
-   - Deploys LGTM stack components
-   - Configures cloud storage and IAM
-
-5. **verify-deployment**
-   - Waits for all pods to be ready
-   - Runs comprehensive smoke tests
-   - Generates HTML verification report
-
-### Smoke Tests
-
-Tests performed on each component:
-
-**Loki:**
-- ✅ Push log entries via API
-- ✅ Query logs using LogQL
-- ✅ Verify label filtering
-
-**Mimir:**
-- ✅ Push metrics via remote write
-- ✅ Query metrics using PromQL
-- ✅ Validate metric ingestion
-
-**Prometheus:**
-- ✅ Check scrape targets health
-- ✅ Query metrics via API
-- ✅ Test alerting rules
-
-**Tempo:**
-- ✅ Send test traces via OTLP
-- ✅ Query trace by ID
-- ✅ Verify trace search
-
-**Grafana:**
-- ✅ API authentication
-- ✅ Datasource configuration
-- ✅ Dashboard creation
-- ✅ Query each datasource
-
-**Integration:**
-- ✅ Correlated logs/metrics/traces
-- ✅ Trace ID linking
+---
 
 ## Troubleshooting
 
-### Workflow Fails at Import Step
+### Workflow Failures
 
-**Problem:** Import job fails with resource not found
+**Check workflow logs:**
+1. Navigate to `Actions` tab
+2. Click on failed workflow run
+3. Review job logs for specific errors
 
-**Solution:** This is expected if resources don't exist. The workflow continues anyway.
+**Download artifacts:**
+- `terraform-plan.txt` - Terraform execution plan
+- `verification-report.html` - Deployment validation results
 
 ### Terraform Apply Fails with "Already Exists"
 
-**Problem:** Resource already exists in cluster
+The import script runs automatically before apply. If resources still conflict:
 
-**Solution:**
-1. Check `import-report.json` artifact
-2. Manually import missing resources:
-   ```bash
-   cd lgtm-stack/terraform
-   terraform import kubernetes_namespace.observability observability
-   ```
-
-### Pods Not Starting
-
-**Problem:** Pods in `Pending` or `CrashLoopBackOff`
-
-**Solution:**
 ```bash
-# Check pod status
-kubectl describe pod -n observability <pod-name>
-
-# Check logs
-kubectl logs -n observability <pod-name>
-
-# Common issues:
-# - Insufficient resources
-# - Storage class not available (generic k8s)
-# - Cloud IAM permissions (GKE/EKS)
+# Manually import resources locally
+cd lgtm-stack/terraform
+terraform import helm_release.loki lgtm/loki
+terraform import helm_release.mimir lgtm/mimir
+terraform import helm_release.tempo lgtm/tempo
+terraform import helm_release.grafana lgtm/grafana
+terraform import helm_release.prometheus lgtm/prometheus
 ```
 
-### Storage Bucket Access Denied
+### Authentication Errors
 
 **GKE:**
 ```bash
-# Verify Workload Identity binding
-kubectl get sa -n observability observability-sa -o yaml | grep iam.gke.io
-
-# Check GCP IAM permissions
-gcloud projects get-iam-policy $PROJECT_ID \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:gke-observability-sa@*"
+# Verify service account key is valid and base64-encoded
+echo $GCP_SA_KEY | base64 -d | jq .
 ```
 
 **EKS:**
 ```bash
-# Verify IRSA annotation
-kubectl get sa -n observability observability-sa -o yaml | grep eks.amazonaws.com
-
-# Check IAM role
-aws iam get-role --role-name my-eks-cluster-lgtm-irsa
+# Verify AWS credentials
+aws sts get-caller-identity
 ```
 
-### Smoke Tests Fail
+### Pod Failures
 
-**Problem:** Some smoke tests fail
+```bash
+# Check pod logs
+kubectl logs -n lgtm <pod-name>
 
-**Solution:**
-1. Wait a few minutes for components to fully initialize
-2. Check individual component logs
-3. Verify ingress/service configurations
-4. Re-run smoke tests manually:
-   ```bash
-   export KUBECONFIG=~/.kube/config
-   export GRAFANA_ADMIN_PASSWORD="your-password"
-   bash .github/scripts/smoke-tests.sh
-   ```
+# Describe pod for events
+kubectl describe pod -n lgtm <pod-name>
+```
+
+---
+
+## State Management
+
+Terraform state is stored remotely for collaboration:
+
+| Platform | Backend | Location |
+|----------|---------|----------|
+| GKE | GCS | `gs://<bucket>/terraform/lgtm-stack/` |
+| EKS | S3 | `s3://<bucket>/terraform/lgtm-stack/` |
+| Generic | Kubernetes | Secret in `kube-system` namespace |
+
+State files persist across workflow runs and are never deleted by workflows.
+
+---
+
+## Advanced Configuration
+
+### Custom Component Versions
+
+Edit repository variables to override component versions:
+- `LOKI_VERSION`
+- `MIMIR_VERSION`
+- `TEMPO_VERSION`
+- `GRAFANA_VERSION`
+- `PROMETHEUS_VERSION`
+
+### Manual Smoke Tests
+
+Run smoke tests locally:
+
+```bash
+export MONITORING_DOMAIN="monitoring.example.com"
+export GRAFANA_ADMIN_PASSWORD="your-password"
+bash .github/scripts/smoke-tests.sh
+```
 
 ---
 
@@ -437,4 +338,3 @@ aws iam get-role --role-name my-eks-cluster-lgtm-irsa
 ---
 
 **Official Documentation**: [Grafana Loki](https://grafana.com/docs/loki/latest/) | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | [Grafana](https://grafana.com/docs/grafana/latest/)
-
