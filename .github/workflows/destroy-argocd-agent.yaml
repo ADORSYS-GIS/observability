@@ -60,7 +60,7 @@ jobs:
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
             --hostname github-runner-destroy-${{ github.run_id }}
           
-          echo "Waiting for NetBird connection to establish..."
+          echo "Waiting for NetBird connection to establish... "
           sleep 15
           
           echo "NetBird Status:"
