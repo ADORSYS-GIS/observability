@@ -39,10 +39,10 @@ Fully automated CI/CD pipelines with PR-based reviews and production approvals. 
 
 ## Infrastructure Stack
 
-| Component | Purpose | Documentation |
-|-----------|---------|---------------|
-| **[LGTM Stack](lgtm-stack/)** | Complete observability with Loki (logs), Grafana (dashboards), Tempo (traces), and Mimir (metrics) | [README](lgtm-stack/README.md) |
-| **[ArgoCD](argocd/)** | GitOps continuous delivery for declarative Kubernetes deployments | [README](argocd/README.md) |
-| **[ArgoCD Agent](argocd-agent/)** | Multi-cluster hub-and-spoke architecture for centralized GitOps | [README](argocd-agent/README.md) |
-| **[cert-manager](cert-manager/)** | Automated TLS certificate provisioning and renewal with Let's Encrypt | [README](cert-manager/README.md) |
-| **[Ingress Controller](ingress-controller/)** | NGINX-based Layer 7 load balancing and HTTP/HTTPS routing | [README](ingress-controller/README.md) |
+| Component | Purpose |
+|-----------|---------|
+| **[LGTM Stack](lgtm-stack/)** | Complete observability with Loki (logs), Grafana (dashboards), Tempo (traces), and Mimir (metrics) |
+| **[ArgoCD](argocd/)** | GitOps continuous delivery for declarative Kubernetes deployments |
+| **[ArgoCD Agent](argocd-agent/)** | Multi-cluster hub-and-spoke architecture for centralized GitOps |
+| **[cert-manager](cert-manager/)** | Automated TLS certificate provisioning and renewal with Let's Encrypt |
+| **[Ingress Controller](ingress-controller/)** | NGINX-based Layer 7 load balancing and HTTP/HTTPS routing |
