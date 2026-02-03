@@ -374,15 +374,8 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
-          retention-days: 30          
+          retention-days: 30
 
-
-  verify-deployment:
-    name: Verify Deployment
-    runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-apply]
-    
-    steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -449,3 +442,4 @@ jobs:
             verification-report.html
             smoke-test-results.json
           retention-days: 30
+         
