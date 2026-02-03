@@ -134,6 +134,18 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ---
 
+## Configuration Variables
+
+The workflows support GitHub repository variables for flexible configuration:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CERT_MANAGER_VERSION` | Helm chart version | `v1.19.2` |
+| `CERT_MANAGER_NAMESPACE` | Kubernetes namespace | `cert-manager` |
+| `CERT_MANAGER_RELEASE_NAME` | Helm release name | `cert-manager` |
+
+See [GitHub Variables Configuration Guide](github-variables-configuration.md) for detailed setup instructions.
+
 ### Step 2: Workflow Overview
 
 Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:

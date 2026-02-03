@@ -30,6 +30,10 @@ env:
   TERRAFORM_VERSION: '1.6.0'
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'cert-manager/terraform'
+  # Configurable deployment settings (must match deployment workflow values)
+  CERT_MANAGER_VERSION: ${{ vars.CERT_MANAGER_VERSION || 'v1.19.2' }}
+  CERT_MANAGER_NAMESPACE: ${{ vars.CERT_MANAGER_NAMESPACE || 'cert-manager' }}
+  CERT_MANAGER_RELEASE_NAME: ${{ vars.CERT_MANAGER_RELEASE_NAME || 'cert-manager' }}
 
 jobs:
   # Single job: validate confirmation and execute destruction
@@ -163,9 +167,9 @@ jobs:
           cloud_provider       = "${{ inputs.cloud_provider }}"
           install_cert_manager = true
           create_issuer        = true
-          release_name         = "cert-manager"
-          cert_manager_version = "v1.19.2"
-          namespace            = "cert-manager"
+          release_name         = "${{ env.CERT_MANAGER_RELEASE_NAME }}"
+          cert_manager_version = "${{ env.CERT_MANAGER_VERSION }}"
+          namespace            = "${{ env.CERT_MANAGER_NAMESPACE }}"
           letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
           cert_issuer_name     = "letsencrypt-prod"
           cert_issuer_kind     = "ClusterIssuer"
@@ -186,7 +190,7 @@ jobs:
       - name: Verify cleanup
         run: |
           echo "📊 Checking remaining cert-manager resources..."
-          kubectl get namespace cert-manager 2>/dev/null || echo "✓ Namespace removed"
+          kubectl get namespace ${{ env.CERT_MANAGER_NAMESPACE }} 2>/dev/null || echo "✓ Namespace removed"
           kubectl get clusterissuer letsencrypt-prod 2>/dev/null || echo "✓ ClusterIssuer removed"
           kubectl get crd | grep cert-manager || echo "✓ CRDs removed"
           echo "✅ Destroy complete"

@@ -132,6 +132,18 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ---
 
+## Configuration Variables
+
+The workflows support GitHub repository variables for flexible configuration:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NGINX_INGRESS_VERSION` | Helm chart version | `2.4.2` |
+| `NGINX_INGRESS_NAMESPACE` | Kubernetes namespace | `ingress-nginx` |
+| `NGINX_INGRESS_RELEASE_NAME` | Helm release name | `nginx-monitoring` |
+
+See [GitHub Variables Configuration Guide](github-variables-configuration.md) for detailed setup instructions.
+
 ### Step 2: Workflow Overview
 
 Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:

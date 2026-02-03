@@ -12,6 +12,12 @@ This repository provides modular, infrastructure-as-code deployments for enterpr
 
 ---
 
+## 🔧 Configuration & Setup
+
+- **[GitHub Variables Configuration Guide](github-variables-configuration.md)** - Configure cert-manager and ingress-controller deployment settings using GitHub repository variables for flexible version and namespace management
+
+---
+
 ## Components
 
 ### [LGTM Observability Stack](../lgtm-stack/README.md)

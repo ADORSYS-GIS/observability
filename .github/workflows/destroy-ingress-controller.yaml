@@ -38,6 +38,10 @@ env:
   KUBECTL_VERSION: '1.28.0'
   KUBELOGIN_VERSION: '0.1.4'
   WORKING_DIR: 'ingress-controller/terraform'
+  # Configurable deployment settings (must match deployment workflow values)
+  NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
+  NGINX_INGRESS_NAMESPACE: ${{ vars.NGINX_INGRESS_NAMESPACE || 'ingress-nginx' }}
+  NGINX_INGRESS_RELEASE_NAME: ${{ vars.NGINX_INGRESS_RELEASE_NAME || 'nginx-monitoring' }}
 
 jobs:
   # Job 1: Safety validation
@@ -237,9 +241,9 @@ jobs:
           cat > terraform.tfvars <<EOF
           cloud_provider        = "${{ inputs.cloud_provider }}"
           install_nginx_ingress = true
-          release_name          = "nginx-monitoring"
-          nginx_ingress_version = "2.5.0"
-          namespace             = "ingress-nginx"
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
           ingress_class_name    = "nginx"
           replica_count         = 2
           EOF
@@ -258,8 +262,8 @@ jobs:
           echo "🔍 Verifying ingress-controller cleanup..."
           
           # Check namespace removal
-          if kubectl get namespace ingress-nginx 2>/dev/null; then
-            echo "⚠️ Warning: ingress-nginx namespace still exists"
+          if kubectl get namespace ${{ env.NGINX_INGRESS_NAMESPACE }} 2>/dev/null; then
+            echo "⚠️ Warning: ${{ env.NGINX_INGRESS_NAMESPACE }} namespace still exists"
           else
             echo "✅ Namespace removed"
           fi

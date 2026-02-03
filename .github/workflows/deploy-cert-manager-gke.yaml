@@ -42,6 +42,10 @@ env:
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'cert-manager/terraform'
   CLOUD_PROVIDER: 'gke'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  CERT_MANAGER_VERSION: ${{ vars.CERT_MANAGER_VERSION || 'v1.19.2' }}
+  CERT_MANAGER_NAMESPACE: ${{ vars.CERT_MANAGER_NAMESPACE || 'cert-manager' }}
+  CERT_MANAGER_RELEASE_NAME: ${{ vars.CERT_MANAGER_RELEASE_NAME || 'cert-manager' }}
 
 jobs:
   # Job 1: Generate and review Terraform infrastructure plan
@@ -129,10 +133,10 @@ jobs:
           echo "════════════════════════════════════════════════════════════════"
           
           # Check if Helm release exists
-          if helm list -n cert-manager 2>/dev/null | grep -q "cert-manager"; then
-            echo "✓ Found existing Helm release: cert-manager"
+          if helm list -n ${{ env.CERT_MANAGER_NAMESPACE }} 2>/dev/null | grep -q "${{ env.CERT_MANAGER_RELEASE_NAME }}"; then
+            echo "✓ Found existing Helm release: ${{ env.CERT_MANAGER_RELEASE_NAME }}"
             echo "Importing into Terraform state..."
-            terraform import 'helm_release.cert_manager[0]' cert-manager/cert-manager || echo "⚠ Already in state or import failed (will continue)"
+            terraform import 'helm_release.cert_manager[0]' ${{ env.CERT_MANAGER_NAMESPACE }}/${{ env.CERT_MANAGER_RELEASE_NAME }} || echo "⚠ Already in state or import failed (will continue)"
           else
             echo "ℹ No existing cert-manager Helm release found"
           fi
@@ -159,9 +163,9 @@ jobs:
           gke_ca_certificate   = "${{ steps.cluster_info.outputs.ca_cert }}"
           install_cert_manager = true
           create_issuer        = true
-          release_name         = "cert-manager"
-          cert_manager_version = "v1.19.2"
-          namespace            = "cert-manager"
+          release_name         = "${{ env.CERT_MANAGER_RELEASE_NAME }}"
+          cert_manager_version = "${{ env.CERT_MANAGER_VERSION }}"
+          namespace            = "${{ env.CERT_MANAGER_NAMESPACE }}"
           letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
           cert_issuer_name     = "letsencrypt-prod"
           cert_issuer_kind     = "ClusterIssuer"
@@ -278,9 +282,9 @@ jobs:
           gke_ca_certificate   = "${{ steps.cluster_info.outputs.ca_cert }}"
           install_cert_manager = true
           create_issuer        = true
-          release_name         = "cert-manager"
-          cert_manager_version = "v1.19.2"
-          namespace            = "cert-manager"
+          release_name         = "${{ env.CERT_MANAGER_RELEASE_NAME }}"
+          cert_manager_version = "${{ env.CERT_MANAGER_VERSION }}"
+          namespace            = "${{ env.CERT_MANAGER_NAMESPACE }}"
           letsencrypt_email    = "${{ secrets.LETSENCRYPT_EMAIL }}"
           cert_issuer_name     = "letsencrypt-prod"
           cert_issuer_kind     = "ClusterIssuer"
@@ -347,12 +351,12 @@ jobs:
           
           # Check namespace creation
           echo "Checking cert-manager namespace..."
-          kubectl get namespace cert-manager
+          kubectl get namespace ${{ env.CERT_MANAGER_NAMESPACE }}
           
           # Check pod status and wait for ready state
           echo "Checking cert-manager pods..."
-          kubectl get pods -n cert-manager
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+          kubectl get pods -n ${{ env.CERT_MANAGER_NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${{ env.CERT_MANAGER_RELEASE_NAME }} -n ${{ env.CERT_MANAGER_NAMESPACE }} --timeout=300s
           
           # Verify ClusterIssuer configuration
           echo "Checking ClusterIssuer..."

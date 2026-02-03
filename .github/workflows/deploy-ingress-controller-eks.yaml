@@ -42,6 +42,10 @@ env:
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'ingress-controller/terraform'
   CLOUD_PROVIDER: 'eks'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
+  NGINX_INGRESS_NAMESPACE: ${{ vars.NGINX_INGRESS_NAMESPACE || 'ingress-nginx' }}
+  NGINX_INGRESS_RELEASE_NAME: ${{ vars.NGINX_INGRESS_RELEASE_NAME || 'nginx-monitoring' }}
 
 jobs:
   # Job 1: Generate and review Terraform infrastructure plan
@@ -137,10 +141,10 @@ jobs:
           echo "════════════════════════════════════════════════════════════════"
           
           # Check if Helm release exists
-          if helm list -n ingress-nginx 2>/dev/null | grep -q "nginx"; then
-            echo "✓ Found existing Helm release in ingress-nginx namespace"
+          if helm list -n ${{ env.NGINX_INGRESS_NAMESPACE }} 2>/dev/null | grep -q "${{ env.NGINX_INGRESS_RELEASE_NAME }}"; then
+            echo "✓ Found existing Helm release: ${{ env.NGINX_INGRESS_RELEASE_NAME }} in ${{ env.NGINX_INGRESS_NAMESPACE }} namespace"
             echo "Importing into Terraform state..."
-            terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring || echo "⚠ Already in state or import failed (will continue)"
+            terraform import 'helm_release.nginx_ingress[0]' ${{ env.NGINX_INGRESS_NAMESPACE }}/${{ env.NGINX_INGRESS_RELEASE_NAME }} || echo "⚠ Already in state or import failed (will continue)"
           else
             echo "ℹ No existing ingress-controller Helm release found"
           fi
@@ -164,9 +168,9 @@ jobs:
           aws_region            = "${{ secrets.AWS_REGION }}"
           eks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
-          release_name          = "nginx-monitoring"
-          nginx_ingress_version = "2.4.2"
-          namespace             = "ingress-nginx"
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
           ingress_class_name    = "nginx"
           replica_count         = 2
           EOF
@@ -274,9 +278,9 @@ jobs:
           aws_region            = "${{ secrets.AWS_REGION }}"
           eks_cluster_name      = "${{ secrets.CLUSTER_NAME }}"
           install_nginx_ingress = true
-          release_name          = "nginx-monitoring"
-          nginx_ingress_version = "2.4.2"
-          namespace             = "ingress-nginx"
+          release_name          = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
+          namespace             = "${{ env.NGINX_INGRESS_NAMESPACE }}"
           ingress_class_name    = "nginx"
           replica_count         = 2
           EOF
@@ -336,12 +340,12 @@ jobs:
           
           # Confirm namespace exists
           echo "Checking ingress-nginx namespace..."
-          kubectl get namespace ingress-nginx
+          kubectl get namespace ${{ env.NGINX_INGRESS_NAMESPACE }}
           
           # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
-          kubectl get pods -n ingress-nginx
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-ingress -n ingress-nginx --timeout=300s
+          kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
           
           # Confirm IngressClass resource is created
           echo "Checking IngressClass..."
@@ -350,6 +354,6 @@ jobs:
           
           # Verify LoadBalancer service has external endpoint
           echo "Checking LoadBalancer service..."
-          kubectl get svc -n ingress-nginx
+          kubectl get svc -n ${{ env.NGINX_INGRESS_NAMESPACE }}
           
           echo "✅ ingress-controller deployment verified successfully"
