@@ -1,14 +1,27 @@
-# GitHub Actions Deployment for LGTM Stack
+# LGTM Stack GitHub Actions Deployment
 
-Automated deployment of the LGTM observability stack to Kubernetes clusters using GitHub Actions workflows with Terraform.
+Automated CI/CD deployment using GitHub Actions workflows with Terraform backend.
+
+Recommended for teams requiring automated deployments, PR-based reviews, and production approval gates. This method provides fully automated infrastructure provisioning with GitOps practices.
+
+**Official Documentation**: [Grafana Loki](https://grafana.com/docs/loki/latest/) | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | [Grafana](https://grafana.com/docs/grafana/latest/)
+
+---
 
 ## Overview
 
-This guide explains how to deploy the LGTM stack (Loki, Grafana, Tempo, Mimir, Prometheus) to any Kubernetes cluster using GitHub Actions. The workflows are cloud-agnostic and support:
+Automated deployment workflows for the LGTM observability stack supporting multiple cloud providers and Kubernetes platforms.
 
-- **GKE** (Google Kubernetes Engine)
-- **EKS** (Amazon Elastic Kubernetes Service)
-- **Generic Kubernetes** (minikube, kind, on-premise, etc.)
+**Supported Platforms:**
+- **GKE** (Google Kubernetes Engine) - Full automation with GCS state backend
+- **EKS** (Amazon Elastic Kubernetes Service) - Full automation with S3 state backend
+- **Generic Kubernetes** (minikube, kind, on-premise) - Kubernetes backend for state
+
+**Available Workflows:**
+- `deploy-lgtm-gke.yaml` - GKE-specific deployment with Workload Identity
+- `deploy-lgtm-eks.yaml` - EKS-specific deployment with IRSA
+- `deploy-lgtm-generic.yaml` - Generic Kubernetes deployment
+- `destroy-lgtm-stack.yaml` - Teardown workflow for all platforms
 
 ## Architecture
 
@@ -35,31 +48,38 @@ lgtm-stack/terraform/
     └── smoke-tests.sh            # Comprehensive component testing
 ```
 
+---
+
 ## Prerequisites
 
 ### 1. Kubernetes Cluster
 
-You need an existing Kubernetes cluster with:
-- `kubectl` access configured
-- Cluster admin permissions
-- Sufficient resources for LGTM stack
+An existing Kubernetes cluster is required:
 
-> [!IMPORTANT]
-> The workflows assume an **existing cluster**. They do not create clusters.
+| Requirement | Description |
+|-------------|-------------|
+| **Cluster Access** | kubectl configured with admin permissions |
+| **Resources** | Minimum: 8 vCPUs, 16GB RAM, 100GB storage |
+| **Ingress** | NGINX Ingress Controller (can be installed by workflow) |
+| **TLS** | cert-manager (can be installed by workflow) |
+
+> **Important:** Workflows deploy to existing clusters. Cluster provisioning must be done separately.
+
+---
 
 ### 2. GitHub Repository Secrets
 
-Configure the following secrets in your repository settings (`Settings → Secrets and variables → Actions`):
+Configure secrets in your repository: `Settings → Secrets and variables → Actions → New repository secret`
 
-#### Common Secrets (All Cloud Providers)
+#### Required Secrets (All Platforms)
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `KUBECONFIG` | Base64-encoded kubeconfig file | `cat ~/.kube/config \| base64 -w 0` |
-| `GRAFANA_ADMIN_PASSWORD` | Admin password for Grafana | `MySecurePassword123!` |
-| `LETSENCRYPT_EMAIL` | Email for Let's Encrypt notifications | `admin@example.com` |
-| `MONITORING_DOMAIN` | Base domain for monitoring services | `monitoring.example.com` |
-| `ENVIRONMENT` | Environment name | `production` |
+| Secret Name | Description | Example Value |
+|-------------|-------------|---------------|
+| `KUBECONFIG` | Base64-encoded kubeconfig | `cat ~/.kube/config \| base64 -w 0` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SecureP@ssw0rd123!` |
+| `LETSENCRYPT_EMAIL` | Let's Encrypt email | `ops@example.com` |
+| `MONITORING_DOMAIN` | Base domain for services | `monitoring.example.com` |
+| `ENVIRONMENT` | Deployment environment | `production` or `staging` |
 
 #### Cloud-Specific Secrets
 
@@ -402,19 +422,19 @@ aws iam get-role --role-name my-eks-cluster-lgtm-irsa
    bash .github/scripts/smoke-tests.sh
    ```
 
+---
+
 ## Related Documentation
 
-- [GKE Testing Workflow](TESTING_GKE_WORKFLOW.md)
-- [Workflow Guide](WORKFLOWS_GUIDE.md)
-- [Manual LGTM Deployment](manual-lgtm-deployment.md)
-- [Testing Monitoring Stack](testing-monitoring-stack-deployment.md)
-- [Troubleshooting LGTM Stack](troubleshooting-lgtm-stack.md)
-- [Adopting LGTM Stack](adopting-lgtm-stack.md)
+- [Terraform CLI Deployment](lgtm-stack-terraform-deployment.md) - Local Terraform execution
+- [Manual Docker Compose Deployment](manual-lgtm-deployment.md) - Local development deployment
+- [Terraform State Management](terraform-state-management.md) - Remote state configuration
+- [Troubleshooting Guide](troubleshooting-lgtm-stack.md) - Common issues and resolutions
+- [Adopting Existing Installation](adopting-lgtm-stack.md) - Migration guide
+- [Testing & Verification](testing-monitoring-stack-deployment.md) - Validation procedures
+- [Workflows Guide](workflows-guide.md) - GitHub Actions workflow reference
 
-## Support
+---
 
-For issues or questions:
-1. Check workflow logs in GitHub Actions tab
-2. Review artifact reports (verification-report.html, import-report.json)
-3. Consult troubleshooting guides
-4. Check component-specific documentation
+**Official Documentation**: [Grafana Loki](https://grafana.com/docs/loki/latest/) | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | [Grafana](https://grafana.com/docs/grafana/latest/)
+

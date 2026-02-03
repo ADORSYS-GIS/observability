@@ -2,31 +2,48 @@
 
 Comprehensive observability platform providing correlated metrics, logs, and traces for complete system visibility.
 
-## Components
+**Official Documentation**: [Grafana Loki](https://grafana.com/docs/loki/latest/) | [Grafana Mimir](https://grafana.com/docs/mimir/latest/) | [Grafana Tempo](https://grafana.com/docs/tempo/latest/) | [Grafana](https://grafana.com/docs/grafana/latest/)  
+**GitHub Repository**: [grafana/loki](https://github.com/grafana/loki) | [grafana/mimir](https://github.com/grafana/mimir) | [grafana/tempo](https://github.com/grafana/tempo)
 
-| Component | Purpose | Official Docs |
-|-----------|---------|---------------|
-| **Grafana** | Visualization and analytics platform | [docs.grafana.com](https://grafana.com/docs/grafana/latest/) |
-| **Loki** | Horizontally-scalable log aggregation | [grafana.com/docs/loki](https://grafana.com/docs/loki/latest/) |
-| **Tempo** | High-volume distributed tracing backend | [grafana.com/docs/tempo](https://grafana.com/docs/tempo/latest/) |
-| **Mimir** | Long-term Prometheus metrics storage | [grafana.com/docs/mimir](https://grafana.com/docs/mimir/latest/) |
-| **Alloy** | OpenTelemetry collector for telemetry pipeline | [grafana.com/docs/alloy](https://grafana.com/docs/alloy/latest/) |
+## Features
+
+- **Unified Observability**: Integrated logs (Loki), metrics (Mimir), and traces (Tempo) with correlation
+- **Scalable Storage**: Cloud-native storage backends (GCS, S3, Azure Blob) or PersistentVolumes
+- **Multi-Cloud Support**: Deploy on GKE, EKS, AKS, or any Kubernetes cluster
+- **Production Ready**: High availability, auto-scaling, and long-term data retention
+- **Grafana Integration**: Pre-configured dashboards and datasources for immediate insights
 
 ## Deployment
 
 ### Automated (Terraform)
-Recommended for production environments.
+Recommended approach with infrastructure-as-code management.
 
-See [Terraform deployment guide](../docs/kubernetes-observability.md)
+See [Terraform deployment guide](../docs/lgtm-stack-terraform-deployment.md)
 
-### Manual (Helm)
-For granular component control.
+### Manual (Docker Compose)
+Local development and testing with Docker containers.
 
 See [Manual deployment guide](../docs/manual-lgtm-deployment.md)
 
-## Configuration & Operations
+### GitHub Actions (CI/CD)
+Fully automated deployment with GitHub Actions workflows.
 
-- **Alloy Configuration**: [Alloy configuration guide](../docs/alloy-config.md)
+See [GitHub Actions deployment guide](../docs/lgtm-stack-github-actions.md)
+
+## Operations
+
 - **Testing & Verification**: [Testing guide](../docs/testing-monitoring-stack-deployment.md)
 - **Adopting Existing Stack**: [Adoption guide](../docs/adopting-lgtm-stack.md)
 - **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-lgtm-stack.md)
+- **Alloy Configuration**: [Alloy configuration guide](../docs/alloy-config.md)
+
+## Components
+
+| Component | Purpose | Storage Backend |
+|-----------|---------|----------------|
+| **Grafana** | Visualization and analytics platform | - |
+| **Loki** | Horizontally-scalable log aggregation | Cloud storage or PV |
+| **Tempo** | High-volume distributed tracing backend | Cloud storage or PV |
+| **Mimir** | Long-term Prometheus metrics storage | Cloud storage or PV |
+| **Prometheus** | Metrics collection and scraping | Remote write to Mimir |
+| **Alloy** | OpenTelemetry collector for telemetry pipeline | - |

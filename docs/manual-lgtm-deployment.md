@@ -11,7 +11,7 @@ This deployment runs the LGTM stack in Docker containers with minimal external d
 - Learning the stack architecture
 - NetBird network integration scenarios
 
-**Not recommended for production use.** For production, use the [Terraform Kubernetes deployment](kubernetes-observability.md).
+**Not recommended for production use.** For production, use the [Terraform Kubernetes deployment](lgtm-stack-terraform-deployment.md).
 
 ## Prerequisites
 
@@ -286,7 +286,7 @@ global:
 - **Single node**: Cannot scale horizontally
 - **No authentication**: Services exposed without access control
 
-For production deployments, use the [Terraform Kubernetes deployment](kubernetes-observability.md).
+For production deployments, use the [Terraform Kubernetes deployment](lgtm-stack-terraform-deployment.md).
 
 ## Next Steps
 

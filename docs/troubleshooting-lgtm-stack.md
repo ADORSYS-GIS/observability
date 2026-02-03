@@ -92,7 +92,7 @@ install_cert_manager = false
 install_nginx_ingress = false
 ```
 
-See: [Shared Infrastructure Guide](kubernetes-observability.md#modular-components--shared-infrastructure)
+See: [Shared Infrastructure Guide](lgtm-stack-terraform-deployment.md#modular-components)
 
 ---
 
