@@ -62,7 +62,7 @@ data "google_client_config" "default" {
 # Modular Cloud Resources
 module "cloud_gke" {
   count  = var.cloud_provider == "gke" ? 1 : 0
-  source = "./modules/cloud-gke"
+  source = "./modules/storage-gke"
 
   project_id               = var.project_id
   region                   = var.region
@@ -76,7 +76,7 @@ module "cloud_gke" {
 
 module "eks_storage" {
   count  = var.cloud_provider == "eks" ? 1 : 0
-  source = "./modules/eks-storage-buckets"
+  source = "./modules/storage-eks"
 
   bucket_prefix            = var.cluster_name
   cluster_name             = var.cluster_name
@@ -89,7 +89,7 @@ module "eks_storage" {
 
 module "cloud_generic" {
   count  = var.cloud_provider == "generic" ? 1 : 0
-  source = "./modules/cloud-generic"
+  source = "./modules/storage-local"
 
   k8s_namespace = var.namespace
 }
