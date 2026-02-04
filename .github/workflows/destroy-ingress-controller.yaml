@@ -200,6 +200,26 @@ jobs:
           kubelogin convert-kubeconfig -l azurecli
 
       # ============================================
+      # Cluster Connection Info
+      # ============================================
+      
+      # Extract cluster connection details for Terraform provider configuration
+      # Required for GKE to allow Terraform to connect to the cluster during destroy
+      - name: Get Cluster Connection Info
+        id: cluster_info
+        run: |
+          if [ "${{ inputs.cloud_provider }}" == "gke" ]; then
+            ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --region=${{ secrets.CLUSTER_LOCATION }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(endpoint)')
+            CA_CERT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --region=${{ secrets.CLUSTER_LOCATION }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(masterAuth.clusterCaCertificate)')
+            echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
+            echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
+          else
+            # For EKS and AKS, kubeconfig is sufficient
+            echo "endpoint=" >> $GITHUB_OUTPUT
+            echo "ca_cert=" >> $GITHUB_OUTPUT
+          fi
+
+      # ============================================
       # Terraform Destruction Process
       # ============================================
 
@@ -247,6 +267,20 @@ jobs:
           ingress_class_name    = "nginx"
           replica_count         = 2
           EOF
+          
+          # Add cloud-specific configuration
+          if [ "${{ inputs.cloud_provider }}" == "gke" ]; then
+            cat >> terraform.tfvars <<EOF
+          project_id           = "${{ secrets.GCP_PROJECT_ID }}"
+          region               = "${{ secrets.CLUSTER_LOCATION }}"
+          gke_endpoint         = "${{ steps.cluster_info.outputs.endpoint }}"
+          gke_ca_certificate   = "${{ steps.cluster_info.outputs.ca_cert }}"
+          EOF
+          elif [ "${{ inputs.cloud_provider }}" == "eks" ]; then
+            cat >> terraform.tfvars <<EOF
+          aws_region           = "${{ secrets.AWS_REGION }}"
+          EOF
+          fi
 
       # Execute Terraform destroy to remove all ingress-controller resources
       # Uses remote state to identify and destroy resources
