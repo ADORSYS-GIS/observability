@@ -80,7 +80,7 @@ jobs:
           echo "Waiting for NetBird connection to establish..."
           sleep 15
           
-          echo "======================================"
+          echo "===================  ==================="
           echo "NetBird Diagnostics"
           echo "======================================"
           
