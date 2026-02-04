@@ -1,6 +1,18 @@
 name: Deploy ArgoCD Agent (Generic)
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-generic.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-generic.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -11,15 +23,6 @@ on:
           - plan
           - apply
         default: 'plan'
-      environment:
-        description: 'Target Environment'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - staging
-          - prod
 
 permissions:
   contents: read
@@ -36,14 +39,24 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       working_dir: ${{ steps.set-env.outputs.working_dir }}
+      terraform_action: ${{ steps.set-env.outputs.terraform_action }}
     steps:
       - uses: actions/checkout@v4
       - name: Set Environment Variables
         id: set-env
         run: |
-          ENV="${{ inputs.environment || 'dev' }}"
-          echo "environment=$ENV" >> $GITHUB_OUTPUT
-          echo "working_dir=terraform/environments/$ENV" >> $GITHUB_OUTPUT
+          # Always use prod environment
+          echo "environment=prod" >> $GITHUB_OUTPUT
+          echo "working_dir=argocd-agent/terraform/environments/prod" >> $GITHUB_OUTPUT
+          
+          # Determine terraform action based on trigger
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "terraform_action=apply" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "terraform_action=${{ inputs.terraform_action }}" >> $GITHUB_OUTPUT
+          else
+            echo "terraform_action=plan" >> $GITHUB_OUTPUT
+          fi
 
   terraform-plan:
     name: Terraform Plan
@@ -154,9 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-plan]
     environment: ${{ needs.setup-environment.outputs.environment }}
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
+    if: needs.setup-environment.outputs.terraform_action == 'apply'
     
     steps:
       - uses: actions/checkout@v4
