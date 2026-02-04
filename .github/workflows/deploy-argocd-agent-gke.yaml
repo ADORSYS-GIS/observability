@@ -52,7 +52,7 @@ jobs:
           echo "working_dir=argocd-agent/terraform/environments/prod" >> $GITHUB_OUTPUT
           
           # Determine terraform action based on trigger
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/pipeline/Argocd") ]]; then
             echo "terraform_action=apply" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "terraform_action=${{ inputs.terraform_action }}" >> $GITHUB_OUTPUT
