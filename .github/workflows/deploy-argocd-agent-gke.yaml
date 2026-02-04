@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - pipeline/Argocd  # TEMPORARY: Remove after testing
     paths:
       - 'argocd-agent/terraform/**'
       - '.github/workflows/deploy-argocd-agent-gke.yaml'
