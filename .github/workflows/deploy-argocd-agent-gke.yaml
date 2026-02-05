@@ -52,13 +52,25 @@ jobs:
           echo "environment=prod" >> $GITHUB_OUTPUT
           echo "working_dir=argocd-agent/terraform/environments/prod" >> $GITHUB_OUTPUT
           
-          # Determine terraform action based on trigger
-          if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/pipeline/Argocd") ]]; then
-            echo "terraform_action=apply" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # Determine terraform action based on trigger and branch
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger: use user selection
             echo "terraform_action=${{ inputs.terraform_action }}" >> $GITHUB_OUTPUT
+            echo "ℹ️ Manual trigger: Running ${{ inputs.terraform_action }}"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              # Push to main branch: auto-apply
+              echo "terraform_action=apply" >> $GITHUB_OUTPUT
+              echo "✅ Push to main branch: Running apply"
+            else
+              # Push to feature branch (e.g., pipeline/Argocd): plan only
+              echo "terraform_action=plan" >> $GITHUB_OUTPUT
+              echo "📋 Push to feature branch: Running plan only"
+            fi
           else
+            # Default: plan only
             echo "terraform_action=plan" >> $GITHUB_OUTPUT
+            echo "📋 Default: Running plan only"
           fi
 
   terraform-plan:
