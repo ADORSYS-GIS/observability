@@ -390,7 +390,7 @@ variable "argocd_install_retry_delay" {
 variable "principal_loadbalancer_wait_timeout" {
   description = "Maximum wait time for Principal LoadBalancer IP allocation (seconds). GCP LoadBalancers typically take 5-10 minutes to provision on first deployment."
   type        = number
-  default     = 600  # Increased to 10 minutes to accommodate GCP LoadBalancer provisioning time
+  default     = 600 # Increased to 10 minutes to accommodate GCP LoadBalancer provisioning time
 
   validation {
     condition     = var.principal_loadbalancer_wait_timeout >= 60 && var.principal_loadbalancer_wait_timeout <= 600
