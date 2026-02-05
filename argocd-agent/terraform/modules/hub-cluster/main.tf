@@ -306,7 +306,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     annotations = {
       # DO NOT add cert-manager annotation here - Certificate is created separately above
       # to prevent NGINX Inc from rejecting the ingress due to hostname conflicts during ACME validation
-      "nginx.ingress.kubernetes.io/ssl-redirect"     = "false"
+      "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
       "nginx.ingress.kubernetes.io/backend-protocol" = "HTTP"
     }
   }
