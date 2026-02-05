@@ -1,4 +1,4 @@
-# Kubernetes Observability & Operations
+# Observability & Operations
 
 Production-ready infrastructure-as-code for enterprise observability and operational tooling on Kubernetes. Modular components deployable independently or as a complete stack.
 
