@@ -8,12 +8,13 @@ on:
     paths:
       - 'argocd-agent/terraform/**'
       - '.github/workflows/deploy-argocd-agent-gke.yaml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-gke.yaml'
+  # pull_request disabled to avoid double-triggers when pushing to PR branches
+  # pull_request:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'argocd-agent/terraform/**'
+  #     - '.github/workflows/deploy-argocd-agent-gke.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -699,9 +700,57 @@ jobs:
           echo ""
           echo "✓ Import check complete. Proceeding with Terraform apply..."
 
-      - name: Terraform Apply
+      - name: Terraform Apply (Stage 1 - Hub Infrastructure)
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform apply -auto-approve
+        continue-on-error: true
+        id: apply_stage1
+
+      - name: Wait for LoadBalancer IP Assignment
+        if: steps.apply_stage1.outcome == 'failure'
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Stage 1 failed - LoadBalancer IP likely not ready"
+          echo "Waiting for LoadBalancer to provision..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          NAMESPACE="argocd"
+          MAX_WAIT=600  # 10 minutes
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "⏳ Checking LoadBalancer status... (${ELAPSED}s/${MAX_WAIT}s)"
+            
+            # Get LoadBalancer IP
+            LB_IP=$(kubectl get svc argocd-agent-principal -n $NAMESPACE \
+              --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            
+            if [ -n "$LB_IP" ] && [ "$LB_IP" != "null" ]; then
+              echo "✓ LoadBalancer IP assigned: $LB_IP"
+              echo "LoadBalancer is ready - proceeding with Stage 2..."
+              break
+            fi
+            
+            echo "  LoadBalancer IP not yet assigned, waiting..."
+            sleep 30
+            ELAPSED=$((ELAPSED + 30))
+          done
+          
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "✗ ERROR: Timeout waiting for LoadBalancer IP after ${MAX_WAIT}s"
+            echo "Check GCP console for LoadBalancer provisioning issues"
+            exit 1
+          fi
+
+      - name: Terraform Apply (Stage 2 - Complete Deployment)
+        if: steps.apply_stage1.outcome == 'failure'
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Running Stage 2 - Completing deployment with LoadBalancer IP"
+          echo "════════════════════════════════════════════════════════════════"
+          terraform apply -auto-approve
 
   verify-deployment:
     name: Verify Deployment
