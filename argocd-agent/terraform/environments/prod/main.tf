@@ -21,43 +21,46 @@ terraform {
 # =============================================================================
 # INFRASTRUCTURE MODULES (Cert-Manager, Ingress)
 # =============================================================================
+# NOTE: cert-manager and nginx-ingress are already deployed in the cluster.
+# These modules are commented out to avoid Terraform provider configuration conflicts.
+# Uncomment and configure if you need to install these from scratch in a new cluster.
 
-module "cert_manager" {
-  count  = var.deploy_hub && var.install_cert_manager ? 1 : 0
-  source = "../../../../cert-manager/terraform"
-
-  providers = {
-    kubernetes = kubernetes
-    helm       = helm.hub
-  }
-
-  install_cert_manager = true
-  create_issuer        = false
-  cert_manager_version = var.cert_manager_version
-  release_name         = var.cert_manager_release_name
-  namespace            = var.cert_manager_namespace
-  letsencrypt_email    = var.letsencrypt_email
-  cert_issuer_name     = var.cert_issuer_name
-  cert_issuer_kind     = var.cert_issuer_kind
-  issuer_namespace     = var.hub_namespace
-  ingress_class_name   = var.ingress_class_name
-}
-
-module "ingress_nginx" {
-  count  = var.deploy_hub && var.install_nginx_ingress ? 1 : 0
-  source = "../../../../ingress-controller/terraform"
-
-  providers = {
-    kubernetes = kubernetes
-    helm       = helm.hub
-  }
-
-  install_nginx_ingress = true
-  nginx_ingress_version = var.nginx_ingress_version
-  release_name          = var.nginx_ingress_release_name
-  namespace             = var.nginx_ingress_namespace
-  ingress_class_name    = var.ingress_class_name
-}
+# module "cert_manager" {
+#   count  = var.deploy_hub && var.install_cert_manager ? 1 : 0
+#   source = "../../../../cert-manager/terraform"
+#
+#   providers = {
+#     kubernetes = kubernetes
+#     helm       = helm.hub
+#   }
+#
+#   install_cert_manager = true
+#   create_issuer        = false
+#   cert_manager_version = var.cert_manager_version
+#   release_name         = var.cert_manager_release_name
+#   namespace            = var.cert_manager_namespace
+#   letsencrypt_email    = var.letsencrypt_email
+#   cert_issuer_name     = var.cert_issuer_name
+#   cert_issuer_kind     = var.cert_issuer_kind
+#   issuer_namespace     = var.hub_namespace
+#   ingress_class_name   = var.ingress_class_name
+# }
+#
+# module "ingress_nginx" {
+#   count  = var.deploy_hub && var.install_nginx_ingress ? 1 : 0
+#   source = "../../../../ingress-controller/terraform"
+#
+#   providers = {
+#     kubernetes = kubernetes
+#     helm       = helm.hub
+#   }
+#
+#   install_nginx_ingress = true
+#   nginx_ingress_version = var.nginx_ingress_version
+#   release_name          = var.nginx_ingress_release_name
+#   namespace             = var.nginx_ingress_namespace
+#   ingress_class_name    = var.ingress_class_name
+# }
 
 # =============================================================================
 # HUB CLUSTER MODULE
@@ -124,10 +127,11 @@ module "hub_cluster" {
   default_admin_password                   = var.default_admin_password
   default_admin_password_temporary         = var.default_admin_password_temporary
 
-  depends_on = [
-    module.cert_manager,
-    module.ingress_nginx
-  ]
+  # NOTE: Commented out because cert_manager and ingress_nginx modules are not being used
+  # depends_on = [
+  #   module.cert_manager,
+  #   module.ingress_nginx
+  # ]
 }
 
 # =============================================================================
@@ -157,7 +161,7 @@ locals {
 }
 
 resource "null_resource" "letsencrypt_issuer" {
-  count = var.deploy_hub && var.install_cert_manager ? 1 : 0
+  count = var.deploy_hub ? 1 : 0
 
   triggers = {
     cert_issuer_kind = var.cert_issuer_kind
