@@ -702,12 +702,37 @@ jobs:
 
       - name: Terraform Apply (Stage 1 - Hub Infrastructure)
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        run: terraform apply -auto-approve
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Starting Stage 1 - Hub Infrastructure Deployment"
+          echo "════════════════════════════════════════════════════════════════"
+          terraform apply -auto-approve 2>&1 | tee /tmp/terraform-stage1.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "Terraform apply exit code: $EXIT_CODE"
+          exit $EXIT_CODE
         continue-on-error: true
         id: apply_stage1
 
-      - name: Wait for LoadBalancer IP Assignment
+      - name: Check Failure Reason
         if: steps.apply_stage1.outcome == 'failure'
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Stage 1 Apply Failed - Analyzing Failure Reason"
+          echo "════════════════════════════════════════════════════════════════"
+          
+          if grep -q "principal_address.*pending" /tmp/terraform-stage1.log; then
+            echo "✓ Failure is due to pending LoadBalancer IP (expected)"
+            echo "FAILURE_TYPE=loadbalancer" >> $GITHUB_ENV
+          else
+            echo "✗ Failure is NOT due to LoadBalancer - this is an unexpected error"
+            echo "Terraform errors:"
+            grep "Error:" /tmp/terraform-stage1.log || echo "Could not extract error details"
+            echo "FAILURE_TYPE=other" >> $GITHUB_ENV
+            exit 1
+          fi
+
+      - name: Wait for LoadBalancer IP Assignment
+        if: steps.apply_stage1.outcome == 'failure' && env.FAILURE_TYPE == 'loadbalancer'
         run: |
           echo "════════════════════════════════════════════════════════════════"
           echo "Stage 1 failed - LoadBalancer IP likely not ready"
@@ -744,7 +769,7 @@ jobs:
           fi
 
       - name: Terraform Apply (Stage 2 - Complete Deployment)
-        if: steps.apply_stage1.outcome == 'failure'
+        if: steps.apply_stage1.outcome == 'failure' && env.FAILURE_TYPE == 'loadbalancer'
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: |
           echo "════════════════════════════════════════════════════════════════"
