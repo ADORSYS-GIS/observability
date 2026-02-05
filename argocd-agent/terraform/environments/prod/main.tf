@@ -141,6 +141,16 @@ module "hub_cluster" {
 locals {
   issuer_namespace_local = var.cert_issuer_kind == "Issuer" ? var.hub_namespace : ""
 
+  # Check if principal LoadBalancer IP is ready
+  # This allows spoke deployment to be skipped on first run when LoadBalancer is still provisioning
+  principal_ready = var.deploy_hub ? (
+    try(module.hub_cluster[0].principal_address, "pending") != "pending" &&
+    try(module.hub_cluster[0].principal_address, "") != ""
+  ) : true # If not deploying hub, assume external principal is ready
+
+  # Only deploy spokes if principal is ready (prevents plan failures on fresh deployments)
+  deploy_spokes_conditional = var.deploy_spokes && local.principal_ready
+
   issuer_manifest_local = join("\n", [
     "apiVersion: cert-manager.io/v1",
     "kind: ${var.cert_issuer_kind}",
@@ -194,9 +204,13 @@ EOF
 # =============================================================================
 # SPOKE CLUSTER MODULE
 # =============================================================================
+# Note: Spoke deployment is conditional on Principal LoadBalancer IP being ready
+# On fresh deployments, run terraform apply twice:
+#   1st run: Deploys hub cluster and waits for LoadBalancer (spokes skipped if not ready)
+#   2nd run: Deploys spoke clusters once LoadBalancer IP is assigned
 
 module "spoke_cluster" {
-  count  = var.deploy_spokes ? 1 : 0
+  count  = local.deploy_spokes_conditional ? 1 : 0
   source = "../../modules/spoke-cluster"
 
   providers = {

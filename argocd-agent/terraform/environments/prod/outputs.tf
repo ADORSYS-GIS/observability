@@ -61,9 +61,9 @@ output "deployed_agents" {
 # DEPLOYMENT SUMMARY
 # =============================================================================
 
-output "deployment_summary" {
+output \"deployment_summary\" {
   description = "Deployment summary"
-  value = var.deploy_hub && var.deploy_spokes ? format(
+  value = var.deploy_hub && local.deploy_spokes_conditional ? format(
     "✓ Hub cluster: %s | Principal: %s:%s | Agents: %s",
     var.hub_cluster_context,
     module.hub_cluster[0].principal_address,
@@ -80,4 +80,43 @@ output "deployment_summary" {
     var.principal_address,
     var.principal_port
   )
+}
+
+# =============================================================================
+# DEPLOYMENT STATUS (Two-Stage Deployment Support)
+# =============================================================================
+
+output "deployment_status" {
+  description = "Overall deployment status and next steps"
+  value = !local.principal_ready && var.deploy_spokes ? format(
+    "\n⚠️  NOTICE: Spoke clusters were SKIPPED because Principal LoadBalancer IP is not ready yet.\n\n" +
+    "This is normal for fresh deployments. The LoadBalancer is still provisioning.\n\n" +
+    "Next Steps:\n" +
+    "1. Wait 5-10 minutes for GKE to assign the LoadBalancer IP\n" +
+    "2. Check status: kubectl get svc argocd-agent-principal -n %s --context %s\n" +
+    "3. Once EXTERNAL-IP shows (not <pending>), re-run this workflow\n" +
+    "4. The second run will deploy the spoke clusters automatically\n",
+    var.hub_namespace,
+    var.hub_cluster_context
+  ) : "✅ Deployment complete! All components deployed successfully."
+}
+
+output "hub_deployed" {
+  description = "Whether hub cluster was deployed"
+  value       = var.deploy_hub
+}
+
+output "spokes_deployed" {
+  description = "Whether spoke clusters were deployed"
+  value       = local.deploy_spokes_conditional
+}
+
+output "spokes_requested" {
+  description = "Whether spoke deployment was requested"
+  value       = var.deploy_spokes
+}
+
+output "spokes_skipped_reason" {
+  description = "Reason spokes were skipped (if applicable)"
+  value       = var.deploy_spokes && !local.deploy_spokes_conditional ? "Principal LoadBalancer IP not ready (still provisioning)" : null
 }
