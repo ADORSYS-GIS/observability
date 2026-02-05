@@ -700,82 +700,9 @@ jobs:
           echo ""
           echo "✓ Import check complete. Proceeding with Terraform apply..."
 
-      - name: Terraform Apply (Stage 1 - Hub Infrastructure)
+      - name: Terraform Apply
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Starting Stage 1 - Hub Infrastructure Deployment"
-          echo "════════════════════════════════════════════════════════════════"
-          terraform apply -auto-approve 2>&1 | tee /tmp/terraform-stage1.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "Terraform apply exit code: $EXIT_CODE"
-          exit $EXIT_CODE
-        continue-on-error: true
-        id: apply_stage1
-
-      - name: Check Failure Reason
-        if: steps.apply_stage1.outcome == 'failure'
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Stage 1 Apply Failed - Analyzing Failure Reason"
-          echo "════════════════════════════════════════════════════════════════"
-          
-          if grep -q "principal_address.*pending" /tmp/terraform-stage1.log; then
-            echo "✓ Failure is due to pending LoadBalancer IP (expected)"
-            echo "FAILURE_TYPE=loadbalancer" >> $GITHUB_ENV
-          else
-            echo "✗ Failure is NOT due to LoadBalancer - this is an unexpected error"
-            echo "Terraform errors:"
-            grep "Error:" /tmp/terraform-stage1.log || echo "Could not extract error details"
-            echo "FAILURE_TYPE=other" >> $GITHUB_ENV
-            exit 1
-          fi
-
-      - name: Wait for LoadBalancer IP Assignment
-        if: steps.apply_stage1.outcome == 'failure' && env.FAILURE_TYPE == 'loadbalancer'
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Stage 1 failed - LoadBalancer IP likely not ready"
-          echo "Waiting for LoadBalancer to provision..."
-          echo "════════════════════════════════════════════════════════════════"
-          
-          NAMESPACE="argocd"
-          MAX_WAIT=600  # 10 minutes
-          ELAPSED=0
-          
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            echo "⏳ Checking LoadBalancer status... (${ELAPSED}s/${MAX_WAIT}s)"
-            
-            # Get LoadBalancer IP
-            LB_IP=$(kubectl get svc argocd-agent-principal -n $NAMESPACE \
-              --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
-              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-            
-            if [ -n "$LB_IP" ] && [ "$LB_IP" != "null" ]; then
-              echo "✓ LoadBalancer IP assigned: $LB_IP"
-              echo "LoadBalancer is ready - proceeding with Stage 2..."
-              break
-            fi
-            
-            echo "  LoadBalancer IP not yet assigned, waiting..."
-            sleep 30
-            ELAPSED=$((ELAPSED + 30))
-          done
-          
-          if [ $ELAPSED -ge $MAX_WAIT ]; then
-            echo "✗ ERROR: Timeout waiting for LoadBalancer IP after ${MAX_WAIT}s"
-            echo "Check GCP console for LoadBalancer provisioning issues"
-            exit 1
-          fi
-
-      - name: Terraform Apply (Stage 2 - Complete Deployment)
-        if: steps.apply_stage1.outcome == 'failure' && env.FAILURE_TYPE == 'loadbalancer'
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Running Stage 2 - Completing deployment with LoadBalancer IP"
-          echo "════════════════════════════════════════════════════════════════"
-          terraform apply -auto-approve
+        run: terraform apply -auto-approve
 
   verify-deployment:
     name: Verify Deployment

@@ -551,14 +551,6 @@ resource "null_resource" "spoke_agent_installation" {
 resource "null_resource" "spoke_agent_configuration" {
   for_each = var.clusters
 
-  # CRITICAL: Prevent configuration if LoadBalancer IP is not ready
-  lifecycle {
-    precondition {
-      condition     = var.principal_address != "pending" && var.principal_address != ""
-      error_message = "Principal LoadBalancer IP is not available yet. The LoadBalancer is still provisioning (can take 5-10 minutes). Run 'terraform apply' again once the LoadBalancer has an external IP. Check status: kubectl get svc argocd-agent-principal -n argocd --context ${var.hub_cluster_context}"
-    }
-  }
-
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
