@@ -1,18 +1,19 @@
 name: Deploy ArgoCD Agent (EKS)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-eks.yaml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-eks.yaml'
+  # Automatic triggers disabled - only manual workflow_dispatch allowed
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'argocd-agent/terraform/**'
+  #     - '.github/workflows/deploy-argocd-agent-eks.yaml'
+  # pull_request:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'argocd-agent/terraform/**'
+  #     - '.github/workflows/deploy-argocd-agent-eks.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:

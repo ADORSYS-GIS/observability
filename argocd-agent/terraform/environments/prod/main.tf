@@ -22,8 +22,8 @@ terraform {
 # INFRASTRUCTURE MODULES (Cert-Manager, Ingress)
 # =============================================================================
 # NOTE: cert-manager and nginx-ingress are already deployed in the cluster.
-# These modules are commented out to avoid Terraform provider configuration conflicts.
-# Uncomment and configure if you need to install these from scratch in a new cluster.
+# These modules are commented out to avoid conflicts with existing installations.
+# If deploying to a fresh cluster, uncomment these modules and set install flags to true.
 
 # module "cert_manager" {
 #   count  = var.deploy_hub && var.install_cert_manager ? 1 : 0
@@ -127,11 +127,7 @@ module "hub_cluster" {
   default_admin_password                   = var.default_admin_password
   default_admin_password_temporary         = var.default_admin_password_temporary
 
-  # NOTE: Commented out because cert_manager and ingress_nginx modules are not being used
-  # depends_on = [
-  #   module.cert_manager,
-  #   module.ingress_nginx
-  # ]
+  # depends_on removed since cert_manager and ingress_nginx modules are commented out
 }
 
 # =============================================================================
@@ -140,16 +136,6 @@ module "hub_cluster" {
 
 locals {
   issuer_namespace_local = var.cert_issuer_kind == "Issuer" ? var.hub_namespace : ""
-
-  # Check if principal LoadBalancer IP is ready
-  # This allows spoke deployment to be skipped on first run when LoadBalancer is still provisioning
-  principal_ready = var.deploy_hub ? (
-    try(module.hub_cluster[0].principal_address, "pending") != "pending" &&
-    try(module.hub_cluster[0].principal_address, "") != ""
-  ) : true # If not deploying hub, assume external principal is ready
-
-  # Only deploy spokes if principal is ready (prevents plan failures on fresh deployments)
-  deploy_spokes_conditional = var.deploy_spokes && local.principal_ready
 
   issuer_manifest_local = join("\n", [
     "apiVersion: cert-manager.io/v1",
@@ -171,7 +157,7 @@ locals {
 }
 
 resource "null_resource" "letsencrypt_issuer" {
-  count = var.deploy_hub ? 1 : 0
+  count = var.deploy_hub && var.install_cert_manager ? 1 : 0
 
   triggers = {
     cert_issuer_kind = var.cert_issuer_kind
@@ -204,13 +190,9 @@ EOF
 # =============================================================================
 # SPOKE CLUSTER MODULE
 # =============================================================================
-# Note: Spoke deployment is conditional on Principal LoadBalancer IP being ready
-# On fresh deployments, run terraform apply twice:
-#   1st run: Deploys hub cluster and waits for LoadBalancer (spokes skipped if not ready)
-#   2nd run: Deploys spoke clusters once LoadBalancer IP is assigned
 
 module "spoke_cluster" {
-  count  = local.deploy_spokes_conditional ? 1 : 0
+  count  = var.deploy_spokes ? 1 : 0
   source = "../../modules/spoke-cluster"
 
   providers = {

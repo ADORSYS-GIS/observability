@@ -1,18 +1,19 @@
 name: Deploy ArgoCD Agent (Generic)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-generic.yaml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-agent-generic.yaml'
+  # Automatic triggers disabled - only manual workflow_dispatch allowed
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'argocd-agent/terraform/**'
+  #     - '.github/workflows/deploy-argocd-agent-generic.yaml'
+  # pull_request:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'argocd-agent/terraform/**'
+  #     - '.github/workflows/deploy-argocd-agent-generic.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:
