@@ -61,7 +61,7 @@ output "deployed_agents" {
 # DEPLOYMENT SUMMARY
 # =============================================================================
 
-output \"deployment_summary\" {
+output "deployment_summary" {
   description = "Deployment summary"
   value = var.deploy_hub && local.deploy_spokes_conditional ? format(
     "✓ Hub cluster: %s | Principal: %s:%s | Agents: %s",
@@ -88,17 +88,19 @@ output \"deployment_summary\" {
 
 output "deployment_status" {
   description = "Overall deployment status and next steps"
-  value = !local.principal_ready && var.deploy_spokes ? format(
-    "\n⚠️  NOTICE: Spoke clusters were SKIPPED because Principal LoadBalancer IP is not ready yet.\n\n" +
-    "This is normal for fresh deployments. The LoadBalancer is still provisioning.\n\n" +
-    "Next Steps:\n" +
-    "1. Wait 5-10 minutes for GKE to assign the LoadBalancer IP\n" +
-    "2. Check status: kubectl get svc argocd-agent-principal -n %s --context %s\n" +
-    "3. Once EXTERNAL-IP shows (not <pending>), re-run this workflow\n" +
-    "4. The second run will deploy the spoke clusters automatically\n",
-    var.hub_namespace,
-    var.hub_cluster_context
-  ) : "✅ Deployment complete! All components deployed successfully."
+  value = !local.principal_ready && var.deploy_spokes ? <<-EOT
+
+    ⚠️  NOTICE: Spoke clusters were SKIPPED because Principal LoadBalancer IP is not ready yet.
+
+    This is normal for fresh deployments. The LoadBalancer is still provisioning.
+
+    Next Steps:
+    1. Wait 5-10 minutes for GKE to assign the LoadBalancer IP
+    2. Check status: kubectl get svc argocd-agent-principal -n ${var.hub_namespace} --context ${var.hub_cluster_context}
+    3. Once EXTERNAL-IP shows (not <pending>), re-run this workflow
+    4. The second run will deploy the spoke clusters automatically
+  EOT
+  : "✅ Deployment complete! All components deployed successfully."
 }
 
 output "hub_deployed" {
