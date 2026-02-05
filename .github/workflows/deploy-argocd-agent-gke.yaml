@@ -700,9 +700,68 @@ jobs:
           echo ""
           echo "✓ Import check complete. Proceeding with Terraform apply..."
 
-      - name: Terraform Apply
+      - name: Terraform Apply (Stage 1 - Initial Deployment)
         working-directory: ${{ needs.setup-environment.outputs.working_dir }}
         run: terraform apply -auto-approve
+        continue-on-error: true
+        id: apply_stage1
+
+      - name: Check if LoadBalancer is Pending
+        if: steps.apply_stage1.outcome == 'failure'
+        id: check_lb_pending
+        run: |
+          # Check if the failure is due to pending LoadBalancer
+          if grep -q "Principal LoadBalancer IP not available yet" <<< "${{ steps.apply_stage1.outputs.stderr }}" 2>/dev/null || \
+             kubectl get svc argocd-agent-principal -n argocd \
+               --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
+               -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null | grep -q '^$'; then
+            echo "LoadBalancer is pending - will wait and retry"
+            echo "lb_pending=true" >> $GITHUB_OUTPUT
+          else
+            echo "Failure is not LoadBalancer-related"
+            echo "lb_pending=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Wait for LoadBalancer IP
+        if: steps.apply_stage1.outcome == 'failure' && steps.check_lb_pending.outputs.lb_pending == 'true'
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "⏳ Waiting for LoadBalancer IP to be assigned..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          MAX_WAIT=600  # 10 minutes
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            LB_IP=$(kubectl get svc argocd-agent-principal -n argocd \
+              --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            
+            if [ -n "$LB_IP" ] && [ "$LB_IP" != "null" ]; then
+              echo "✓ LoadBalancer IP assigned: $LB_IP"
+              exit 0
+            fi
+            
+            if [ $((ELAPSED % 30)) -eq 0 ]; then
+              echo "  Still waiting for LoadBalancer IP... (${ELAPSED}s/${MAX_WAIT}s)"
+            fi
+            
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+          done
+          
+          echo "✗ ERROR: LoadBalancer IP not assigned after ${MAX_WAIT}s"
+          exit 1
+
+      - name: Terraform Apply (Stage 2 - Complete with LoadBalancer IP)
+        if: steps.apply_stage1.outcome == 'failure' && steps.check_lb_pending.outputs.lb_pending == 'true'
+        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "🔄 Re-running terraform apply with LoadBalancer IP available"
+          echo "════════════════════════════════════════════════════════════════"
+          terraform apply -auto-approve
 
   verify-deployment:
     name: Verify Deployment
