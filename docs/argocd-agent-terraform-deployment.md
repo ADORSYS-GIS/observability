@@ -312,8 +312,17 @@ HUB_CTX=$HUB_CTX ./05-verify.sh agent-1 $SPOKE_CTX
 
 ---
 
-## Next Steps
+## Related Documentation
 
+- [GitHub Actions Deployment](argocd-agent-github-actions-deployment.md) - Automated CI/CD workflow
+- [Architecture Guide](argocd-agent-architecture.md) - Hub-spoke architecture explained
+- [Configuration Reference](argocd-agent-configuration.md) - All Terraform variables
 - [Operations Guide](argocd-agent-operations.md) - Scaling, upgrades, monitoring
 - [RBAC & SSO](argocd-agent-rbac.md) - Keycloak integration
 - [Troubleshooting](argocd-agent-troubleshooting.md) - Common issues
+- [Adopting Existing Installation](adopting-argocd-agent.md) - Migration guide
+- [Terraform State Management](terraform-state-management.md) - Remote state configuration
+
+---
+
+**Official Documentation**: [ArgoCD Agent](https://argocd-agent.readthedocs.io/) | **GitHub Repository**: [argoproj-labs/argocd-agent](https://github.com/argoproj-labs/argocd-agent)
