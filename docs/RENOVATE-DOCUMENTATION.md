@@ -222,6 +222,59 @@ Renovate supports:
 
 It uses API access (tokens if needed) to read data from that repo.
 
+**Step 3: Look for changelog information**
+
+Renovate tries multiple sources, in this order:
+
+**1️⃣ Release notes (preferred)**
+
+If the repo uses GitHub/GitLab Releases, Renovate checks:
+
+  - Release titles
+
+  - Release descriptions
+
+  - Tags (e.g. v1.2.3)
+
+This is the best-quality info.
+
+**2️⃣ Changelog files (fallback)**
+
+If there are no usable releases, Renovate looks for files like:
+
+  - CHANGELOG.md
+
+  - changelog.md
+
+  - HISTORY.md
+
+  - history.md
+
+It then tries to parse:
+
+  - version headers
+
+  - dates
+
+  - bullet points
+
+**3️⃣ Version matching**
+
+Renovate only extracts entries between the old version and the new version.
+
+So if your update is:
+
+```txt
+1.2.0 → 1.4.0
+```
+
+Renovate shows:
+
+  - changes for 1.3.0
+
+  - changes for 1.4.0
+
+It does not dump the entire changelog.
 ## Renovate Presets
 
 ### What Are Presets?
