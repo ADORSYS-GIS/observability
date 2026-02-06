@@ -139,12 +139,8 @@ variable "keycloak_url" {
   description = "Keycloak URL (e.g., https://keycloak.example.com)"
   type        = string
   default     = ""
-
-  validation {
-    condition     = var.enable_keycloak ? var.keycloak_url != "" : true
-    error_message = "The keycloak_url is required when enable_keycloak is true."
-  }
 }
+
 
 variable "keycloak_user" {
   description = "Keycloak admin username"
