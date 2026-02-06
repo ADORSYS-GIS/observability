@@ -16,6 +16,17 @@ GitHub Actions workflows automatically deploy ArgoCD Agent using Terraform. Hub 
 
 ---
 
+## Deployment Modes Index
+
+| Deployment Mode | Folder/Path | Quick Start (Plan) | Prerequisites | Required Secrets | Guide/Validation |
+|:---|:---|:---|:---|:---|:---|
+| **GKE** | `argocd-agent/terraform/environments/prod` | `Run GKE Workflow` | GCP Project, GCS Bucket | `GCP_CREDENTIALS`, `GCP_PROJECT_ID` | [GKE Guide](#gke-google-kubernetes-engine) |
+| **EKS** | `argocd-agent/terraform/environments/prod` | `Run EKS Workflow` | AWS IAM Role, S3 Bucket | `AWS_ROLE_ARN`, `REGION` | [EKS Guide](#eks-amazon-elastic-kubernetes-service) |
+| **Generic** | `argocd-agent/terraform/environments/prod` | `Run Generic Workflow` | Kubeconfigs (Hub+Spokes) | `KUBECONFIG_CONTENT`, `ARGOCD_URL` | [Generic Guide](#generic-kubernetes--on-premises) |
+| **Manual** | `argocd-agent/scripts/` | `bash scripts/01-hub-setup.sh` | Local kubectl access | Local kubeconfig, Helm | [Manual Guide](argocd-agent-terraform-deployment.md#manual-deployment-scripts) |
+
+---
+
 ## Prerequisites
 
 - **Clusters**: Hub + spoke clusters (Kubernetes ≥1.24) with admin access

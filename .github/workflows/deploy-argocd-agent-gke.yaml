@@ -40,10 +40,45 @@ env:
   WORKING_DIR: 'argocd-agent/terraform/environments/prod'
 
 jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive || true
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          find argocd-agent/scripts -name "*.sh" -exec shellcheck {} \;
+          find .github/scripts -name "*.sh" -exec shellcheck {} \;
+
+      - name: Yamllint
+        run: |
+          sudo apt-get install -y yamllint
+          yamllint .github/workflows/deploy-argocd-agent-gke.yaml
+
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (secrets.GCP_CREDENTIALS != '' && secrets.KUBECONFIG_DATA != '')
+    needs: validate
     environment: prod
     env:
       KUBECONFIG: /home/runner/.kube/config
@@ -58,1008 +93,165 @@ jobs:
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
             --hostname github-runner-plan-${{ github.run_id }}
           
-          echo "Waiting for NetBird connection to establish..."
-          sleep 15
-          
-          echo "===================  ==================="
-          echo "NetBird Diagnostics"
-          echo "======================================"
-          
-          echo "\n1. NetBird Status:"
-          sudo netbird status
-          
-          echo "\n2. NetBird Interface:"
-          ip addr show wt0 || echo "NetBird interface not found"
-          
-          echo "\n3. NetBird IP:"
-          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
-          echo "NetBird IP: $NETBIRD_IP"
-          
-          echo "\n4. Waiting additional 10 seconds for peers to sync..."
-          sleep 10
-          
-          echo "\n5. Final NetBird status:"
-          sudo netbird status
-          
-          echo "\n======================================"
-          echo "NetBird setup complete"
-          echo "======================================"
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-          
-      - name: Verify Spoke Cluster Connectivity
-        env:
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
-        run: |
-          echo "======================================"
-          echo "Spoke Cluster Connectivity Verification"
-          echo "======================================"
-          
-          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "No workload clusters configured, skipping connectivity check"
-            exit 0
-          fi
-          
-          # Extract spoke cluster info from JSON
-          echo "\nParsing workload clusters configuration..."
-          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
-          
-          if [ -z "$CONTEXTS" ]; then
-            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
-            exit 0
-          fi
-          
-          echo "\nTesting connectivity to spoke clusters..."
-          for CONTEXT in $CONTEXTS; do
-            echo "\n--- Testing context: $CONTEXT ---"
-            
-            # Check if context exists in kubeconfig
-            if ! kubectl config get-contexts "$CONTEXT" &>/dev/null; then
-              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
-              echo "\nAvailable contexts:"
-              kubectl config get-contexts
-              exit 1
-            fi
-            
-            echo "  ✓ Context $CONTEXT found in kubeconfig"
-            
-            # Extract cluster endpoint IP
-            CLUSTER_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$CONTEXT\")].cluster.server}" 2>/dev/null)
-            echo "  Cluster endpoint: $CLUSTER_SERVER"
-            
-            # Extract IP from server URL (format: https://IP:PORT)
-            CLUSTER_IP=$(echo "$CLUSTER_SERVER" | sed -E 's|https?://([^:]+):.*|\1|')
-            echo "  Cluster IP: $CLUSTER_IP"
-            
-            # Test network connectivity to the IP
-            echo "  Testing network connectivity to $CLUSTER_IP..."
-            if timeout 5 ping -c 2 "$CLUSTER_IP" &>/dev/null; then
-              echo "  ✓ Ping successful to $CLUSTER_IP"
-            else
-              echo "  ⚠ Ping failed to $CLUSTER_IP (may be blocked by firewall)"
-            fi
-            
-            # Test Kubernetes API connectivity
-            echo "  Testing Kubernetes API connection..."
-            if timeout 15 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-              echo "  ✓ Successfully connected to $CONTEXT"
-            else
-              echo "  ⚠ WARNING: Initial connection failed, investigating..."
-            echo ""
-            echo "  Diagnostics:"
-            echo "  - NetBird status:"
-            sudo netbird status || echo "NetBird not running"
-            
-            echo ""
-            echo "  - Attempting direct curl to API server:"
-              timeout 5 curl -k "$CLUSTER_SERVER/healthz" 2>&1 || echo "  Direct API connection failed"
-              
-              echo "\n  - Waiting 20 more seconds for NetBird routes..."
-              sleep 20
-              
-              # Final retry
-              echo "  Retrying kubectl connection..."
-              if timeout 15 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                echo "  ✓ Successfully connected to $CONTEXT after extended wait"
-              else
-                echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
-                echo "\n  Final diagnostics:"
-                echo "  - NetBird peers:"
-                sudo netbird status || echo "NetBird not running"
-                echo "\n  - Network routes:"
-                ip route | grep -E '100\.' || echo "  No NetBird routes found"
-                exit 1
-              fi
-            fi
-          done
-          
-          echo "\n======================================"
-          echo "✓ All spoke clusters are reachable"
-          echo "======================================"
+          sleep 5
+          netbird status
 
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Install gke-gcloud-auth-plugin
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates gnupg curl
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update
-          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure kubectl (GKE)
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ secrets.CLUSTER_NAME }}
-          location: ${{ secrets.REGION }}
+      - name: Setup kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+          
+          # Configure KUBECONFIG for spokes if provided
+          if [ ! -z "${{ secrets.KUBECONFIG_DATA }}" ]; then
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+          fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Verify kubectl connection
-        run: |
-          echo "Current kubectl context:"
-          kubectl config current-context
-          echo "Available contexts:"
-          kubectl config get-contexts
-          echo "Cluster info:"
-          kubectl cluster-info
-          echo "Testing connection to hub cluster..."
-          kubectl get nodes
-
-      - name: Config Backend
+      - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "gke" "argocd-agent"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
-        run: |
-          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-      - name: Terraform Validate
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform validate
-
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
-        env:
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
-          # Get the actual current kubectl context name
-          KUBE_CONTEXT=$(kubectl config current-context)
-          
-          # Fetch cluster details using gcloud (bypasses terraform data source permissions issue)
-          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
-          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
-
           cat > terraform.tfvars <<EOF
-          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
-          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
-          region                   = "${{ secrets.REGION }}"
-          cluster_endpoint         = "$CLUSTER_ENDPOINT"
-          cluster_ca_certificate   = "$CLUSTER_CA"
-          hub_cluster_context      = "$KUBE_CONTEXT"
-          hub_namespace            = "argocd"
-          spoke_namespace          = "argocd"
-          create_default_admin_user = true
-          default_admin_password   = "${{ secrets.PASSWORD }}"
-          
-          # Keycloak
-          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
-          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
-          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
-          argocd_url               = "${{ secrets.ARGOCD_URL }}"
-
-          # Ingress/Cert
-          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
-          argocd_host              = "${{ secrets.ARGOCD_HOST }}"
-          cert_issuer_name         = "letsencrypt-prod"
-          cert_issuer_kind         = "ClusterIssuer"
+          cloud_provider             = "${{ env.CLOUD_PROVIDER }}"
+          project_id                 = "${{ secrets.GCP_PROJECT_ID }}"
+          region                     = "${{ secrets.REGION }}"
+          cluster_name               = "${{ secrets.CLUSTER_NAME }}"
+          argocd_url                 = "${{ secrets.ARGOCD_HOST }}"
+          letsencrypt_email          = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          keycloak_url               = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id         = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password          = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          workload_clusters_json     = '${{ secrets.WORKLOAD_CLUSTERS_JSON }}'
           EOF
-          
-          # Append workload_clusters if secret exists
-          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "" >> terraform.tfvars
-            echo "workload_clusters = $WORKLOAD_CLUSTERS_JSON" >> terraform.tfvars
-            echo "✅ appended workload_clusters to terraform.tfvars"
-          fi
-
-          echo "✅ Created terraform.tfvars" 
 
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           set +e
-          terraform plan -out=tfplan -detailed-exitcode
+          terraform plan -out=tfplan -detailed-exitcode -var="argocd_admin_password=${{ secrets.PASSWORD }}"
           EXIT_CODE=$?
           set -e
           echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
-          if [ $EXIT_CODE -eq 1 ]; then exit 1; fi
-          terraform show -no-color tfplan > plan.txt
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          terraform show tfplan > plan.txt
           exit 0
 
-      - name: Upload Plan Artifact
+      - name: Upload plan
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ env.ENVIRONMENT }}
+          name: tfplan-gke
           path: |
             ${{ env.WORKING_DIR }}/tfplan
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
   terraform-apply:
-    name: Terraform Apply
+    name: Terraform Apply & Verify
     runs-on: ubuntu-latest
-    needs: [terraform-plan]
-    environment: prod
-    env:
-      KUBECONFIG: /home/runner/.kube/config
+    needs: [validate, terraform-plan]
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
-    
+    environment: prod
+    env:
+      KUBECONFIG: /home/runner/.kube/config
     steps:
       - name: Setup NetBird
         run: |
           echo "Installing NetBird client..."
           curl -fsSL https://pkgs.netbird.io/install.sh | sh
           
-          echo "Connecting to NetBird network..."
+          echo "Connecting to NetBird network..." 
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
-            --hostname github-runner-${{ github.run_id }}
+            --hostname github-runner-apply-${{ github.run_id }}
           
-          echo "Waiting for NetBird connection to establish..."
-          sleep 15
-          
-          echo "======================================"
-          echo "NetBird Diagnostics"
-          echo "======================================"
-          
-          echo "\n1. NetBird Status:"
-          sudo netbird status
-          
-          echo "\n2. NetBird Interface:"
-          ip addr show wt0 || echo "NetBird interface not found"
-          
-          echo "\n3. NetBird IP:"
-          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
-          echo "NetBird IP: $NETBIRD_IP"
-          
-          echo "\n4. Waiting additional 10 seconds for peers to sync..."
-          sleep 10
-          
-          echo "\n5. Final NetBird status:"
-          sudo netbird status
-          
-          echo "\n======================================"
-          echo "NetBird setup complete"
-          echo "======================================"
+          sleep 5
+          netbird status
 
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-          
-      - name: Verify Spoke Cluster Connectivity
-        env:
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
-        run: |
-          echo "Verifying spoke cluster connectivity via NetBird..."
-          
-          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "No workload clusters configured, skipping connectivity check"
-            exit 0
-          fi
-          
-          # Extract spoke contexts from JSON
-          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
-          
-          if [ -z "$CONTEXTS" ]; then
-            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
-            exit 0
-          fi
-          
-          echo "Testing connectivity to spoke clusters..."
-          for CONTEXT in $CONTEXTS; do
-            echo "Testing context: $CONTEXT"
-            
-            # Check if context exists in kubeconfig
-            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
-              echo "  ✓ Context $CONTEXT found in kubeconfig"
-              
-              # Test actual connectivity with timeout
-              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                echo "  ✓ Successfully connected to $CONTEXT"
-              else
-                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
-                echo "  This may indicate Tailscale tunnel is not fully established"
-                echo "  Waiting 15 more seconds..."
-                sleep 15
-                
-                # Retry once
-                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                  echo "  ✓ Successfully connected to $CONTEXT after retry"
-                else
-                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
-                  exit 1
-                fi
-              fi
-            else
-              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
-              echo "Available contexts:"
-              kubectl config get-contexts
-              exit 1
-            fi
-          done
-          
-          echo "✓ All spoke clusters are reachable"
-          
-          # CRITICAL: Switch back to hub cluster context before terraform runs
-          echo "Switching back to hub cluster context..."
-          kubectl config use-context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}
-          echo "✓ Context switched back to hub cluster"
- 
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Setup GCP credentials
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Install gke-gcloud-auth-plugin
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup kubectl
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates gnupg curl
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update
-          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
-
-
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+          
+          # Configure KUBECONFIG for spokes if provided
+          if [ ! -z "${{ secrets.KUBECONFIG_DATA }}" ]; then
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+          fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Verify kubectl connection
-        run: |
-          echo "Current kubectl context:"
-          kubectl config current-context
-          echo "Available contexts:"
-          kubectl config get-contexts
-          echo "Cluster info:" 
-          kubectl cluster-info
-          echo "Testing connection  to hub cluster..." 
-          kubectl get nodes
-
-      - name: Config Backend
+      - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "gke" "argocd-agent"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
-        run: |
-          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-      - name: Create terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
-        env:
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
-        run: |
-          # Get the actual current  kubectl context name
-          KUBE_CONTEXT=$(kubectl config current-context)
-          
-          # Fetch cluster details using gcloud (bypasses terraform data source permissions issue)
-          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
-          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
-
-          cat > terraform.tfvars <<EOF
-          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
-          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
-          region                   = "${{ secrets.REGION }}"
-          cluster_endpoint         = "$CLUSTER_ENDPOINT"
-          cluster_ca_certificate   = "$CLUSTER_CA"
-          hub_cluster_context      = "$KUBE_CONTEXT"
-          hub_namespace            = "argocd"
-          spoke_namespace          = "argocd"
-          create_default_admin_user = true
-          default_admin_password   = "${{ secrets.PASSWORD }}"
-          
-          # Keycloak
-          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
-          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
-          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
-          argocd_url               = "${{ secrets.ARGOCD_URL }}"
-
-          # Ingress/Cert
-          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
-          argocd_host              = "${{ secrets.ARGOCD_HOST }}"
-          cert_issuer_name         = "letsencrypt-prod"
-          cert_issuer_kind         = "ClusterIssuer"
-          EOF
-          
-          # Append workload_clusters if secret exists
-          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "" >> terraform.tfvars
-            echo "workload_clusters = $WORKLOAD_CLUSTERS_JSON" >> terraform.tfvars
-            echo "✅ appended workload_clusters to terraform.tfvars"
-          fi
-
-          echo "✅ Created terraform.tfvars"
-
-      - name: Install argocd-agentctl
-        run: |
-          curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
-          chmod +x argocd-agentctl
-          sudo mv argocd-agentctl /usr/local/bin/
-
-      - name: Download Plan Artifact
+      - name: Download plan
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ env.ENVIRONMENT }}
+          name: tfplan-gke
           path: ${{ env.WORKING_DIR }}
 
-      - name: Import Keycloak Resources if exist
+      - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Verify Deployment
         run: |
-          # Variable Setup
-          KC_URL="${{ secrets.KEYCLOAK_URL }}"
-          KC_USER="admin"  # Assuming default admin user, update if different
-          KC_PASS="${{ secrets.KEYCLOAK_PASSWORD }}"
-          REALM="argocd"
-          
-          echo "Installing jq..."
-          sudo apt-get install -y jq
-
-          # 1. Get Access Token (from master realm)
-          echo "Authenticating to Keycloak..."
-          TOKEN_RESPONSE=$(curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
-            -d "client_id=admin-cli" \
-            -d "username=$KC_USER" \
-            -d "password=$KC_PASS" \
-            -d "grant_type=password" 2>&1)
-          
-          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty' 2>/dev/null || echo "")
-
-          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
-            echo "⚠ Failed to get Keycloak token. This is expected for fresh deployments."
-            echo "   Terraform will create all resources from scratch."
-            echo "   Skipping import step."
-            exit 0
-          fi
-          
-          echo "✓ Successfully authenticated to Keycloak"
-          
-          # Helper function for import
-          import_resource() {
-            local ADDR=$1
-            local ID=$2
-            # Use grep -F for fixed string matching to handle [ ] characters correctly without escaping issues
-            if ! terraform state list | grep -F -q "$ADDR"; then
-              echo "Importing $ADDR with ID $ID..."
-              terraform import "$ADDR" "$ID" || echo "⚠ Import failed for $ADDR"
-            else
-              echo "✓ $ADDR already in state"
-            fi
-          }
-
-          # 2. Import Realm
-          # Realm import uses just the realm name
-          echo "Checking if realm '$REALM' exists..."
-          REALM_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM" 2>&1)
-          if echo "$REALM_RESPONSE" | grep -q "\"realm\":\"$REALM\""; then
-            echo "✓ Realm '$REALM' found, importing..."
-            import_resource "module.hub_cluster[0].keycloak_realm.argocd[0]" "$REALM"
-          else
-            echo "Realm '$REALM' not found (fresh deployment)"
-          fi
-
-          # 3. Import Client (argocd)
-          echo "Looking up Client 'argocd'..."
-          CLIENT_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/clients?clientId=argocd" 2>&1)
-          CLIENT_UUID=$(echo "$CLIENT_RESPONSE" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
-          if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
-             echo "✓ Client 'argocd' found, importing..."
-             import_resource "module.hub_cluster[0].keycloak_openid_client.argocd[0]" "$REALM/$CLIENT_UUID"
-          else
-             echo "Client 'argocd' not found (fresh deployment)"
-          fi
-
-          # 4. Import Client Scope (groups)
-          echo "Looking up Client Scope 'groups'..."
-          SCOPE_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes" 2>&1)
-          SCOPE_UUID=$(echo "$SCOPE_RESPONSE" | jq -r '.[] | select(.name=="groups") | .id // empty' 2>/dev/null || echo "")
-          if [ -n "$SCOPE_UUID" ] && [ "$SCOPE_UUID" != "null" ]; then
-             echo "✓ Client Scope 'groups' found, importing..."
-             import_resource "module.hub_cluster[0].keycloak_openid_client_scope.groups[0]" "$REALM/$SCOPE_UUID"
-          else
-             echo "Client Scope 'groups' not found (fresh deployment)"
-          fi
-
-          # 5. Import Groups
-          # Mapping: ArgoCDAdmins -> argocd_admins, ArgoCDDevelopers -> argocd_developers, ArgoCDViewers -> argocd_viewers
-          declare -A KC_GROUPS
-          KC_GROUPS=( ["ArgoCDAdmins"]="argocd_admins" ["ArgoCDDevelopers"]="argocd_developers" ["ArgoCDViewers"]="argocd_viewers" )
-
-          for GROUP_NAME in "${!KC_GROUPS[@]}"; do
-             RESOURCE_NAME="${KC_GROUPS[$GROUP_NAME]}"
-             echo "Looking up Group '$GROUP_NAME'..."
-             GROUP_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/groups?search=$GROUP_NAME" 2>&1)
-             GROUP_UUID=$(echo "$GROUP_RESPONSE" | jq -r ".[0] | select(.name==\"$GROUP_NAME\") | .id // empty" 2>/dev/null || echo "")
-             
-             if [ -n "$GROUP_UUID" ] && [ "$GROUP_UUID" != "null" ]; then
-                echo "✓ Group '$GROUP_NAME' found, importing..."
-                import_resource "module.hub_cluster[0].keycloak_group.${RESOURCE_NAME}[0]" "$REALM/$GROUP_UUID"
-             else
-                echo "Group '$GROUP_NAME' not found (fresh deployment)"
-             fi
-          done
-
-          # 6. Import Protocol Mapper (group-membership)
-          echo "Looking up Protocol Mapper 'group-membership'..."
-          # The mapper is attached to the Client Scope 'groups' (SCOPE_UUID), NOT the Client.
-          if [ -n "$SCOPE_UUID" ] && [ "$SCOPE_UUID" != "null" ]; then
-             MAPPER_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/client-scopes/$SCOPE_UUID/protocol-mappers/models" 2>&1)
-             MAPPER_UUID=$(echo "$MAPPER_RESPONSE" | jq -r '.[] | select(.name=="group-membership") | .id // empty' 2>/dev/null || echo "")
-             if [ -n "$MAPPER_UUID" ] && [ "$MAPPER_UUID" != "null" ]; then
-                echo "✓ Protocol Mapper 'group-membership' found, importing..."
-                # Import ID Format: realm/client-scope/client_scope_id/mapper_id
-                import_resource "module.hub_cluster[0].keycloak_openid_group_membership_protocol_mapper.groups_mapper[0]" "$REALM/client-scope/$SCOPE_UUID/$MAPPER_UUID"
-             else
-                echo "Protocol Mapper 'group-membership' not found (fresh deployment)"
-             fi
-          else
-             echo "Skipping Protocol Mapper import (Client Scope not found)"
-          fi
-
-          # 7. Import Ingress (argocd-server)
-          # Conflict Resolution: The error indicates an ingress exists in 'argocd-agent' namespace (or similar).
-          # We need to clear it from the old namespace if we are deploying to a new one ('argocd').
-          echo "Checking for conflicting Ingress in 'argocd-agent' namespace..."
-          kubectl delete ingress argocd-server -n argocd-agent --ignore-not-found || true
-
-          # Now check target namespace
-          INGRESS_NS="argocd"
-          INGRESS_NAME="argocd-server"
-          echo "Checking for existing Ingress '$INGRESS_NAME' in '$INGRESS_NS'..."
-          if kubectl get ingress "$INGRESS_NAME" -n "$INGRESS_NS" >/dev/null 2>&1; then
-             echo "✓ Ingress '$INGRESS_NAME' found, importing..."
-             import_resource "module.hub_cluster[0].kubernetes_ingress_v1.argocd_ui[0]" "$INGRESS_NS/$INGRESS_NAME"
-          else
-             echo "Ingress '$INGRESS_NAME' not found (fresh deployment)"
-          fi
-
-          # 8. Import User (argocd-admin)
-          echo "Looking up User 'argocd-admin'..."
-          USER_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$KC_URL/admin/realms/$REALM/users?username=argocd-admin" 2>&1)
-          USER_UUID=$(echo "$USER_RESPONSE" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
-          if [ -n "$USER_UUID" ] && [ "$USER_UUID" != "null" ]; then
-             echo "✓ User 'argocd-admin' found, importing..."
-             import_resource "module.hub_cluster[0].keycloak_user.argocd_admin[0]" "$REALM/$USER_UUID"
-          else
-             echo "User 'argocd-admin' not found (fresh deployment)"
-          fi
-          
-          echo ""
-          echo "✓ Import check complete. Proceeding with Terraform apply..."
-
-      - name: Terraform Apply (Stage 1 - Initial Deployment)
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform apply -auto-approve
-        continue-on-error: true
-        id: apply_stage1
-
-      - name: Check if LoadBalancer is Pending
-        if: steps.apply_stage1.outcome == 'failure'
-        id: check_lb_pending
-        run: |
-          # Check if the failure is due to pending LoadBalancer
-          if grep -q "Principal LoadBalancer IP not available yet" <<< "${{ steps.apply_stage1.outputs.stderr }}" 2>/dev/null || \
-             kubectl get svc argocd-agent-principal -n argocd \
-               --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
-               -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null | grep -q '^$'; then
-            echo "LoadBalancer is pending - will wait and retry"
-            echo "lb_pending=true" >> $GITHUB_OUTPUT
-          else
-            echo "Failure is not LoadBalancer-related"
-            echo "lb_pending=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      - name: Wait for LoadBalancer IP
-        if: steps.apply_stage1.outcome == 'failure' && steps.check_lb_pending.outputs.lb_pending == 'true'
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "⏳ Waiting for LoadBalancer IP to be assigned..."
-          echo "════════════════════════════════════════════════════════════════"
-          
-          MAX_WAIT=600  # 10 minutes
-          ELAPSED=0
-          
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            LB_IP=$(kubectl get svc argocd-agent-principal -n argocd \
-              --context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }} \
-              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-            
-            if [ -n "$LB_IP" ] && [ "$LB_IP" != "null" ]; then
-              echo "✓ LoadBalancer IP assigned: $LB_IP"
-              exit 0
-            fi
-            
-            if [ $((ELAPSED % 30)) -eq 0 ]; then
-              echo "  Still waiting for LoadBalancer IP... (${ELAPSED}s/${MAX_WAIT}s)"
-            fi
-            
-            sleep 10
-            ELAPSED=$((ELAPSED + 10))
-          done
-          
-          echo "✗ ERROR: LoadBalancer IP not assigned after ${MAX_WAIT}s"
-          exit 1
-
-      - name: Terraform Apply (Stage 2 - Complete with LoadBalancer IP)
-        if: steps.apply_stage1.outcome == 'failure' && steps.check_lb_pending.outputs.lb_pending == 'true'
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "🔄 Re-running terraform apply with LoadBalancer IP available"
-          echo "════════════════════════════════════════════════════════════════"
-          terraform apply -auto-approve
-
-  verify-deployment:
-    name: Verify Deployment
-    runs-on: ubuntu-latest
-    needs: [terraform-apply]
-    environment: prod
-    env:
-      KUBECONFIG: /home/runner/.kube/config
-    steps:
-      - name: Setup NetBird
-        run: |
-          echo "Installing NetBird client..."
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-          
-          echo "Connecting to NetBird network..."
-          sudo netbird up \
-            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
-            --hostname github-runner-${{ github.run_id }}
-          
-          echo "Waiting for NetBird connection to establish..."
-          sleep 15
-          
-          echo "======================================"
-          echo "NetBird Diagnostics"
-          echo "======================================"
-          
-          echo "\n1. NetBird Status:"
-          sudo netbird status
-          
-          echo "\n2. NetBird Interface:"
-          ip addr show wt0 || echo "NetBird interface not found"
-          
-          echo "\n3. NetBird IP:"
-          NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 || echo "unknown")
-          echo "NetBird IP: $NETBIRD_IP"
-          
-          echo "\n4. Waiting additional 10 seconds for peers to sync..."
-          sleep 10
-          
-          echo "\n5. Final NetBird status:"
-          sudo netbird status
-          
-          echo "\n======================================"
-          echo "NetBird setup complete"
-          echo "======================================"
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-          
-      - name: Verify Spoke Cluster Connectivity
-        env:
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
-        run: |
-          echo "Verifying spoke cluster connectivity via NetBird..."
-          
-          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "No workload clusters configured, skipping connectivity check"
-            exit 0
-          fi
-          
-          # Extract spoke contexts from JSON
-          CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
-          
-          if [ -z "$CONTEXTS" ]; then
-            echo "Could not parse spoke contexts from WORKLOAD_CLUSTERS_JSON"
-            exit 0
-          fi
-          
-          echo "Testing connectivity to spoke clusters..."
-          for CONTEXT in $CONTEXTS; do
-            echo "Testing context: $CONTEXT"
-            
-            # Check if context exists in kubeconfig
-            if kubectl config get-contexts "$CONTEXT" &>/dev/null; then
-              echo "  ✓ Context $CONTEXT found in kubeconfig"
-              
-              # Test actual connectivity with timeout
-              if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                echo "  ✓ Successfully connected to $CONTEXT"
-              else
-                echo "  ⚠ WARNING: Context $CONTEXT exists but cluster is not reachable"
-                echo "  This may indicate Tailscale tunnel is not fully established"
-                echo "  Waiting 15 more seconds..."
-                sleep 15
-                
-                # Retry once
-                if timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null; then
-                  echo "  ✓ Successfully connected to $CONTEXT after retry"
-                else
-                  echo "  ✗ ERROR: Cannot reach cluster $CONTEXT"
-                  exit 1
-                fi
-              fi
-            else
-              echo "  ✗ ERROR: Context $CONTEXT not found in kubeconfig"
-              echo "Available contexts:"
-              kubectl config get-contexts
-              exit 1
-            fi
-          done
-          
-          echo "✓ All spoke clusters are reachable"
-
-      - uses: actions/checkout@v4
-      - name: Authenticate to Google Cloud 
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Install gke-gcloud-auth-plugin
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates gnupg curl
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update
-          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
-
-
-
-      - name: Verify kubectl connection
-        run: |
-          echo "Current kubectl context:"
-          kubectl config current-context
-          echo "Available contexts:"
-          kubectl config get-contexts
-      - name: Install argocd-agentctl
-        run: |
-          curl -L -o argocd-agentctl https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64
-          chmod +x argocd-agentctl
-          sudo mv argocd-agentctl /usr/local/bin/
-
-      - name: Run Verification
-        env:
-          NAMESPACE: argocd
-          HUB_CONTEXT: ${{ secrets.CLUSTER_NAME }}
-          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
-        run: |
-          set -e
-          echo "═══════════════════════════════════════════════════════════════"
-          echo "ArgoCD Agent Deployment Verification"
-          echo "═══════════════════════════════════════════════════════════════"
-          
-          # CRITICAL: Switch to hub cluster context for verification
-          echo "Switching to hub cluster context for verification..."
-          kubectl config use-context gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.REGION }}_${{ secrets.CLUSTER_NAME }}
-          
-          # Get current context
-          CURRENT_CONTEXT=$(kubectl config current-context)
-          echo "✓ Current kubectl context: $CURRENT_CONTEXT"
-          echo ""
-          
-          # ================================================================
-          # 1. VERIFY HUB CLUSTER (PRINCIPAL) DEPLOYMENT
-          # ================================================================
-          echo "[1/5] Verifying Principal (Hub) Deployment..."
-          echo "───────────────────────────────────────────────────────────────"
-          
-          # Check principal pods
-          echo "Checking principal pods..."
-          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal
-          
-          PRINCIPAL_READY=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-          if [[ "$PRINCIPAL_READY" == *"True"* ]]; then
-            echo "✓ Principal pod is running and ready"
-          else
-            echo "✗ ERROR: Principal pod is not ready"
-            kubectl describe pods -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal
-            exit 1
-          fi
-          
-          # Check principal service
-          echo ""
-          echo "Checking principal service..."
-          kubectl get svc -n $NAMESPACE argocd-agent-principal
-          
-          PRINCIPAL_IP=$(kubectl get svc -n $NAMESPACE argocd-agent-principal -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-          if [ -z "$PRINCIPAL_IP" ] || [ "$PRINCIPAL_IP" = "null" ]; then
-            echo "⚠ WARNING: Principal LoadBalancer IP not yet assigned (may still be provisioning)"
-            PRINCIPAL_IP="pending"
-          else
-            echo "✓ Principal LoadBalancer IP: $PRINCIPAL_IP"
-          fi
-          
-          # Check principal logs for errors
-          echo ""
-          echo "Recent principal logs:"
-          kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=argocd-agent-principal --tail=20 || echo "⚠ Could not fetch logs"
-          echo ""
-          
-          # ================================================================
-          # 2. VERIFY SPOKE CLUSTERS CONFIGURATION
-          # ================================================================
-          echo "[2/5] Checking Workload Clusters Configuration..."
-          echo "───────────────────────────────────────────────────────────────"
-          
-          if [ -z "$WORKLOAD_CLUSTERS_JSON" ]; then
-            echo "⚠ WARNING: WORKLOAD_CLUSTERS_JSON is not configured"
-            echo "Spoke agents will NOT be deployed automatically"
-            echo "To enable spoke deployments, set the WORKLOAD_CLUSTERS_JSON secret"
-            SKIP_SPOKE_VERIFICATION="true"
-          else
-            echo "✓ Workload clusters configured:"
-            echo "$WORKLOAD_CLUSTERS_JSON" | jq . || echo "$WORKLOAD_CLUSTERS_JSON"
-            SKIP_SPOKE_VERIFICATION="false"
-          fi
-          echo ""
-          
-          # ================================================================
-          # 3. VERIFY SPOKE AGENT DEPLOYMENTS (if configured)
-          # ================================================================
-          if [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
-            echo "[3/5] Verifying Spoke Agent Deployments..."
-            echo "───────────────────────────────────────────────────────────────"
-            
-            # Extract agent names from JSON (expecting format: {"agent-1": "spoke-1", ...})
-            AGENT_NAMES=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'keys[]' 2>/dev/null || echo "")
-            
-            if [ -z "$AGENT_NAMES" ]; then
-              echo "⚠ WARNING: Could not parse agent names from WORKLOAD_CLUSTERS_JSON"
-              echo "Skipping spoke verification"
-            else
-              for AGENT in $AGENT_NAMES; do
-                SPOKE_CONTEXT=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r ".\"$AGENT\"" 2>/dev/null || echo "")
-                
-                echo ""
-                echo "Checking agent: $AGENT (context: $SPOKE_CONTEXT)"
-                
-                # Check if context exists
-                if ! kubectl config get-contexts "$SPOKE_CONTEXT" &>/dev/null; then
-                  echo "  ⚠ WARNING: Context '$SPOKE_CONTEXT' not found in kubeconfig"
-                  echo "  Skipping verification for $AGENT"
-                  continue
-                fi
-                
-                # Check agent deployment
-                if kubectl get deployment argocd-agent-agent -n $NAMESPACE --context "$SPOKE_CONTEXT" &>/dev/null; then
-                  AGENT_READY=$(kubectl get deployment argocd-agent-agent -n $NAMESPACE --context "$SPOKE_CONTEXT" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
-                  if [ "$AGENT_READY" = "True" ]; then
-                    echo "  ✓ Agent deployment is ready"
-                  else
-                    echo "  ✗ Agent deployment exists but is not ready"
-                    kubectl get pods -n $NAMESPACE --context "$SPOKE_CONTEXT" -l app.kubernetes.io/name=argocd-agent-agent
-                  fi
-                else
-                  echo "  ✗ Agent deployment not found"
-                  echo "  This may indicate the spoke was not deployed by Terraform"
-                fi
-              done
-            fi
-          else
-            echo "[3/5] Skipping Spoke Agent Verification (not configured)"
-          fi
-          echo ""
-          
-          # ================================================================
-          # 4. VERIFY AGENT REGISTRATION ON HUB
-          # ================================================================
-          echo "[4/5] Verifying Agent Registration on Hub..."
-          echo "───────────────────────────────────────────────────────────────"
-          
-          # Check if agent CRD exists
-          if kubectl get crd agents.argoproj.io &>/dev/null; then
-            echo "✓ Agent CRD exists"
-            
-            # List registered agents
-            echo ""
-            echo "Registered agents:"
-            if kubectl get agents -n $NAMESPACE &>/dev/null; then
-              kubectl get agents -n $NAMESPACE
-              
-              AGENT_COUNT=$(kubectl get agents -n $NAMESPACE --no-headers 2>/dev/null | wc -l)
-              echo ""
-              echo "✓ Found $AGENT_COUNT registered agent(s)"
-              
-              # Show agent details
-              if [ "$AGENT_COUNT" -gt 0 ]; then
-                echo ""
-                echo "Agent details:"
-                kubectl get agents -n $NAMESPACE -o wide
-              fi
-            else
-              echo "⚠ No agents registered yet"
-              echo "This is normal if spokes haven't connected to principal yet"
-            fi
-          else
-            echo "⚠ Agent CRD not found (may not be installed yet)"
-          fi
-          echo ""
-          
-          # ================================================================
-          # 5. VERIFY ARGOCD CORE COMPONENTS
-          # ================================================================
-          echo "[5/5] Verifying ArgoCD Core Components..."
-          echo "───────────────────────────────────────────────────────────────"
-          
-          # Run existing verification script if it exists
-          if [ -f "$GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh" ]; then
-            chmod +x $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
-            $GITHUB_WORKSPACE/.github/scripts/verify-deployment.sh
-          else
-            echo "Basic ArgoCD component check:"
-            kubectl get pods -n $NAMESPACE
-          fi
-          
-          echo ""
-          echo "═══════════════════════════════════════════════════════════════"
-          echo "Verification Summary"
-          echo "═══════════════════════════════════════════════════════════════"
-          echo "✓ Principal pod status: $PRINCIPAL_READY"
-          echo "✓ Principal LoadBalancer IP: $PRINCIPAL_IP"
-          if [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
-            echo "✓ Workload clusters configuration present"
-            echo "  Note: Individual spoke status shown above"
-          else
-            echo "⚠ Workload clusters not configured"
-          fi
-          echo ""
-          echo "Next steps:"
-          if [ "$PRINCIPAL_IP" = "pending" ]; then
-            echo "  1. Wait for Principal LoadBalancer IP to be assigned"
-            echo "  2. Re-run this workflow to complete spoke deployment"
-          elif [ "$SKIP_SPOKE_VERIFICATION" = "false" ]; then
-            echo "  1. Verify spoke agents are connecting to principal"
-            echo "  2. Deploy test applications to workload clusters"
-          else
-            echo "  1. Configure WORKLOAD_CLUSTERS_JSON secret"
-            echo "  2. Re-run workflow to deploy spoke agents"
-          fi
-          echo "═══════════════════════════════════════════════════════════════"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+          kubectl get pods -n argocd
+          kubectl get clusterrolebinding argocd-agent-principal-binding || true
