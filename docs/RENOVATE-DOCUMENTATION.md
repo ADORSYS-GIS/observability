@@ -156,6 +156,72 @@ Tt's actually pretty useful for controlling when Renovate creates or updates PRs
 
 - **[Job Schedulers and the Renovate Status](https://docs.renovatebot.com/mend-hosted/job-scheduling/)** - Learn more about job schedulers and the Renovate Status.
 
+## Renovate and Changelogs
+
+### What is a changelog?
+
+A **changelog** is just “what changed between versions of a dependency”.
+
+**Example:**
+
+You use lodash@4.17.20
+Renovate wants to update it to 4.17.21
+
+The changelog answers:
+  “What changed in lodash between 4.17.20 → 4.17.21?”
+
+That might be:
+
+  - bug fixes
+  - security patches
+  - breaking changes
+  - nothing important
+
+Renovate’s goal is:
+  - show that information directly inside the pull request, so you don’t have to hunt for it.
+
+### Where does Renovate look for changelogs?
+
+Renovate works like a detective. It follows this chain:
+
+**Step 1: Identify the dependency’s source repository**
+
+For a dependency like axios, Renovate asks:
+
+  “Where is axios’s source code hosted?”
+
+It figures this out from:
+
+  - npm registry metadata
+  - repository field in package.json
+  - datasource responses
+
+Example:
+```json
+"repository": {
+  "type": "git",
+  "url": "https://github.com/axios/axios"
+}
+```
+Now Renovate knows:
+  “Okay, axios lives on GitHub at github.com/axios/axios”
+
+**Step 2: Go to that repository (GitHub/GitLab/etc.)**
+
+Renovate supports:
+
+ - GitHub
+
+ - GitLab
+
+ - Bitbucket
+
+ - Gitea / Forgejo
+
+ - Artifactory (special case)
+
+It uses API access (tokens if needed) to read data from that repo.
+
 ## Renovate Presets
 
 ### What Are Presets?
