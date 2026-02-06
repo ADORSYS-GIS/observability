@@ -1,19 +1,22 @@
 name: Deploy ArgoCD Agent (Generic)
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
-  # Automatic triggers disabled - only manual workflow_dispatch allowed
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'argocd-agent/terraform/**'
-  #     - '.github/workflows/deploy-argocd-agent-generic.yaml'
-  # pull_request:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'argocd-agent/terraform/**'
-  #     - '.github/workflows/deploy-argocd-agent-generic.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-generic.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-generic.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -32,38 +35,15 @@ permissions:
 env:
   TERRAFORM_VERSION: '1.5.7'
   CLOUD_PROVIDER: 'generic'
+  ENVIRONMENT: 'prod'
+  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
 
 jobs:
-  setup-environment:
-    name: Setup Environment
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.set-env.outputs.environment }}
-      working_dir: ${{ steps.set-env.outputs.working_dir }}
-      terraform_action: ${{ steps.set-env.outputs.terraform_action }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Environment Variables
-        id: set-env
-        run: |
-          # Always use prod environment
-          echo "environment=prod" >> $GITHUB_OUTPUT
-          echo "working_dir=argocd-agent/terraform/environments/prod" >> $GITHUB_OUTPUT
-          
-          # Determine terraform action based on trigger
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "terraform_action=apply" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "terraform_action=${{ inputs.terraform_action }}" >> $GITHUB_OUTPUT
-          else
-            echo "terraform_action=plan" >> $GITHUB_OUTPUT
-          fi
-
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: setup-environment
-    environment: ${{ needs.setup-environment.outputs.environment }}
+    if: github.event_name == 'workflow_dispatch' || secrets.KUBECONFIG_CONTENT != ''
+    environment: prod
     
     steps:
       - name: Checkout code
@@ -81,29 +61,23 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Config Backend
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
           # Generic backend uses kubernetes secret, so no bucket/region needed
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ needs.setup-environment.outputs.environment }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-      - name: Smart Import Existing Resources
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
-        env:
-          NAMESPACE: argocd
-          CLOUD_PROVIDER: generic
-        run: |
-          chmod +x $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh
-          # Set KUBECONFIG specifically for the script if needed, or rely on ~/.kube/config
-          export KUBECONFIG=~/.kube/config
-          $GITHUB_WORKSPACE/.github/scripts/import-existing-resources.sh || true
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
 
       - name: Create terraform.tfvars
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > terraform.tfvars <<EOF
           hub_cluster_context      = "in-cluster" # Using current context from KUBECONFIG
@@ -126,7 +100,7 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
@@ -140,35 +114,20 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ needs.setup-environment.outputs.environment }}
+          name: tfplan-${{ env.ENVIRONMENT }}
           path: |
-            ${{ needs.setup-environment.outputs.working_dir }}/tfplan
-            ${{ needs.setup-environment.outputs.working_dir }}/plan.txt
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
-
-      - name: Comment PR (Plan)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const planPath = '${{ needs.setup-environment.outputs.working_dir }}/plan.txt';
-            let plan = '';
-            try { plan = fs.readFileSync(planPath, 'utf8'); } catch (e) { plan = 'Plan file invalid.'; }
-            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '...' : plan;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## 🌍 Terraform Plan (Generic - ${{ needs.setup-environment.outputs.environment }})\n\`\`\`hcl\n${truncatedPlan}\n\`\`\``
-            })
 
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-plan]
-    environment: ${{ needs.setup-environment.outputs.environment }}
-    if: needs.setup-environment.outputs.terraform_action == 'apply'
+    needs: [terraform-plan]
+    environment: prod
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     
     steps:
       - uses: actions/checkout@v4
@@ -184,30 +143,31 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Config Backend
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ needs.setup-environment.outputs.environment }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh generic ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ needs.setup-environment.outputs.environment }}
-          path: ${{ needs.setup-environment.outputs.working_dir }}
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: ${{ env.WORKING_DIR }}
 
       - name: Terraform Apply
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-apply]
-    environment: ${{ needs.setup-environment.outputs.environment }}
+    needs: [terraform-apply]
+    environment: prod
+    if: always() && needs.terraform-apply.result == 'success'
     steps:
       - uses: actions/checkout@v4
       - name: Setup Kubeconfig

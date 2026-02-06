@@ -126,6 +126,11 @@ variable "keycloak_password" {
   type        = string
   sensitive   = true
   default     = ""
+
+  validation {
+    condition     = var.enable_keycloak ? var.keycloak_password != "" : true
+    error_message = "The keycloak_password is required when enable_keycloak is true."
+  }
 }
 
 variable "keycloak_realm" {
@@ -138,6 +143,11 @@ variable "argocd_url" {
   description = "ArgoCD URL for Keycloak redirect URIs (e.g., https://argocd.example.com)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.enable_keycloak ? var.argocd_url != "" : true
+    error_message = "The argocd_url is required when enable_keycloak is true."
+  }
 }
 
 variable "keycloak_client_id" {

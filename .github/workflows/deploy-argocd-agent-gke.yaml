@@ -1,20 +1,22 @@
 name: Deploy ArgoCD Agent (GKE)
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
-      - pipeline/Argocd  # TEMPORARY: Remove after testing
     paths:
       - 'argocd-agent/terraform/**'
       - '.github/workflows/deploy-argocd-agent-gke.yaml'
-  # pull_request disabled to avoid double-triggers when pushing to PR branches
-  # pull_request:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'argocd-agent/terraform/**'
-  #     - '.github/workflows/deploy-argocd-agent-gke.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-gke.yaml'
   workflow_dispatch:
     inputs:
       terraform_action:
@@ -34,50 +36,15 @@ permissions:
 env:
   TERRAFORM_VERSION: '1.5.7'
   CLOUD_PROVIDER: 'gke'
+  ENVIRONMENT: 'prod'
+  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
 
 jobs:
-  setup-environment:
-    name: Setup Environment
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.set-env.outputs.environment }}
-      working_dir: ${{ steps.set-env.outputs.working_dir }}
-      terraform_action: ${{ steps.set-env.outputs.terraform_action }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Environment Variables
-        id: set-env
-        run: |
-          # Always use prod environment
-          echo "environment=prod" >> $GITHUB_OUTPUT
-          echo "working_dir=argocd-agent/terraform/environments/prod" >> $GITHUB_OUTPUT
-          
-          # Determine terraform action based on trigger and branch
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Manual trigger: use user selection
-            echo "terraform_action=${{ inputs.terraform_action }}" >> $GITHUB_OUTPUT
-            echo "ℹ️ Manual trigger: Running ${{ inputs.terraform_action }}"
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-              # Push to main branch: auto-apply
-              echo "terraform_action=apply" >> $GITHUB_OUTPUT
-              echo "✅ Push to main branch: Running apply"
-            else
-              # Push to feature branch (e.g., pipeline/Argocd): plan only
-              echo "terraform_action=plan" >> $GITHUB_OUTPUT
-              echo "📋 Push to feature branch: Running plan only"
-            fi
-          else
-            # Default: plan only
-            echo "terraform_action=plan" >> $GITHUB_OUTPUT
-            echo "📋 Default: Running plan only"
-          fi
-
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: setup-environment
-    environment: ${{ needs.setup-environment.outputs.environment }}
+    if: github.event_name == 'workflow_dispatch' || (secrets.GCP_CREDENTIALS != '' && secrets.KUBECONFIG_DATA != '')
+    environment: prod
     env:
       KUBECONFIG: /home/runner/.kube/config
     steps:
@@ -254,19 +221,23 @@ jobs:
           kubectl get nodes
 
       - name: Config Backend
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ needs.setup-environment.outputs.environment }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
       - name: Create terraform.tfvars
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
@@ -314,7 +285,7 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           set +e
           terraform plan -out=tfplan -detailed-exitcode
@@ -328,37 +299,22 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ needs.setup-environment.outputs.environment }}
+          name: tfplan-${{ env.ENVIRONMENT }}
           path: |
-            ${{ needs.setup-environment.outputs.working_dir }}/tfplan
-            ${{ needs.setup-environment.outputs.working_dir }}/plan.txt
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
-
-      - name: Comment PR (Plan)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const planPath = '${{ needs.setup-environment.outputs.working_dir }}/plan.txt';
-            let plan = '';
-            try { plan = fs.readFileSync(planPath, 'utf8'); } catch (e) { plan = 'Plan file invalid.'; }
-            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '...' : plan;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## 🌍 Terraform Plan (GKE - ${{ needs.setup-environment.outputs.environment }})\n\`\`\`hcl\n${truncatedPlan}\n\`\`\``
-            })
 
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-plan]
-    environment: ${{ needs.setup-environment.outputs.environment }}
+    needs: [terraform-plan]
+    environment: prod
     env:
       KUBECONFIG: /home/runner/.kube/config
-    if: needs.setup-environment.outputs.terraform_action == 'apply'
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     
     steps:
       - name: Setup NetBird
@@ -498,19 +454,19 @@ jobs:
           kubectl get nodes
 
       - name: Config Backend
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
         run: |
           chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
-          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ needs.setup-environment.outputs.environment }}
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh gke ${{ env.ENVIRONMENT }}
 
       - name: Terraform Init
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
       - name: Create terraform.tfvars
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         env:
           WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
         run: |
@@ -565,11 +521,11 @@ jobs:
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ needs.setup-environment.outputs.environment }}
-          path: ${{ needs.setup-environment.outputs.working_dir }}
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: ${{ env.WORKING_DIR }}
 
       - name: Import Keycloak Resources if exist
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           # Variable Setup
           KC_URL="${{ secrets.KEYCLOAK_URL }}"
@@ -713,7 +669,7 @@ jobs:
           echo "✓ Import check complete. Proceeding with Terraform apply..."
 
       - name: Terraform Apply (Stage 1 - Initial Deployment)
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve
         continue-on-error: true
         id: apply_stage1
@@ -768,7 +724,7 @@ jobs:
 
       - name: Terraform Apply (Stage 2 - Complete with LoadBalancer IP)
         if: steps.apply_stage1.outcome == 'failure' && steps.check_lb_pending.outputs.lb_pending == 'true'
-        working-directory: ${{ needs.setup-environment.outputs.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           echo "════════════════════════════════════════════════════════════════"
           echo "🔄 Re-running terraform apply with LoadBalancer IP available"
@@ -778,8 +734,8 @@ jobs:
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs: [setup-environment, terraform-apply]
-    environment: ${{ needs.setup-environment.outputs.environment }}
+    needs: [terraform-apply]
+    environment: prod
     env:
       KUBECONFIG: /home/runner/.kube/config
     steps:
