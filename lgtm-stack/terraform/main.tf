@@ -339,16 +339,18 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
   metadata {
     name      = "monitoring-stack-ingress"
     namespace = kubernetes_namespace.observability.metadata[0].name
-    annotations = {
-      "kubernetes.io/ingress.class"                       = var.ingress_class_name
-      "cert-manager.io/issuer"                            = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/ssl-redirect"          = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"      = "HTTP"
-      "nginx.ingress.kubernetes.io/proxy-connect-timeout" = "300"
-      "nginx.ingress.kubernetes.io/proxy-send-timeout"    = "300"
-      "nginx.ingress.kubernetes.io/proxy-read-timeout"    = "300"
-      "nginx.ingress.kubernetes.io/proxy-body-size"       = "50m"
-    }
+    annotations = merge(
+      {
+        "kubernetes.io/ingress.class"                       = var.ingress_class_name
+        "nginx.ingress.kubernetes.io/ssl-redirect"          = "true"
+        "nginx.ingress.kubernetes.io/backend-protocol"      = "HTTP"
+        "nginx.ingress.kubernetes.io/proxy-connect-timeout" = "300"
+        "nginx.ingress.kubernetes.io/proxy-send-timeout"    = "300"
+        "nginx.ingress.kubernetes.io/proxy-read-timeout"    = "300"
+        "nginx.ingress.kubernetes.io/proxy-body-size"       = "50m"
+      },
+      var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
+    )
   }
 
   spec {
@@ -490,12 +492,14 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
   metadata {
     name      = "monitoring-stack-ingress-grpc"
     namespace = kubernetes_namespace.observability.metadata[0].name
-    annotations = {
-      "kubernetes.io/ingress.class"                  = var.ingress_class_name
-      "cert-manager.io/issuer"                       = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol" = "GRPC"
-    }
+    annotations = merge(
+      {
+        "kubernetes.io/ingress.class"                  = var.ingress_class_name
+        "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
+        "nginx.ingress.kubernetes.io/backend-protocol" = "GRPC"
+      },
+      var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
+    )
   }
 
   spec {
