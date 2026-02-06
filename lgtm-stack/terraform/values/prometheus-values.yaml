@@ -12,7 +12,8 @@ serviceAccount:
   create: false  # Use existing service account created by Terraform
   name: ${k8s_service_account_name}
   annotations:
-    iam.gke.io/gcp-service-account: ${gcp_service_account_email} 
+    %{ if cloud_provider == "gke" }iam.gke.io/gcp-service-account: ${gcp_service_account_email}%{ endif }
+    %{ if cloud_provider == "eks" }eks.amazonaws.com/role-arn: ${aws_role_arn}%{ endif }
 
 server:
   persistentVolume:
@@ -40,7 +41,7 @@ server:
     evaluation_interval: 15s
     scrape_interval: 15s
     external_labels:
-      cluster: gke_${project_id}_${region}_${cluster_name}
+      cluster: %{ if cloud_provider == "gke" }gke_${project_id}_${region}_${cluster_name}%{ else }${cluster_name}%{ endif }
       environment: prod
   
   remoteWrite:

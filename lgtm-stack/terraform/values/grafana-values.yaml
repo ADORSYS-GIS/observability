@@ -2,7 +2,8 @@ serviceAccount:
   create: false
   name: ${k8s_service_account_name}
   annotations:
-    iam.gke.io/gcp-service-account: ${gcp_service_account_email} # Replace with your GCP service account email
+    %{ if cloud_provider == "gke" }iam.gke.io/gcp-service-account: ${gcp_service_account_email}%{ endif }
+    %{ if cloud_provider == "eks" }eks.amazonaws.com/role-arn: ${aws_role_arn}%{ endif }
 
 
 # Explicitly disable testFramework to avoid nil pointer in Helm chart

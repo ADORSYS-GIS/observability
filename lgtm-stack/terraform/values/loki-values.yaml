@@ -11,15 +11,21 @@ loki:
   auth_enabled: false
 
   storage:
-    type: gcs
+    type: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
     bucketNames:
       chunks: ${loki_chunks_bucket}
       ruler: ${loki_ruler_bucket}
       admin: ${loki_chunks_bucket}
+    %{ if cloud_provider == "gke" }
     gcs:
       chunkBufferSize: 0
       requestTimeout: "0s"
       enableHttp2: true
+    %{ else }
+    s3:
+      region: ${aws_region}
+      s3ForcePathStyle: false
+    %{ endif }
   
   commonConfig:
     replication_factor: 1
@@ -27,9 +33,9 @@ loki:
   
   schemaConfig:
     configs:
-      - from: "2025-12-01"
+      - from: "${loki_schema_from_date}"
         store: tsdb
-        object_store: gcs
+        object_store: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
         schema: v13
         index:
           prefix: loki_index_
@@ -54,9 +60,15 @@ loki:
   ruler:
     enable_api: true
     storage:
-      type: gcs
+      type: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+      %{ if cloud_provider == "gke" }
       gcs:
         bucket_name: ${loki_ruler_bucket}
+      %{ else }
+      s3:
+        bucket_name: ${loki_ruler_bucket}
+        region: ${aws_region}
+      %{ endif }
   
   ingester:
     chunk_encoding: snappy
@@ -67,7 +79,7 @@ loki:
     retention_enabled: true
     retention_delete_delay: 2h
     retention_delete_worker_count: 150
-    delete_request_store: gcs
+    delete_request_store: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
   
   analytics:
     reporting_enabled: false
@@ -85,7 +97,8 @@ serviceAccount:
   create: false
   name: ${k8s_service_account_name}
   annotations:
-    iam.gke.io/gcp-service-account: ${gcp_service_account_email} # Replace with your GCP service account email
+    %{ if cloud_provider == "gke" }iam.gke.io/gcp-service-account: ${gcp_service_account_email}%{ endif }
+    %{ if cloud_provider == "eks" }eks.amazonaws.com/role-arn: ${aws_role_arn}%{ endif }
 
 singleBinary:
   replicas: 0
