@@ -77,7 +77,7 @@ jobs:
       - name: Yamllint
         run: |
           sudo apt-get install -y yamllint
-          yamllint .github/workflows/deploy-argocd-agent-gke.yaml
+          yamllint -c .yamllint .github/workflows/deploy-argocd-agent-gke.yaml
 
   terraform-plan:
     name: Terraform Plan
@@ -92,7 +92,7 @@ jobs:
           echo "Installing NetBird client..."
           curl -fsSL https://pkgs.netbird.io/install.sh | sh
           
-          echo "Connecting to NetBird network..." 
+          echo "Connecting to NetBird network..."
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
             --hostname github-runner-plan-${{ github.run_id }}
@@ -197,7 +197,7 @@ jobs:
           echo "Installing NetBird client..."
           curl -fsSL https://pkgs.netbird.io/install.sh | sh
           
-          echo "Connecting to NetBird network..." 
+          echo "Connecting to NetBird network..."
           sudo netbird up \
             --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
             --hostname github-runner-apply-${{ github.run_id }}

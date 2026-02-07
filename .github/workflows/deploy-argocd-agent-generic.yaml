@@ -76,7 +76,7 @@ jobs:
       - name: Yamllint
         run: |
           sudo apt-get install -y yamllint
-          yamllint .github/workflows/deploy-argocd-agent-generic.yaml
+          yamllint -c .yamllint .github/workflows/deploy-argocd-agent-generic.yaml
 
   terraform-plan:
     name: Terraform Plan

@@ -20,8 +20,42 @@ terraform {
   }
 }
 
-# Providers are configured in the root module and passed to this module
-# This allows the module to work with count, for_each, and depends_on
+provider "google" {
+  project = var.cloud_provider == "gke" && var.project_id != "" ? var.project_id : null
+  region  = var.region
+}
+
+# AWS provider - required by EKS module even when not used (count=0)
+provider "aws" {
+  region                      = var.aws_region
+  skip_credentials_validation = var.cloud_provider != "eks"
+  skip_requesting_account_id  = var.cloud_provider != "eks"
+  skip_metadata_api_check     = var.cloud_provider != "eks"
+  access_key                  = var.cloud_provider != "eks" ? "mock_access_key" : null
+  secret_key                  = var.cloud_provider != "eks" ? "mock_secret_key" : null
+}
+
+# The kubernetes and helm providers will use the configuration established
+# by gcloud/kubectl/az in the workflow (via ~/.kube/config), but for GKE
+# we explicitly configure them using values passed from the workflow
+# to ensure zero-config connectivity in CI.
+provider "kubernetes" {
+  host                   = var.cloud_provider == "gke" && var.gke_endpoint != "" ? "https://${var.gke_endpoint}" : null
+  token                  = var.cloud_provider == "gke" && var.gke_endpoint != "" ? data.google_client_config.default[0].access_token : null
+  cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = var.cloud_provider == "gke" && var.gke_endpoint != "" ? "https://${var.gke_endpoint}" : null
+    token                  = var.cloud_provider == "gke" && var.gke_endpoint != "" ? data.google_client_config.default[0].access_token : null
+    cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+  }
+}
+
+data "google_client_config" "default" {
+  count = var.cloud_provider == "gke" ? 1 : 0
+}
 
 resource "helm_release" "cert_manager" {
   count = var.install_cert_manager ? 1 : 0
