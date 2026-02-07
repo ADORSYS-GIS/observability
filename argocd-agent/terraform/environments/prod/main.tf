@@ -21,13 +21,17 @@ terraform {
 # =============================================================================
 # INFRASTRUCTURE MODULES (Cert-Manager, Ingress)
 # =============================================================================
+# NOTE: cert-manager and nginx-ingress are already deployed in the cluster.
+# These modules are commented out to avoid conflicts with existing installations.
+# If deploying to a fresh cluster, uncomment these modules and set install flags to true.
 
+/*
 module "cert_manager" {
   count  = var.deploy_hub && var.install_cert_manager ? 1 : 0
   source = "../../../../cert-manager/terraform"
 
   providers = {
-    kubernetes = kubernetes.hub
+    kubernetes = kubernetes
     helm       = helm.hub
   }
 
@@ -48,7 +52,7 @@ module "ingress_nginx" {
   source = "../../../../ingress-controller/terraform"
 
   providers = {
-    kubernetes = kubernetes.hub
+    kubernetes = kubernetes
     helm       = helm.hub
   }
 
@@ -58,6 +62,7 @@ module "ingress_nginx" {
   namespace             = var.nginx_ingress_namespace
   ingress_class_name    = var.ingress_class_name
 }
+*/
 
 # =============================================================================
 # HUB CLUSTER MODULE
@@ -68,7 +73,7 @@ module "hub_cluster" {
   source = "../../modules/hub-cluster"
 
   providers = {
-    kubernetes = kubernetes.hub
+    kubernetes = kubernetes
     helm       = helm.hub
     keycloak   = keycloak
   }
@@ -125,8 +130,8 @@ module "hub_cluster" {
   default_admin_password_temporary         = var.default_admin_password_temporary
 
   depends_on = [
-    module.cert_manager,
-    module.ingress_nginx
+    # module.cert_manager,
+    # module.ingress_nginx
   ]
 }
 

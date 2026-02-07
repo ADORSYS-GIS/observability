@@ -108,3 +108,95 @@ resource "null_resource" "namespace_cleanup" {
 
   depends_on = [helm_release.nginx_ingress]
 }
+
+# =============================================================================
+# RBAC FIX FOR NGINX INC CONTROLLER
+# =============================================================================
+# The NGINX Inc Helm chart doesn't create sufficient RBAC permissions by default
+# This is a known limitation compared to the Community NGINX chart
+# Without these permissions, the controller cannot list/watch Kubernetes ingresses
+# and will fail with: "cannot list resource 'ingresses' in API group 'networking.k8s.io'"
+#
+# Official NGINX Inc docs confirm this is required for proper operation:
+# https://docs.nginx.com/nginx-ingress-controller/installation/installation-with-helm/
+# =============================================================================
+
+resource "kubernetes_cluster_role_v1" "nginx_ingress_rbac" {
+  count = var.install_nginx_ingress ? 1 : 0
+
+  metadata {
+    name = "nginx-ingress"
+  }
+
+  # Discovery API - Required for service discovery
+  rule {
+    api_groups = ["discovery.k8s.io"]
+    resources  = ["endpointslices"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  # Core resources - Services, endpoints, pods, secrets, configmaps
+  rule {
+    api_groups = [""]
+    resources  = ["services", "endpoints", "pods", "secrets", "configmaps"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  # Events - For logging and debugging
+  rule {
+    api_groups = [""]
+    resources  = ["events"]
+    verbs      = ["create", "patch", "list"]
+  }
+
+  # CRITICAL: Ingress resources - This is what was missing!
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources  = ["ingresses", "ingressclasses"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  # Ingress status updates - So controller can update LoadBalancer IPs
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources  = ["ingresses/status"]
+    verbs      = ["update"]
+  }
+
+  # NGINX Inc specific CRDs (if using VirtualServer, etc.)
+  rule {
+    api_groups = ["k8s.nginx.org"]
+    resources  = ["virtualservers", "virtualserverroutes", "transportservers", "policies", "globalconfigurations"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
+    api_groups = ["k8s.nginx.org"]
+    resources  = ["virtualservers/status", "virtualserverroutes/status", "transportservers/status", "policies/status"]
+    verbs      = ["update"]
+  }
+
+  depends_on = [helm_release.nginx_ingress]
+}
+
+resource "kubernetes_cluster_role_binding_v1" "nginx_ingress_rbac" {
+  count = var.install_nginx_ingress ? 1 : 0
+
+  metadata {
+    name = "nginx-ingress"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.nginx_ingress_rbac[0].metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = "nginx-monitoring-nginx-ingress" # This is created by the Helm chart
+    namespace = var.namespace
+  }
+
+  depends_on = [helm_release.nginx_ingress]
+}

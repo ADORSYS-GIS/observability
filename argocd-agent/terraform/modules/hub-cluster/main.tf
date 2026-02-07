@@ -5,8 +5,6 @@
 # 1.1 Create Namespace
 resource "kubernetes_namespace" "hub_argocd" {
 
-  provider = kubernetes
-
   metadata {
     name = var.hub_namespace
   }
@@ -31,12 +29,28 @@ resource "null_resource" "hub_argocd_base_install" {
       echo "Installing base Argo CD on Hub cluster..." | tee -a "$LOG_FILE"
       echo "Installation URL: ${local.argocd_base_install_url}" | tee -a "$LOG_FILE"
       
+      # CRITICAL FIX: Clean up CRD annotations that may have grown too large
+      # This prevents "metadata.annotations: Too long: may not be more than 262144 bytes" error
+      echo "Cleaning up CRD annotations to prevent size limit errors..." | tee -a "$LOG_FILE"
+      for crd in applications.argoproj.io applicationsets.argoproj.io appprojects.argoproj.io; do
+        if kubectl get crd $crd --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+          echo "  Removing last-applied-configuration annotation from $crd..." | tee -a "$LOG_FILE"
+          kubectl annotate crd $crd \
+            --context ${var.hub_cluster_context} \
+            kubectl.kubernetes.io/last-applied-configuration- \
+            --overwrite 2>&1 | tee -a "$LOG_FILE" || echo "  (annotation may not exist, continuing...)" | tee -a "$LOG_FILE"
+        fi
+      done
+      
       while [ $RETRY -lt $MAX_RETRIES ]; do
         echo "[Attempt $((RETRY+1))/$MAX_RETRIES] Applying ArgoCD manifests (principal-specific, no app controller)..." | tee -a "$LOG_FILE"
         
-        # Use kubectl apply with -k flag for kustomize directory
+        # Use server-side apply to avoid storing large configurations in annotations
+        # This is the recommended approach for large manifests and prevents the 262144 byte limit error
         if kubectl apply -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
+          --server-side \
+          --force-conflicts \
           -k ${local.argocd_base_install_url} 2>&1 | tee -a "$LOG_FILE"; then
           echo "✓ Principal-specific Argo CD manifests applied successfully" | tee -a "$LOG_FILE"
           echo "  Components: server, dex, redis, repo-server, applicationset-controller" | tee -a "$LOG_FILE"
@@ -222,18 +236,78 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
-# 1.4 Expose ArgoCD UI via Ingress
+# 1.4.1 Create Certificate Resource First (for NGINX Inc. compatibility)
+# NGINX Inc. controller doesn't allow multiple ingresses per hostname,
+# so we create the certificate separately before creating the main ingress with TLS
+resource "null_resource" "argocd_certificate" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      
+      echo "Creating Certificate resource for ArgoCD..."
+      
+      cat <<EOF | kubectl apply -f - --context ${var.hub_cluster_context}
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: argocd-server-tls
+        namespace: ${var.hub_namespace}
+      spec:
+        secretName: argocd-server-tls
+        issuerRef:
+          name: ${var.cert_issuer_name}
+          kind: ${var.cert_issuer_kind}
+        dnsNames:
+        - ${var.argocd_host}
+      EOF
+      
+      echo "Waiting for certificate to be issued (max 5 minutes)..."
+      
+      # Wait for certificate to be ready
+      for i in {1..60}; do
+        STATUS=$(kubectl get certificate argocd-server-tls -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+        
+        if [ "$STATUS" = "True" ]; then
+          echo "✓ Certificate issued successfully!"
+          exit 0
+        fi
+        
+        echo "Waiting for certificate... (attempt $i/60)"
+        sleep 5
+      done
+      
+      echo "⚠ WARNING: Certificate not issued within 5 minutes. Continuing anyway..."
+      echo "You may need to manually troubleshoot: kubectl describe certificate argocd-server-tls -n ${var.hub_namespace}"
+    EOT
+  }
+
+  depends_on = [
+    null_resource.hub_argocd_server_insecure
+  ]
+}
+
+# 1.4.2 Expose ArgoCD UI via Ingress (with TLS after certificate is issued)
+# CRITICAL: We create the Certificate separately BEFORE this Ingress to avoid NGINX Inc conflicts
+# NGINX Inc controller doesn't allow multiple ingresses per hostname, so we:
+# 1. Create Certificate resource separately (above) which handles ACME validation
+# 2. Create Ingress WITHOUT cert-manager annotation to avoid duplicate cert creation
+# 3. Reference the TLS secret created by the Certificate resource
 resource "kubernetes_ingress_v1" "argocd_ui" {
-  count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
-  provider = kubernetes
+  count = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
 
   metadata {
     name      = "argocd-server"
     namespace = var.hub_namespace
     annotations = {
-      "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/force-ssl-redirect"                                           = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
+      # DO NOT add cert-manager annotation here - Certificate is created separately above
+      # to prevent NGINX Inc from rejecting the ingress due to hostname conflicts during ACME validation
+      "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol" = "HTTP"
     }
   }
 
@@ -265,7 +339,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   }
 
   depends_on = [
-    null_resource.hub_argocd_server_insecure
+    null_resource.argocd_certificate
   ]
 }
 
@@ -311,14 +385,19 @@ resource "null_resource" "hub_pki_initialization" {
       echo "Principal context: ${var.hub_cluster_context}" | tee -a "$LOG_FILE"
       echo "Principal namespace: ${var.hub_namespace}" | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} pki init \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
+      # Check if CA secret already exists to avoid errors
+      if kubectl get secret argocd-agent-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+          echo "⚠ CA secret 'argocd-agent-ca' already exists. Skipping initialization." | tee -a "$LOG_FILE"
+      else
+          if ! ${var.argocd_agentctl_path} pki init \
+            --principal-context ${var.hub_cluster_context} \
+            --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
+            echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+            exit 1
+          fi
+          echo "✓ PKI initialized successfully" | tee -a "$LOG_FILE"
       fi
       
-      echo "✓ PKI initialized successfully" | tee -a "$LOG_FILE"
       echo "PKI initialization logs saved to: $LOG_FILE"
     EOT
   }
@@ -568,6 +647,10 @@ data "external" "hub_principal_address" {
       exit 0
     fi
 
+    # Give LoadBalancer time to start provisioning (GCP typically takes 30-60 seconds)
+    echo "Waiting for LoadBalancer to provision..." >&2
+    sleep 30
+
     PRINCIPAL_IP=""
     RETRY_COUNT=0
     MAX_RETRIES=$((${var.principal_loadbalancer_wait_timeout} / 5))
@@ -583,7 +666,7 @@ data "external" "hub_principal_address" {
           -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
       fi
       
-      if [ -n "$PRINCIPAL_IP" ]; then
+      if [ -n "$PRINCIPAL_IP" ] && [ "$PRINCIPAL_IP" != "null" ]; then
         echo "{\"address\": \"$PRINCIPAL_IP\", \"port\": \"$SERVICE_PORT\"}"
         exit 0
       fi
@@ -592,8 +675,10 @@ data "external" "hub_principal_address" {
       sleep 5
     done
     
-    echo "{\"address\": \"pending\", \"port\": \"443\"}"
-    exit 1
+    # LoadBalancer not ready - return pending but DON'T fail (exit 0)
+    # This allows Terraform to continue and spoke config will detect "pending" and skip
+    echo "{\"address\": \"pending\", \"port\": \"$SERVICE_PORT\"}"
+    exit 0
   EOT
   ]
 
@@ -606,8 +691,7 @@ data "external" "hub_principal_address" {
 
 # Exposes Principal service via Ingress with TLS termination
 resource "kubernetes_ingress_v1" "hub_principal_ingress" {
-  count    = var.deploy_hub && var.enable_principal_ingress && var.principal_ingress_host != "" ? 1 : 0
-  provider = kubernetes
+  count = var.deploy_hub && var.enable_principal_ingress && var.principal_ingress_host != "" ? 1 : 0
 
   metadata {
     name      = var.principal_service_name
@@ -653,62 +737,162 @@ resource "kubernetes_ingress_v1" "hub_principal_ingress" {
 }
 
 # Updates Principal server certificate with LoadBalancer IP after service is exposed
+# IMPROVED: Self-contained using kubectl and openssl (no dependency on argocd-agentctl)
 resource "null_resource" "hub_pki_principal_server_cert_updated" {
 
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
-      set -e
+      set +e  # Don't exit on error initially
       set -o pipefail
       
-      LOG_FILE="/tmp/argocd-pki-principal-cert-update-$$(date +%Y%m%d-%H%M%S).log"
+      LOG_FILE="/tmp/argocd-pki-principal-cert-update-$(date +%Y%m%d-%H%M%S).log"
+      
+      echo "======================================" | tee -a "$LOG_FILE"
+      echo "  Principal Certificate Update" | tee -a "$LOG_FILE"
+      echo "======================================" | tee -a "$LOG_FILE"
+      echo "" | tee -a "$LOG_FILE"
+      
+      # Get the LoadBalancer IP from the data source
       PRINCIPAL_IP="${data.external.hub_principal_address.result.address}"
+      PRINCIPAL_PORT="${data.external.hub_principal_address.result.port}"
       
-      echo "Updating Principal certificate with external address..." | tee -a "$LOG_FILE"
-      echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+      echo "Principal address: $PRINCIPAL_IP:$PRINCIPAL_PORT" | tee -a "$LOG_FILE"
       
-      if [ "$PRINCIPAL_IP" = "pending" ] || [ "$PRINCIPAL_IP" = "error" ]; then
-        echo "✗ ERROR: Cannot update certificate - LoadBalancer not ready" | tee -a "$LOG_FILE"
+      # Check if LoadBalancer IP is still pending
+      if [ "$PRINCIPAL_IP" = "pending" ]; then
+        echo "" | tee -a "$LOG_FILE"
+        echo "⚠ WARNING: LoadBalancer IP is still pending" | tee -a "$LOG_FILE"
+        echo "Skipping certificate update (will retry on next apply)" | tee -a "$LOG_FILE"
+        echo "======================================" | tee -a "$LOG_FILE"
+        exit 0  # Non-fatal exit
+      fi
+      
+      echo "" | tee -a "$LOG_FILE"
+      echo "→ Updating certificate with LoadBalancer IP..." | tee -a "$LOG_FILE"
+      
+      # Enable strict error handling for critical operations
+      set -e
+      
+      # Check if CA secret exists
+      if ! kubectl get secret argocd-agent-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "✗ ERROR: CA secret not found" | tee -a "$LOG_FILE"
         exit 1
       fi
       
-      echo "Issuing updated Principal server certificate..." | tee -a "$LOG_FILE"
-      if ! ${var.argocd_agentctl_path} pki issue principal \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} \
-        --ip "127.0.0.1,$PRINCIPAL_IP" \
-        --dns "${local.principal_dns}" \
-        --upsert 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Failed to update Principal certificate. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
-      fi
+      # Create temporary directory for certificates
+      CERT_DIR=$(mktemp -d)
+      trap "rm -rf $CERT_DIR" EXIT
       
-      echo "Restarting ${var.principal_service_name} deployment..." | tee -a "$LOG_FILE"
-      if ! kubectl rollout restart deployment/${var.principal_service_name} \
-        -n ${var.hub_namespace} \
-        --context ${var.hub_cluster_context} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Failed to restart Principal deployment. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
-      fi
+      # Extract CA certificate and key
+      echo "→ Extracting CA certificate and key..." | tee -a "$LOG_FILE"
+      kubectl get secret argocd-agent-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} \
+        -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
+      kubectl get secret argocd-agent-ca -n ${var.hub_namespace} --context ${var.hub_cluster_context} \
+        -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/ca.key"
       
-      echo "Waiting for Principal pods to be ready..." | tee -a "$LOG_FILE"
-      if ! kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/name=${var.principal_service_name} \
+      echo "✓ CA certificate extracted" | tee -a "$LOG_FILE"
+      
+      # Create OpenSSL config for certificate with SANs
+      echo "→ Generating new server certificate with IP: $PRINCIPAL_IP..." | tee -a "$LOG_FILE"
+      
+      cat > "$CERT_DIR/server_cert.conf" <<EOF_CERT
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = argocd-agent-principal
+
+[v3_req]
+keyUsage = keyEncipherment, digitalSignature
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = argocd-agent-principal.${var.hub_namespace}.svc.cluster.local
+DNS.3 = argocd-agent-principal.${var.hub_namespace}.svc
+DNS.4 = argocd-agent-principal
+IP.1 = 127.0.0.1
+IP.2 = $PRINCIPAL_IP
+EOF_CERT
+      
+      # Generate new private key
+      openssl genrsa -out "$CERT_DIR/server.key" 2048 2>&1 | tee -a "$LOG_FILE"
+      
+      # Generate CSR
+      openssl req -new -key "$CERT_DIR/server.key" -out "$CERT_DIR/server.csr" \
+        -config "$CERT_DIR/server_cert.conf" 2>&1 | tee -a "$LOG_FILE"
+      
+      # Sign the certificate with CA
+      openssl x509 -req -in "$CERT_DIR/server.csr" -CA "$CERT_DIR/ca.crt" -CAkey "$CERT_DIR/ca.key" \
+        -CAcreateserial -out "$CERT_DIR/server.crt" -days 365 \
+        -extensions v3_req -extfile "$CERT_DIR/server_cert.conf" 2>&1 | tee -a "$LOG_FILE"
+      
+      echo "✓ New certificate generated" | tee -a "$LOG_FILE"
+      
+      # Verify the certificate
+      echo "" | tee -a "$LOG_FILE"
+      echo "→ Verifying new certificate..." | tee -a "$LOG_FILE"
+      openssl x509 -in "$CERT_DIR/server.crt" -noout -text | grep -A2 "Subject Alternative Name" | tee -a "$LOG_FILE"
+      
+      # Update the secret
+      echo "" | tee -a "$LOG_FILE"
+      echo "→ Updating argocd-agent-principal-tls secret..." | tee -a "$LOG_FILE"
+      kubectl create secret tls argocd-agent-principal-tls \
+        --cert="$CERT_DIR/server.crt" \
+        --key="$CERT_DIR/server.key" \
         -n ${var.hub_namespace} \
         --context ${var.hub_cluster_context} \
-        --timeout=${var.kubectl_timeout} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Principal pods failed to become ready after restart" | tee -a "$LOG_FILE"
-        kubectl describe pods -l app.kubernetes.io/name=${var.principal_service_name} -n ${var.hub_namespace} --context ${var.hub_cluster_context} | tee -a "$LOG_FILE"
-        exit 1
-      fi
+        --dry-run=client -o yaml | kubectl apply -f - 2>&1 | tee -a "$LOG_FILE"
       
-      echo "✓ Principal certificate updated successfully" | tee -a "$LOG_FILE"
+      echo "✓ Secret updated" | tee -a "$LOG_FILE"
+      
+      # Restart principal deployment
+      echo "" | tee -a "$LOG_FILE"
+      echo "→ Restarting ${var.principal_service_name} deployment..." | tee -a "$LOG_FILE"
+      kubectl rollout restart deployment/${var.principal_service_name} \
+        -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} 2>&1 | tee -a "$LOG_FILE"
+      
+      # Wait for deployment to be ready
+      echo "→ Waiting for deployment to be ready..." | tee -a "$LOG_FILE"
+      kubectl rollout status deployment/${var.principal_service_name} \
+        -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} \
+        --timeout=${var.kubectl_timeout} 2>&1 | tee -a "$LOG_FILE"
+      
+      echo "" | tee -a "$LOG_FILE"
+      echo "======================================" | tee -a "$LOG_FILE"
+      echo "✓ Certificate Update Complete!" | tee -a "$LOG_FILE"
+      echo "======================================" | tee -a "$LOG_FILE"
+      echo "" | tee -a "$LOG_FILE"
+      echo "Certificate now includes:" | tee -a "$LOG_FILE"
+      echo "  - 127.0.0.1" | tee -a "$LOG_FILE"
+      echo "  - $PRINCIPAL_IP" | tee -a "$LOG_FILE"
+      echo "" | tee -a "$LOG_FILE"
       echo "Update logs saved to: $LOG_FILE"
     EOT
   }
 
-  depends_on = [data.external.hub_principal_address]
+  depends_on = [
+    null_resource.hub_principal_loadbalancer_service,
+    data.external.hub_principal_address,
+    null_resource.hub_pki_initialization
+  ]
+
+  # CRITICAL: Add triggers to ensure this runs when LoadBalancer IP changes
+  triggers = {
+    principal_address = data.external.hub_principal_address.result.address
+    principal_port    = data.external.hub_principal_address.result.port
+    ca_secret_version = sha256(jsonencode({
+      context   = var.hub_cluster_context
+      namespace = var.hub_namespace
+    }))
+  }
 }
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
@@ -758,15 +942,20 @@ resource "null_resource" "hub_pki_jwt_signing_key" {
       
       echo "Creating JWT signing key for agent authentication..." | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} jwt create-key \
-        --principal-context ${var.hub_cluster_context} \
-        --principal-namespace ${var.hub_namespace} \
-        --upsert 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Failed to create JWT signing key. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
-        exit 1
+      # Check if token key secret exists
+      if kubectl get secret argocd-agent-token-key -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "⚠ JWT Key secret 'argocd-agent-token-key' already exists. Skipping creation." | tee -a "$LOG_FILE"
+      else
+        if ! ${var.argocd_agentctl_path} jwt create-key \
+          --principal-context ${var.hub_cluster_context} \
+          --principal-namespace ${var.hub_namespace} \
+          --upsert 2>&1 | tee -a "$LOG_FILE"; then
+          echo "✗ ERROR: Failed to create JWT signing key. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+          exit 1
+        fi
+        echo "✓ JWT signing key created successfully" | tee -a "$LOG_FILE"
       fi
       
-      echo "✓ JWT signing key created successfully" | tee -a "$LOG_FILE"
       echo "Key creation logs saved to: $LOG_FILE"
     EOT
   }
@@ -1073,7 +1262,6 @@ resource "null_resource" "spoke_agent_creation" {
 # Creates agent-specific namespace on hub cluster for managed mode resources
 resource "kubernetes_namespace" "spoke_agent_managed_namespace" {
   for_each = var.workload_clusters
-  provider = kubernetes
 
   metadata {
     name = each.key

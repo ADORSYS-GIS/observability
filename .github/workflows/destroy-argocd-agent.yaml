@@ -1,0 +1,380 @@
+name: Destroy ArgoCD Agent
+
+on:
+  push:
+    branches:
+      - '**'  # Trigger on push to any branch
+    paths:
+      - '.github/workflows/destroy-argocd-agent.yaml'  # Only trigger when this workflow file changes
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev, staging, prod)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      cloud_provider:
+        description: 'Cloud provider'
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+          - generic
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm complete removal'
+        required: true
+      # EKS specific
+      aws_region:
+        description: '[EKS] AWS Region'
+        required: false
+
+      hub_cluster_context:
+        description: 'Kubectl context for hub cluster'
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  destroy-argocd-agent:
+    name: Destroy ArgoCD Agent
+    runs-on: ubuntu-latest
+    # Removed 'environment' reference to avoid GitHub environment protection rules 
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup NetBird
+        run: |
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --hostname github-runner-destroy-${{ github.run_id }}
+          
+          echo "Waiting for NetBird connection to establish... "
+          sleep 15
+          
+          echo "NetBird Status:"
+          sudo netbird status
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          echo "Kubeconfig contexts:"
+          kubectl config get-contexts
+
+      - name: Resolve Hub Cluster Context
+        run: |
+          if [ -n "${{ inputs.hub_cluster_context }}" ]; then
+            HUB_CLUSTER_CONTEXT="${{ inputs.hub_cluster_context }}"
+          else
+            HUB_CLUSTER_CONTEXT="$(kubectl config current-context)"
+          fi
+          echo "HUB_CLUSTER_CONTEXT=$HUB_CLUSTER_CONTEXT" >> $GITHUB_ENV
+
+      # GKE Authentication (Required for Terraform modules even for push triggers)
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          credentials_json: '''${{ secrets.GCP_CREDENTIALS }}'''
+
+      - name: Configure kubectl (GKE)
+        if: inputs.cloud_provider == 'gke'
+        run: |
+          echo "Skipping direct gcloud get-credentials to preserve custom kubeconfig with spoke contexts."
+          echo "Ensuring GKE context exists in injected config..."
+          kubectl config get-contexts | grep "${{ inputs.cluster_name }}" || echo "Warning: Hub cluster context might be missing"
+
+      # EKS Authentication
+      - name: Configure AWS Credentials
+        if: inputs.cloud_provider == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Configure kubectl (EKS)
+        if: inputs.cloud_provider == 'eks'
+        run: |
+          aws eks update-kubeconfig \
+            --name "${{ inputs.cluster_name }}" \
+            --region "${{ inputs.aws_region }}"
+
+      # Generic Authentication
+      - name: Configure kubectl (Generic)
+        if: inputs.cloud_provider == 'generic'
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Configure Terraform Backend
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          # Pass cloud provider and environment
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh ${{ inputs.cloud_provider || 'gke' }} ${{ inputs.environment || 'prod' }}
+
+      - name: Terraform Init
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        run: terraform init
+      - name: Remove Terraform State Lock
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+        run: |
+          echo "Attempting to remove stale Terraform state lock..."
+          # Ensure the bucket variable is correctly expanded by the shell
+          gsutil rm "gs://observe-472521-terraform-state-argocd/terraform/argocd-agent/prod/default.tflock" || echo "Lock file not found or already removed."
+
+      - name: Fetch GKE Cluster Details
+        if: inputs.cloud_provider == 'gke'
+        run: |
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe "${{ secrets.CLUSTER_NAME }}" --zone "${{ secrets.REGION }}" --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe "${{ secrets.CLUSTER_NAME }}" --zone "${{ secrets.REGION }}" --format="value(masterAuth.clusterCaCertificate)")
+          echo "CLUSTER_ENDPOINT=$CLUSTER_ENDPOINT" >> $GITHUB_ENV
+          echo "CLUSTER_CA=$CLUSTER_CA" >> $GITHUB_ENV
+
+      - name: Create terraform.tfvars for Destroy
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        env:
+          CLUSTER_ENDPOINT: ${{ env.CLUSTER_ENDPOINT }}
+          CLUSTER_CA: ${{ env.CLUSTER_CA }}
+        run: |
+          # Get the actual current kubectl context name
+          KUBE_CONTEXT=$(kubectl config current-context)
+          
+          # Fetch cluster details using gcloud
+          CLUSTER_ENDPOINT=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(endpoint)")
+          CLUSTER_CA=$(gcloud container clusters describe ${{ secrets.CLUSTER_NAME }} --zone ${{ secrets.REGION }} --format="value(masterAuth.clusterCaCertificate)")
+          
+          cat > terraform.tfvars <<EOF
+          project_id               = "${{ secrets.GCP_PROJECT_ID }}"
+          cluster_name             = "${{ secrets.CLUSTER_NAME }}"
+          region                   = "${{ secrets.REGION }}"
+          cluster_endpoint         = "$CLUSTER_ENDPOINT"
+          cluster_ca_certificate   = "$CLUSTER_CA"
+          hub_cluster_context      = "$KUBE_CONTEXT"
+          hub_namespace            = "argocd-agent"
+          spoke_namespace          = "argocd-agent"
+          create_default_admin_user = true
+          default_admin_password   = "${{ secrets.PASSWORD }}"
+          
+          # Keycloak
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          argocd_url               = "${{ secrets.ARGOCD_URL }}"
+
+          # Ingress/Cert
+          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          argocd_host              = "${{ secrets.ARGOCD_HOST }}"
+          EOF
+
+          echo "✅ Created terraform.tfvars for destroy operation"
+          echo "Cluster Endpoint: $CLUSTER_ENDPOINT"
+
+      - name: Terraform Destroy
+        working-directory: argocd-agent/terraform/environments/${{ inputs.environment || 'prod' }}
+        run: terraform destroy -auto-approve
+
+      - name: Force Delete Stuck Namespaces (All Clusters)
+        timeout-minutes: 10
+        env:
+          WORKLOAD_CLUSTERS_JSON: ${{ secrets.WORKLOAD_CLUSTERS_JSON }}
+        run: |
+          echo "======================================"
+          echo "Force Cleaning Up Stuck Namespaces"
+          echo "======================================"
+          
+          # Function to force delete stuck namespace
+          force_delete_namespace() {
+            local NS=$1
+            local CTX=$2
+            
+            echo ""
+            echo "Checking namespace '$NS' in context '$CTX'..."
+            
+            # Check if namespace exists
+            if ! kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+              echo "  ✓ Namespace does not exist (clean state)"
+              return 0
+            fi
+            
+            # Get namespace status
+            NS_STATUS=$(kubectl get namespace "$NS" --context "$CTX" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            echo "  Current status: $NS_STATUS"
+            
+            if [ "$NS_STATUS" = "Terminating" ] || [ "$NS_STATUS" = "Active" ]; then
+              echo "  → Force deleting namespace..."
+              
+              # Step 1: Remove finalizers from all resources
+              echo "    [1/5] Removing finalizers from resources..."
+              timeout 120 bash -c '
+                kubectl api-resources --verbs=list --namespaced=true -o name 2>/dev/null | while read resource; do
+                  timeout 10 kubectl get "$resource" -n "'"$NS"'" --context "'"$CTX"'" -o name 2>/dev/null | while read item; do
+                    timeout 5 kubectl patch "$item" -n "'"$NS"'" --context "'"$CTX"'" \
+                      -p '"'"'{"metadata":{"finalizers":null}}'"'"' --type=merge 2>/dev/null || true
+                  done
+                done
+              ' || echo "    ⚠ Step 1 timed out after 120s, continuing..."
+              
+              # Step 2: Remove namespace finalizers
+              echo "    [2/5] Removing namespace finalizers..."
+              timeout 10 kubectl patch namespace "$NS" --context "$CTX" \
+                -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || echo "    ⚠ Step 2 timed out, continuing..."
+              
+              # Step 3: Force delete
+              echo "    [3/5] Force deleting namespace..."
+              timeout 10 kubectl delete namespace "$NS" --context "$CTX" \
+                --grace-period=0 --force --ignore-not-found=true 2>/dev/null || echo "    ⚠ Step 3 timed out, continuing..."
+              
+              # Step 4: Use API to finalize
+              echo "    [4/5] Finalizing via Kubernetes API..."
+              TMP_FILE="/tmp/ns-${NS}-${CTX}-$$.json"
+              if timeout 10 kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | jq 'del(.spec.finalizers)' > "$TMP_FILE" 2>/dev/null; then
+                timeout 10 kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE" --context "$CTX" >/dev/null 2>&1 || true
+                rm -f "$TMP_FILE"
+              else
+                echo "    ⚠ Step 4 timed out, continuing..."
+              fi
+              
+              # Step 5: Verify deletion
+              echo "    [5/5] Verifying deletion..."
+              sleep 3
+              if timeout 10 kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+                echo "    ⚠ Namespace still exists, attempting final cleanup..."
+                
+                # Final attempt with API finalize
+                TMP_FILE2="/tmp/ns-${NS}-${CTX}-final-$$.json"
+                timeout 10 kubectl get namespace "$NS" --context "$CTX" -o json 2>/dev/null | \
+                  jq 'del(.spec.finalizers) | del(.metadata.finalizers)' > "$TMP_FILE2" 2>/dev/null || true
+                timeout 10 kubectl replace --raw "/api/v1/namespaces/$NS/finalize" -f "$TMP_FILE2" --context "$CTX" 2>&1 || true
+                rm -f "$TMP_FILE2"
+                
+                sleep 2
+                if timeout 10 kubectl get namespace "$NS" --context "$CTX" >/dev/null 2>&1; then
+                  echo "    ⚠ WARNING: Namespace still exists after all cleanup attempts"
+                  echo "    This is non-fatal - it may clean up eventually"
+                else
+                  echo "    ✓ Namespace successfully deleted"
+                fi
+              else
+                echo "    ✓ Namespace successfully deleted"
+              fi
+            else
+              echo "  ⚠ Namespace in unexpected state: $NS_STATUS"
+            fi
+          }
+          
+          # Clean up spoke clusters first
+          if [ -n "$WORKLOAD_CLUSTERS_JSON" ]; then
+            echo ""
+            echo "Cleaning up spoke clusters..."
+            CONTEXTS=$(echo "$WORKLOAD_CLUSTERS_JSON" | jq -r 'values[]' 2>/dev/null || echo "")
+            
+            for CONTEXT in $CONTEXTS; do
+              echo ""
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "Processing spoke cluster: $CONTEXT"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              
+              # Check if context is reachable
+              if ! kubectl config get-contexts "$CONTEXT" &>/dev/null; then
+                echo "  ⚠ Context not found in kubeconfig, skipping"
+                continue
+              fi
+              
+              if ! timeout 10 kubectl get nodes --context "$CONTEXT" &>/dev/null 2>&1; then
+                echo "  ⚠ Context not reachable, skipping cleanup"
+                continue
+              fi
+              
+              # Force delete argocd namespace
+              force_delete_namespace "argocd" "$CONTEXT"
+            done
+          else
+            echo "No spoke clusters configured in WORKLOAD_CLUSTERS_JSON"
+          fi
+          
+          # Clean up hub cluster
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Processing hub cluster"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          HUB_CONTEXT=$(kubectl config current-context)
+          echo "Hub context: $HUB_CONTEXT"
+          
+          # Clean up both argocd and argocd-agent namespaces on hub
+          force_delete_namespace "argocd" "$HUB_CONTEXT"
+          force_delete_namespace "argocd-agent" "$HUB_CONTEXT"
+          
+          echo ""
+          echo "======================================"
+          echo "✓ Namespace cleanup complete"
+          echo "======================================"
+
+      - name: Verify Cleanup
+        env:
+          NAMESPACE: argocd-agent
+        run: |
+          echo "🔍 Verifying namespace removal..."
+          if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+            echo "⚠️  Namespace still exists, attempting manual cleanup..."
+            kubectl delete namespace "$NAMESPACE" --wait=false || true
+          else
+            echo "✅ Namespace successfully removed"
+          fi
+
+      - name: Clean up argocd namespace (Core ArgoCD)
+        run: |
+          echo "🧹 Cleaning up argocd namespace (core ArgoCD components)..."
+          # Delete core ArgoCD resources
+          kubectl delete application -n argocd --all --wait=false 2>/dev/null || true
+          
+          # Delete the namespace if it exists and is not terminating
+          if kubectl get namespace argocd &>/dev/null; then
+            echo "Deleting argocd namespace..."
+            kubectl delete namespace argocd --wait=false || true
+            echo "✅ argocd namespace deletion initiated"
+          else
+            echo "✅ argocd namespace already removed or does not exist"
+          fi
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## ArgoCD Agent Destruction" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment || 'prod' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cloud Provider**: ${{ inputs.cloud_provider || 'gke' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster**: ${{ inputs.cluster_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **All ArgoCD Agent resources have been destroyed**" >> $GITHUB_STEP_SUMMARY

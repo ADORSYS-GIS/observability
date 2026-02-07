@@ -34,11 +34,13 @@ check_resource_deleted() {
   
   if [ -n "$namespace" ]; then
     kubectl get "$resource_type" "$resource_name" -n "$namespace" --context "$context" &>/dev/null
+    EXIT_CODE=$?
   else
     kubectl get "$resource_type" "$resource_name" --context "$context" &>/dev/null
+    EXIT_CODE=$?
   fi
   
-  if [ $? -eq 0 ]; then
+  if [ $EXIT_CODE -eq 0 ]; then
     echo "✗ FAIL: $resource_type/$resource_name still exists"
     ((ERRORS++))
     return 1

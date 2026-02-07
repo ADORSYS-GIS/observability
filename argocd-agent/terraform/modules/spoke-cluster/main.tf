@@ -68,11 +68,7 @@ resource "null_resource" "spoke_argocd_installation" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    environment = {
-      GIT_HTTP_USER_AGENT   = "kubectl-kustomize"
-      GIT_CONFIG_PARAMETERS = "'http.lowSpeedLimit=1000' 'http.lowSpeedTime=600'"
-    }
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       set -o pipefail
       
@@ -566,8 +562,17 @@ resource "null_resource" "spoke_agent_configuration" {
       echo "Configuring agent ${each.key}..." | tee -a "$LOG_FILE"
       echo "Principal address: ${var.principal_address}:${var.principal_port}" | tee -a "$LOG_FILE"
       
-      if [ "${var.principal_address}" = "pending" ]; then
-        echo "✗ ERROR: Principal address not available. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
+      # CRITICAL: Check if principal address is still pending
+      if [ "${var.principal_address}" = "pending" ] || [ -z "${var.principal_address}" ]; then
+        echo "✗ ERROR: Principal LoadBalancer IP not available yet." | tee -a "$LOG_FILE"
+        echo "This usually means:" | tee -a "$LOG_FILE"
+        echo "  1. GCP LoadBalancer is still provisioning (can take 5-10 minutes)" | tee -a "$LOG_FILE"
+        echo "  2. LoadBalancer service failed to get an external IP" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "To debug:" | tee -a "$LOG_FILE"
+        echo "  kubectl get svc argocd-agent-principal -n argocd --context ${var.hub_cluster_context}" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
         exit 1
       fi
       

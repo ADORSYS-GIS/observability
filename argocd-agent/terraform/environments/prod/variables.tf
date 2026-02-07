@@ -18,8 +18,34 @@ variable "deploy_spokes" {
 # CLUSTER CONFIGURATION
 # =============================================================================
 
+
 variable "hub_cluster_context" {
   description = "Kubectl context for hub cluster"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Name of the GKE cluster"
+  type        = string
+}
+
+variable "region" {
+  description = "Region of the GKE cluster"
+  type        = string
+}
+
+variable "cluster_endpoint" {
+  description = "GKE Cluster Endpoint"
+  type        = string
+}
+
+variable "cluster_ca_certificate" {
+  description = "GKE Cluster CA Certificate (base64 encoded)"
+  type        = string
+}
+
+variable "project_id" {
+  description = "GCP Project ID"
   type        = string
 }
 
@@ -113,12 +139,8 @@ variable "keycloak_url" {
   description = "Keycloak URL (e.g., https://keycloak.example.com)"
   type        = string
   default     = ""
-
-  validation {
-    condition     = var.enable_keycloak ? var.keycloak_url != "" : true
-    error_message = "The keycloak_url is required when enable_keycloak is true."
-  }
 }
+
 
 variable "keycloak_user" {
   description = "Keycloak admin username"
@@ -131,11 +153,6 @@ variable "keycloak_password" {
   type        = string
   sensitive   = true
   default     = ""
-
-  validation {
-    condition     = var.enable_keycloak ? var.keycloak_password != "" : true
-    error_message = "The keycloak_password is required when enable_keycloak is true."
-  }
 }
 
 variable "keycloak_realm" {
@@ -148,11 +165,6 @@ variable "argocd_url" {
   description = "ArgoCD URL for Keycloak redirect URIs (e.g., https://argocd.example.com)"
   type        = string
   default     = ""
-
-  validation {
-    condition     = var.enable_keycloak ? var.argocd_url != "" : true
-    error_message = "The argocd_url is required when enable_keycloak is true."
-  }
 }
 
 variable "keycloak_client_id" {
@@ -195,11 +207,6 @@ variable "default_admin_password" {
   type        = string
   sensitive   = true
   default     = ""
-
-  validation {
-    condition     = var.create_default_admin_user && var.enable_keycloak ? var.default_admin_password != "" : true
-    error_message = "The default_admin_password is required when create_default_admin_user is true. Set TF_VAR_default_admin_password environment variable."
-  }
 }
 
 variable "default_admin_password_temporary" {

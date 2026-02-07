@@ -1,0 +1,217 @@
+name: Deploy ArgoCD Agent (EKS)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-eks.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-eks.yaml'
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TERRAFORM_VERSION: '1.5.7'
+  CLOUD_PROVIDER: 'eks'
+  ENVIRONMENT: 'prod'
+  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init -backend=false
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive || true
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          find argocd-agent/scripts -name "*.sh" -exec shellcheck {} \;
+          find .github/scripts -name "*.sh" -exec shellcheck {} \;
+
+      - name: Yamllint
+        run: |
+          sudo apt-get install -y yamllint
+          yamllint -c .yamllint .github/workflows/deploy-argocd-agent-eks.yaml
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: prod
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.REGION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name "${{ secrets.CLUSTER_NAME }}" \
+            --region "${{ secrets.REGION }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Config Backend
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+          AWS_REGION: ${{ secrets.REGION }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh eks ${{ env.ENVIRONMENT }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          hub_cluster_context      = "arn:aws:eks:${{ secrets.REGION }}:cluster/${{ secrets.CLUSTER_NAME }}"
+          hub_namespace            = "argocd"
+          spoke_namespace          = "argocd"
+          create_default_admin_user = true
+          default_admin_password   = "${{ secrets.PASSWORD }}"
+          
+          # Keycloak (Optional - enables if secrets exist)
+          enable_keycloak          = ${{ secrets.KEYCLOAK_URL != '' }}
+          keycloak_url             = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id       = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password        = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          argocd_url               = "${{ secrets.ARGOCD_URL }}"
+
+          # Ingress/Cert (Example Secrets)
+          letsencrypt_email        = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          EOF
+          echo "✅ Created terraform.tfvars"
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -eq 1 ]; then exit 1; fi
+          terraform show -no-color tfplan > plan.txt
+          exit 0
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+  terraform-apply:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [validate, terraform-plan]
+    environment: prod
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.REGION }}
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME }}" --region "${{ secrets.REGION }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Config Backend
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+          AWS_REGION: ${{ secrets.REGION }}
+        run: |
+          chmod +x $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh
+          $GITHUB_WORKSPACE/.github/scripts/configure-backend.sh eks ${{ env.ENVIRONMENT }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Verify Deployment
+        run: |
+          kubectl get pods -n argocd
+          kubectl get clusterrolebinding argocd-agent-principal-binding || true

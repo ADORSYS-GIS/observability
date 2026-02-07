@@ -1,0 +1,261 @@
+name: Deploy ArgoCD Agent (GKE)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-gke.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-agent-gke.yaml'
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TERRAFORM_VERSION: '1.5.7'
+  CLOUD_PROVIDER: 'gke'
+  ENVIRONMENT: 'prod'
+  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init -backend=false
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive || true
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          find argocd-agent/scripts -name "*.sh" -exec shellcheck {} \;
+          find .github/scripts -name "*.sh" -exec shellcheck {} \;
+
+      - name: Yamllint
+        run: |
+          sudo apt-get install -y yamllint
+          yamllint -c .yamllint .github/workflows/deploy-argocd-agent-gke.yaml
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: prod
+    env:
+      KUBECONFIG: /home/runner/.kube/config
+    steps:
+      - name: Setup NetBird
+        run: |
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --hostname github-runner-plan-${{ github.run_id }}
+          
+          sleep 5
+          netbird status
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+          
+          # Configure KUBECONFIG for spokes if provided
+          if [ ! -z "${{ secrets.KUBECONFIG_DATA }}" ]; then
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "gke" "argocd-agent"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          cloud_provider             = "${{ env.CLOUD_PROVIDER }}"
+          project_id                 = "${{ secrets.GCP_PROJECT_ID }}"
+          region                     = "${{ secrets.REGION }}"
+          cluster_name               = "${{ secrets.CLUSTER_NAME }}"
+          argocd_url                 = "${{ secrets.ARGOCD_HOST }}"
+          letsencrypt_email          = "${{ secrets.LETSENCRYPT_EMAIL_ARGOCD }}"
+          keycloak_url               = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_client_id         = "${{ secrets.KEYCLOAK_CLIENT_ID }}"
+          keycloak_password          = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          workload_clusters_json     = '${{ secrets.WORKLOAD_CLUSTERS_JSON }}'
+          EOF
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode -var="argocd_admin_password=${{ secrets.PASSWORD }}"
+          EXIT_CODE=$?
+          set -e
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+          terraform show tfplan > plan.txt
+          exit 0
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-gke
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+  terraform-apply:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [validate, terraform-plan]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment: prod
+    env:
+      KUBECONFIG: /home/runner/.kube/config
+    steps:
+      - name: Setup NetBird
+        run: |
+          echo "Installing NetBird client..."
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          
+          echo "Connecting to NetBird network..."
+          sudo netbird up \
+            --setup-key ${{ secrets.NETBIRD_SETUP_KEY }} \
+            --hostname github-runner-apply-${{ github.run_id }}
+          
+          sleep 5
+          netbird status
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+          
+          # Configure KUBECONFIG for spokes if provided
+          if [ ! -z "${{ secrets.KUBECONFIG_DATA }}" ]; then
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "gke" "argocd-agent"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET_ARGOCD }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-gke
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Verify Deployment
+        run: |
+          kubectl get pods -n argocd
+          kubectl get clusterrolebinding argocd-agent-principal-binding || true
