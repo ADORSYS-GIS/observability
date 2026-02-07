@@ -52,7 +52,7 @@ echo "✓ Principal Port: $SVC_PORT"
 echo ""
 
 echo "→ Checking agent connectivity..."
-kubectl logs -n argocd deployment/argocd-agent-agent --context $SPOKE_CTX --tail=20 | grep -i "connected\|error\|failed" || echo "No connectivity messages in recent logs"
+kubectl logs -n argocd deployment/argocd-agent-agent --context "$SPOKE_CTX" --tail=20 | grep -i "connected\|error\|failed" || echo "No connectivity messages in recent logs"
 echo ""
 
 echo "→ Propagating default AppProject..."
