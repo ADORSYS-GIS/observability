@@ -28,13 +28,13 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Check arguments
 if [ $# -lt 4 ]; then
-    error "Usage: $0 <agent-name> <app-name> <git-repo> <path> [target-namespace]
-    
-Examples:
-  $0 agent-1 sock-shop https://github.com/argoproj/argocd-example-apps.git sock-shop
-  $0 agent-2 guestbook https://github.com/argoproj/argocd-example-apps.git guestbook default
-  
-Available agents:"
+    echo -e "${RED}[ERROR]${NC} Usage: $0 <agent-name> <app-name> <git-repo> <path> [target-namespace]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 agent-1 sock-shop https://github.com/argoproj/argocd-example-apps.git sock-shop"
+    echo "  $0 agent-2 guestbook https://github.com/argoproj/argocd-example-apps.git guestbook default"
+    echo ""
+    echo "Available agents:"
     kubectl get ns --context "${HUB_CONTEXT:-gke_observe-472521_europe-west3_observe-prod-cluster}" 2>/dev/null | grep "^agent-" | awk '{print "  - " $1}' || echo "  (unable to list agents)"
     exit 1
 fi
@@ -51,9 +51,9 @@ HUB_CONTEXT="${HUB_CONTEXT:-gke_observe-472521_europe-west3_observe-prod-cluster
 # Validate agent namespace exists on hub
 info "Validating agent namespace '$AGENT_NAME' exists on hub..."
 if ! kubectl get ns "$AGENT_NAME" --context "$HUB_CONTEXT" &>/dev/null; then
-    error "Agent namespace '$AGENT_NAME' does not exist on hub cluster.
-    
-Available agent namespaces:"
+    echo -e "${RED}[ERROR]${NC} Agent namespace '$AGENT_NAME' does not exist on hub cluster."
+    echo ""
+    echo "Available agent namespaces:"
     kubectl get ns --context "$HUB_CONTEXT" | grep "^agent-" | awk '{print "  - " $1}'
     exit 1
 fi
