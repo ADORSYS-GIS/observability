@@ -297,7 +297,66 @@ For a public **npm package**, Renovate relies on three things working together:
 
 Private packages usually fail step 1 or step 2.
 
+### Failure mode #1 (MOST COMMON): missing source repository metadata
 
+#### What Renovate expects
+
+Renovate asks the registry:
+
+  “Where is the source code for @company/foo?”
+It expects something like:
+
+```json
+"repository": {
+  "type": "git",
+  "url": "https://github.com/company/foo"
+}
+```
+
+#### What often happens with private packages
+
+  - repository field is missing
+
+  - or stripped during publishing
+
+  - or points to an internal URL Renovate doesn’t recognize
+
+Example of broken metadata:
+```json
+"repository": "git@github.com:company/foo.git"
+```
+
+Renovate may not normalize this correctly, especially in Artifactory / private npm setups.
+
+**Result**
+
+🚫 Renovate has no idea where the changelog lives, so it gives up.
+
+### Failure mode #2: Renovate cannot access the source repo (auth problem)
+Even if Renovate knows where the repo is, it still must read it.
+
+#### Common causes
+
+  - Repo is private on GitHub / GitLab
+
+  - Renovate token does not have access
+
+  - Token only has repo read access in some orgs
+
+  - Self-hosted GitLab / Gitea requires a different token
+
+#### Typical symptoms
+
+  - Dependency updates work ✅
+
+  - Changelogs are missing ❌
+
+  - No obvious error in the PR
+
+Why?
+
+Because **version metadata comes from the registry**, not the repo.
+Changelog fetching requires **repo access**.
 
 ## Renovate Presets
 
