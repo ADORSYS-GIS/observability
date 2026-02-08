@@ -285,6 +285,18 @@ Private packages are where Renovate changelogs most often break, and the reasons
   Changelogs fail for private packages because Renovate cannot reliably discover or access the package’s source repository.
 Now let’s unpack exactly where it breaks.
 
+### How Renovate normally succeeds (baseline)
+
+For a public **npm package**, Renovate relies on three things working together:
+
+1. The registry (npm, Artifactory, etc.) tells Renovate where the source repo is
+
+2. Renovate can authenticate to that source repo
+
+3. The repo exposes releases or a readable changelog
+
+Private packages usually fail step 1 or step 2.
+
 
 
 ## Renovate Presets
