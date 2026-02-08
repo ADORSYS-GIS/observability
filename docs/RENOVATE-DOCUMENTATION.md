@@ -275,6 +275,18 @@ Renovate shows:
   - changes for 1.4.0
 
 It does not dump the entire changelog.
+
+## Concept of private packages
+
+Private packages are where Renovate changelogs most often break, and the reasons are very concrete. We will talk about this theory in the following lines.
+
+### The short truth (before details)
+
+  Changelogs fail for private packages because Renovate cannot reliably discover or access the package’s source repository.
+Now let’s unpack exactly where it breaks.
+
+
+
 ## Renovate Presets
 
 ### What Are Presets?
