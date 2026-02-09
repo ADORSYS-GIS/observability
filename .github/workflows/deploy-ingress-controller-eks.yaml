@@ -200,7 +200,7 @@ jobs:
       # Upload plan artifacts for apply job and PR comments
       # Binary plan ensures apply executes exactly what was reviewed
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-ingress-controller-eks
           path: |
@@ -326,7 +326,7 @@ jobs:
 
       # Store outputs as artifact for reference and troubleshooting
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-ingress-controller-eks
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
