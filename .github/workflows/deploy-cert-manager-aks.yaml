@@ -270,7 +270,7 @@ jobs:
 
       # Download the plan artifact generated in terraform-plan job
       - name: Download plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: tfplan-cert-manager-aks
           path: ${{ env.WORKING_DIR }}
