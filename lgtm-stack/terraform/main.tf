@@ -342,7 +342,7 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
     annotations = merge(
       {
         "kubernetes.io/ingress.class"     = var.ingress_class_name
-        "nginx.org/redirect-to-https"     = "true"
+        "nginx.org/redirect-to-https"     = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -494,7 +494,7 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
     annotations = merge(
       {
         "kubernetes.io/ingress.class"     = var.ingress_class_name
-        "nginx.org/redirect-to-https"     = "true"
+        "nginx.org/redirect-to-https"     = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
