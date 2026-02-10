@@ -70,7 +70,7 @@ jobs:
       - name: Install kubectl
         if: steps.cache-kubectl.outputs.cache-hit != 'true'
         run: |
-          curl -LO "https://dl.k8s.io/release/v${env.KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          curl -LO "https://dl.k8s.io/release/v${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
 
