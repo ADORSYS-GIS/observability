@@ -20,8 +20,6 @@ server:
     enabled: true
     size: 20Gi
   retention: 7d
-  extraArgs:
-    web.enable-lifecycle: ""
   service:
     type: ClusterIP
     port: 80
