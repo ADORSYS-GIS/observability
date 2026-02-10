@@ -31,6 +31,7 @@ on:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-gke.yaml'
 
+
 # Required permissions for workflow operations
 permissions:
   contents: read           # Read repository content
