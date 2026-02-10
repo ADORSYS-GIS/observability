@@ -199,7 +199,7 @@ jobs:
 
       # Save plan artifacts for apply job (tfplan binary + human-readable output)
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-cert-manager-gke
           path: |
@@ -334,7 +334,7 @@ jobs:
 
       # Save outputs as artifact for potential downstream jobs or auditing
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-cert-manager-gke
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json

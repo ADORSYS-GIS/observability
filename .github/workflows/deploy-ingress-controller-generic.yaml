@@ -165,7 +165,7 @@ jobs:
 
       # Save plan artifacts for apply job
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-ingress-controller-generic
           path: |
@@ -260,7 +260,7 @@ jobs:
 
       # Save outputs as artifact
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-ingress-controller-generic
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
