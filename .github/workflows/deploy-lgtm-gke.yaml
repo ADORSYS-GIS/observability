@@ -76,8 +76,6 @@ jobs:
           kubectl get nodes
           echo "✅ Connected to GKE cluster"
 
-
-
   import-existing-resources:
     name: Import Existing Resources
     runs-on: ubuntu-latest
@@ -282,7 +280,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
       name: production
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
