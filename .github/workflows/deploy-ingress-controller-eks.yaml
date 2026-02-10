@@ -62,9 +62,9 @@ jobs:
         uses: actions/checkout@v4
 
       # Authenticate to AWS using OIDC (recommended best practice for GitHub Actions)
-      # Alternative: Use static credentials with aws-actions/configure-aws-credentials@v4
+      # Alternative: Use static credentials with aws-actions/configure-aws-credentials@v6
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -229,7 +229,7 @@ jobs:
 
       # Authenticate to AWS
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
