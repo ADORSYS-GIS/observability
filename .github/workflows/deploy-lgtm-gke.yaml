@@ -28,10 +28,10 @@ on:
     paths:
       - 'lgtm-stack/terraform/**'
       - '.github/workflows/deploy-lgtm-gke.yaml'
-  pull_request:
-    paths:
-      - 'lgtm-stack/terraform/**'
-      - '.github/workflows/deploy-lgtm-gke.yaml'
+  # pull_request:
+  #   paths:
+  #     - 'lgtm-stack/terraform/**'
+  #     - '.github/workflows/deploy-lgtm-gke.yaml'
 
 permissions:
   contents: read
