@@ -133,13 +133,13 @@ jobs:
         run: |
           cat > terraform.tfvars <<EOF
           cloud_provider    = "${{ env.CLOUD_PROVIDER }}"
-          install_ingress   = true
+          install_nginx_ingress = true
           release_name      = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
-          chart_version     = "${{ env.NGINX_INGRESS_VERSION }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
           namespace         = "${{ env.NGINX_INGRESS_NAMESPACE }}"
           replica_count     = 2
-          enable_metrics    = true
-          service_type      = "LoadBalancer"
+          ingress_class_name    = "nginx"
+          
           EOF
 
       # Execute Terraform plan and capture exit code
@@ -165,7 +165,7 @@ jobs:
 
       # Save plan artifacts for apply job
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-ingress-controller-generic
           path: |
@@ -214,13 +214,13 @@ jobs:
         run: |
           cat > terraform.tfvars <<EOF
           cloud_provider    = "${{ env.CLOUD_PROVIDER }}"
-          install_ingress   = true
+          install_nginx_ingress = true
           release_name      = "${{ env.NGINX_INGRESS_RELEASE_NAME }}"
-          chart_version     = "${{ env.NGINX_INGRESS_VERSION }}"
+          nginx_ingress_version = "${{ env.NGINX_INGRESS_VERSION }}"
           namespace         = "${{ env.NGINX_INGRESS_NAMESPACE }}"
           replica_count     = 2
-          enable_metrics    = true
-          service_type      = "LoadBalancer"
+          ingress_class_name    = "nginx"
+          
           EOF
 
       # Remove stale backend configs
@@ -242,7 +242,7 @@ jobs:
 
       # Download the plan artifact
       - name: Download plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: tfplan-ingress-controller-generic
           path: ${{ env.WORKING_DIR }}
@@ -260,7 +260,7 @@ jobs:
 
       # Save outputs as artifact
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-ingress-controller-generic
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
@@ -278,7 +278,7 @@ jobs:
           # Check pods
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
           
           # Check service
           echo "Checking ingress-controller service..."

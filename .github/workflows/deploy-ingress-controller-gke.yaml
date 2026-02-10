@@ -63,13 +63,13 @@ jobs:
 
       # Authenticate to Google Cloud (needed for GCS state bucket access)
       - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Install gcloud CLI for cluster metadata retrieval
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install kubectl for Kubernetes provider configuration
       - name: Setup kubectl
@@ -195,7 +195,7 @@ jobs:
       # Upload plan artifacts for apply job and PR comments
       # Binary plan ensures apply executes exactly what was reviewed
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-ingress-controller-gke
           path: |
@@ -230,13 +230,13 @@ jobs:
 
       # Authenticate to Google Cloud for resource provisioning
       - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Install gcloud CLI
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install and configure kubectl for Kubernetes provider
       - name: Setup kubectl
@@ -305,7 +305,7 @@ jobs:
       # Download plan artifact from plan job
       # Ensures we apply exactly what was reviewed
       - name: Download plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: tfplan-ingress-controller-gke
           path: ${{ env.WORKING_DIR }}
@@ -333,7 +333,7 @@ jobs:
           kubectl describe pods -n ${{ env.NGINX_INGRESS_NAMESPACE }} || true
           
           echo "=== Pod Logs ==="
-          kubectl logs -n ingress-nginx -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} --tail=100 || true
+          kubectl logs -n ingress-nginx -l app.kubernetes.io/instance=${{ env.NGINX_INGRESS_RELEASE_NAME }} --tail=100 || true
           
           echo "=== Events ==="
           kubectl get events -n ${{ env.NGINX_INGRESS_NAMESPACE }} --sort-by='.lastTimestamp' || true
@@ -349,7 +349,7 @@ jobs:
 
       # Store outputs as artifact for reference and troubleshooting
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-ingress-controller-gke
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
@@ -368,7 +368,7 @@ jobs:
           # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
           
           # Confirm IngressClass resource is created
           echo "Checking IngressClass..."
