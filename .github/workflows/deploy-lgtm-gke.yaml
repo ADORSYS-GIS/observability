@@ -377,28 +377,6 @@ jobs:
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
           retention-days: 30
 
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: 'gke-gcloud-auth-plugin'
-
-      - name: Setup kubectl and get GKE credentials
-        run: |
-          # Install kubectl
-          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          
-          # Get GKE credentials
-          gcloud container clusters get-credentials ${{ secrets.CLUSTER_NAME }} \
-            --region=${{ secrets.CLUSTER_LOCATION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }}
-
       - name: Run deployment verification
         run: bash .github/scripts/verify-deployment.sh
         env:
