@@ -341,7 +341,7 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
     namespace = kubernetes_namespace.observability.metadata[0].name
     annotations = merge(
       {
-        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/redirect-to-https"     = "true"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -352,6 +352,7 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
   }
 
   spec {
+    ingress_class_name = var.ingress_class_name
     tls {
       hosts = [
         "grafana.${var.monitoring_domain}",
