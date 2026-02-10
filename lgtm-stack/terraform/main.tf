@@ -299,7 +299,7 @@ resource "helm_release" "prometheus" {
     helm_release.loki
   ]
 
-  timeout = 600
+  timeout = 1200
 }
 
 # Grafana
@@ -341,13 +341,12 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
     namespace = kubernetes_namespace.observability.metadata[0].name
     annotations = merge(
       {
-        "kubernetes.io/ingress.class"                       = var.ingress_class_name
-        "nginx.ingress.kubernetes.io/ssl-redirect"          = "true"
-        "nginx.ingress.kubernetes.io/backend-protocol"      = "HTTP"
-        "nginx.ingress.kubernetes.io/proxy-connect-timeout" = "300"
-        "nginx.ingress.kubernetes.io/proxy-send-timeout"    = "300"
-        "nginx.ingress.kubernetes.io/proxy-read-timeout"    = "300"
-        "nginx.ingress.kubernetes.io/proxy-body-size"       = "50m"
+        "kubernetes.io/ingress.class"     = var.ingress_class_name
+        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/proxy-connect-timeout" = "300s"
+        "nginx.org/proxy-read-timeout"    = "300s"
+        "nginx.org/proxy-send-timeout"    = "300s"
+        "nginx.org/client-max-body-size"  = "50m"
       },
       var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
     )
@@ -494,9 +493,12 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
     namespace = kubernetes_namespace.observability.metadata[0].name
     annotations = merge(
       {
-        "kubernetes.io/ingress.class"                  = var.ingress_class_name
-        "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
-        "nginx.ingress.kubernetes.io/backend-protocol" = "GRPC"
+        "kubernetes.io/ingress.class"     = var.ingress_class_name
+        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/proxy-connect-timeout" = "300s"
+        "nginx.org/proxy-read-timeout"    = "300s"
+        "nginx.org/proxy-send-timeout"    = "300s"
+        "nginx.org/client-max-body-size"  = "50m"
       },
       var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
     )
