@@ -27,7 +27,6 @@ on:
   push:
     branches:
       - main
-      - 25-setup-pipeline-for-deploying-terraform-scripts
     paths:
       - 'cert-manager/terraform/**'
       - '.github/workflows/deploy-cert-manager-gke.yaml'
