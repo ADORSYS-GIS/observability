@@ -69,7 +69,7 @@ jobs:
 
       # Install gcloud CLI for cluster metadata retrieval
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install kubectl for Kubernetes provider configuration
       - name: Setup kubectl
@@ -236,7 +236,7 @@ jobs:
 
       # Install gcloud CLI
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install and configure kubectl for Kubernetes provider
       - name: Setup kubectl

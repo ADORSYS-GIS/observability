@@ -76,7 +76,7 @@ jobs:
       # Install gcloud CLI for GKE operations
       - name: Setup Compute Environment - GKE
         if: inputs.cloud_provider == 'gke'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Authenticate to AWS (EKS only)
       # Required for: cluster access, state storage (S3), resource deletion
