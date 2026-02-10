@@ -27,7 +27,8 @@ on:
     paths:
       - 'lgtm-stack/terraform/**'
       - '.github/workflows/deploy-lgtm-gke.yaml'
-      
+
+     
 permissions:
   contents: read
   pull-requests: write
