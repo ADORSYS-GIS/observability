@@ -42,7 +42,7 @@ Renovate's first action is to open a PR titled **"Configure Renovate"**. This PR
 
 ## Step 3: Configure Renovate
 
-After merging the onboarding PR, customize `renovate.json` in the repository root. Here is a recommended configuration tailored for this project:
+After merging the onboarding PR, you can customize `renovate.json` in the repository root. Like for example this configuration below:
 
 ```json
 {
