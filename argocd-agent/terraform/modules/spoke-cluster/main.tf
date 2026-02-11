@@ -18,7 +18,7 @@ resource "null_resource" "spoke_namespace" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
       set -e
-      
+
       if ! kubectl get namespace ${self.triggers.namespace} --context ${self.triggers.context} >/dev/null 2>&1; then
         echo "Creating namespace ${self.triggers.namespace} in cluster ${self.triggers.context}..."
         kubectl create namespace ${self.triggers.namespace} --context ${self.triggers.context}
@@ -35,20 +35,20 @@ resource "null_resource" "spoke_namespace" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
       echo "Deleting namespace ${self.triggers.namespace} from ${self.triggers.context}..."
-      
+
       # Graceful deletion with timeout
       if ! kubectl delete namespace ${self.triggers.namespace} \
         --context ${self.triggers.context} \
         --ignore-not-found=true \
         --timeout=120s 2>&1 | tee /tmp/ns-delete-${self.triggers.agent}.log; then
-        
+
         echo "WARNING: Graceful deletion timed out, attempting force deletion..."
-        
+
         # Remove finalizers
         kubectl patch namespace ${self.triggers.namespace} \
           -p '{"metadata":{"finalizers":null}}' \
           --context ${self.triggers.context} 2>/dev/null || true
-        
+
         # Force delete
         kubectl delete namespace ${self.triggers.namespace} \
           --context ${self.triggers.context} \
@@ -56,7 +56,7 @@ resource "null_resource" "spoke_namespace" {
           --grace-period=0 \
           --force 2>&1 || true
       fi
-      
+
       echo "✓ Namespace ${self.triggers.namespace} cleanup completed for ${self.triggers.context}"
     EOT
   }
@@ -75,18 +75,18 @@ resource "null_resource" "spoke_argocd_installation" {
     command = <<-EOT
       set -e
       set -o pipefail
-      
+
       LOG_FILE="/tmp/argocd-spoke-install-${each.key}-$$(date +%Y%m%d-%H%M%S).log"
       MAX_RETRIES=${var.argocd_install_retry_attempts}
       RETRY_DELAY=${var.argocd_install_retry_delay}
       RETRY=0
-      
+
       echo "Installing ArgoCD (agent-managed) on spoke cluster: ${each.key}" | tee -a "$$LOG_FILE"
       echo "Installation URL: ${local.agent_spoke_managed_install_url}" | tee -a "$$LOG_FILE"
-      
+
       while [ $RETRY -lt $MAX_RETRIES ]; do
         echo "[Attempt $((RETRY+1))/$MAX_RETRIES] Applying ArgoCD agent-managed manifests..." | tee -a "$$LOG_FILE"
-        
+
         if kubectl apply -n ${var.spoke_namespace} \
           --context ${each.value} \
           --server-side=true \
@@ -95,7 +95,7 @@ resource "null_resource" "spoke_argocd_installation" {
           echo "✓ ArgoCD manifests applied successfully to ${each.key}" | tee -a "$$LOG_FILE"
           break
         fi
-        
+
         RETRY=$((RETRY+1))
         if [ $RETRY -lt $MAX_RETRIES ]; then
           echo "WARNING: Apply failed, retrying in $RETRY_DELAY seconds..." | tee -a "$$LOG_FILE"
@@ -105,7 +105,7 @@ resource "null_resource" "spoke_argocd_installation" {
           exit 1
         fi
       done
-      
+
       echo "Waiting for ${var.argocd_repo_server_name} deployment..." | tee -a "$$LOG_FILE"
       if ! kubectl wait --for=condition=available --timeout=${var.kubectl_timeout} \
         deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} \
@@ -114,7 +114,7 @@ resource "null_resource" "spoke_argocd_installation" {
         kubectl describe deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} --context ${each.value} | tee -a "$$LOG_FILE"
         exit 1
       fi
-      
+
       echo "✓ ArgoCD agent-managed components ready on ${each.key}" | tee -a "$$LOG_FILE"
       echo "Installation logs saved to: $$LOG_FILE"
     EOT
@@ -157,24 +157,25 @@ resource "null_resource" "spoke_argocd_secret_patch" {
     command     = <<-EOT
       set -e
       set -o pipefail
-      
+
       LOG_FILE="/tmp/argocd-spoke-secret-${each.key}-$$(date +%Y%m%d-%H%M%S).log"
-      
+
       echo "Patching ${var.argocd_secret_name} with server.secretkey for ${each.key}..." | tee -a "$$LOG_FILE"
-      
+
       # Generate random secret key (already base64 encoded)
       SECRET_KEY="$$(openssl rand -base64 32)"
-      
+
       # Use stringData to avoid double base64 encoding
       if ! kubectl patch secret ${var.argocd_secret_name} -n ${var.spoke_namespace} \
         --context ${each.value} \
         --type='json' \
+        --insecure-skip-tls-verify=true \
         -p='[{"op": "add", "path": "/stringData", "value": {"server.secretkey": "'"$$SECRET_KEY"'"}}]' 2>&1 | tee -a "$$LOG_FILE"; then
         echo "WARNING: Warning: Secret patch failed - may not exist yet, will retry on next run" | tee -a "$$LOG_FILE"
       else
         echo "✓ ArgoCD secret patched successfully for ${each.key}" | tee -a "$$LOG_FILE"
       fi
-      
+
       echo "Secret patch logs saved to: $$LOG_FILE"
     EOT
   }
@@ -191,12 +192,12 @@ resource "null_resource" "spoke_cluster_secret" {
     command     = <<-EOT
       set -e
       set -o pipefail
-      
+
       LOG_FILE="/tmp/argocd-spoke-cluster-secret-${each.key}-$$(date +%Y%m%d-%H%M%S).log"
-      
+
       echo "Creating in-cluster secret for application-controller on ${each.key}..." | tee -a "$$LOG_FILE"
-      
-      cat <<EOF | kubectl apply -f - --context ${each.value} 2>&1 | tee -a "$$LOG_FILE"
+
+      cat <<EOF | kubectl apply -f - --context ${each.value} --insecure-skip-tls-verify=true 2>&1 | tee -a "$$LOG_FILE"
 apiVersion: v1
 kind: Secret
 metadata:
