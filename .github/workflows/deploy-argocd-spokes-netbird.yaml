@@ -142,31 +142,35 @@ jobs:
           for cluster in "${CLUSTERS[@]}"; do
             cluster=$(echo "$cluster" | xargs)  # Trim whitespace
 
-            # Convert cluster name to secret variable name (e.g., spoke-1 -> SPOKE_1)
-            SECRET_PREFIX=$(echo "$cluster" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
-
-            # Get Netbird IP from secrets
-            CLUSTER_NETBIRD_IP_VAR="SPOKE_${SECRET_PREFIX#SPOKE_}_NETBIRD_IP"
-            CLUSTER_NETBIRD_IP="${!CLUSTER_NETBIRD_IP_VAR:-${!CLUSTER_NETBIRD_IP_VAR}}"
+            # Get Netbird IP and certificates based on cluster name
+            case "$cluster" in
+              spoke-1)
+                NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              *)
+                echo "  ⚠ Unknown cluster: $cluster"
+                continue
+                ;;
+            esac
 
             # Use GitHub secrets syntax to get values
             echo "Configuring kubectl for $cluster..."
 
-            # Note: Using inline secret expansion for security
-            # Secrets are not logged but used directly in kubectl config
-
-            if [ ! -z "${!CLUSTER_NETBIRD_IP_VAR}" ]; then
-              echo "  Netbird IP: ${!CLUSTER_NETBIRD_IP_VAR}"
+            if [ ! -z "$NETBIRD_IP" ]; then
+              echo "  Netbird IP: $NETBIRD_IP"
 
               # Create kubeconfig entries
               kubectl config set-cluster $cluster \
-                --server=https://${!CLUSTER_NETBIRD_IP_VAR}:6443 \
-                --certificate-authority=<(echo "${{ secrets[format('SPOKE_{0}_CA_CERT', env.SECRET_PREFIX)] }}" | base64 -d) \
+                --server=https://$NETBIRD_IP:6443 \
+                --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
                 --embed-certs=true
 
               kubectl config set-credentials $cluster-admin \
-                --client-certificate=<(echo "${{ secrets[format('SPOKE_{0}_CLIENT_CERT', env.SECRET_PREFIX)] }}" | base64 -d) \
-                --client-key=<(echo "${{ secrets[format('SPOKE_{0}_CLIENT_KEY', env.SECRET_PREFIX)] }}" | base64 -d) \
+                --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
+                --client-key=<(echo "$CLIENT_KEY" | base64 -d) \
                 --embed-certs=true
 
               kubectl config set-context $cluster \
@@ -432,11 +436,40 @@ jobs:
 
           for cluster in "${CLUSTERS[@]}"; do
             cluster=$(echo "$cluster" | xargs)
-            SECRET_PREFIX=$(echo "$cluster" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+
+            # Get Netbird IP and certificates based on cluster name
+            case "$cluster" in
+              spoke-1)
+                NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              *)
+                echo "  ⚠ Unknown cluster: $cluster"
+                continue
+                ;;
+            esac
 
             echo "Configuring $cluster..."
-            # Kubeconfig setup (same logic as plan job)
-            # Implementation details omitted for brevity
+
+            if [ ! -z "$NETBIRD_IP" ]; then
+              echo "  Netbird IP: $NETBIRD_IP"
+
+              kubectl config set-cluster $cluster \
+                --server=https://$NETBIRD_IP:6443 \
+                --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
+                --embed-certs=true
+
+              kubectl config set-credentials $cluster-admin \
+                --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
+                --client-key=<(echo "$CLIENT_KEY" | base64 -d) \
+                --embed-certs=true
+
+              kubectl config set-context $cluster \
+                --cluster=$cluster \
+                --user=$cluster-admin
+            fi
           done
 
           kubectl config get-contexts
