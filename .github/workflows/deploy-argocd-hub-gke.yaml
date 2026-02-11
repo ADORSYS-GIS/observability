@@ -68,6 +68,24 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      # Debug: Verify cluster configuration
+      - name: Verify cluster exists
+        run: |
+          echo "========================================="
+          echo "Verifying GKE cluster configuration..."
+          echo "========================================="
+          echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
+          echo "Location: ${{ secrets.HUB_CLUSTER_LOCATION }}"
+          echo "Cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
+          echo ""
+          echo "Listing clusters in project..."
+          gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }}
+          echo ""
+          echo "Attempting to describe cluster..."
+          gcloud container clusters describe ${{ secrets.HUB_CLUSTER_NAME }} \
+            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} || echo "ERROR: Cluster not found with these exact values"
+
       # Install kubectl and configure cluster access for Terraform kubernetes provider
       - name: Setup kubectl
         run: |
