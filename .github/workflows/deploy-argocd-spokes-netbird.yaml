@@ -307,15 +307,15 @@ jobs:
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
-          keycloak_url                 = ${{ secrets.KEYCLOAK_URL }}
-          keycloak_user                = ${{ secrets.KEYCLOAK_USER }}
-          keycloak_password            = ${{ secrets.KEYCLOAK_PASSWORD }}
-          keycloak_realm               = ${{ vars.KEYCLOAK_REALM || 'argocd' }}
-          argocd_url                   = ${{ secrets.ARGOCD_URL }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
-          default_admin_username       = ${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}
-          default_admin_email          = ${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}
-          default_admin_password       = ${{ secrets.DEFAULT_ADMIN_PASSWORD }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
           default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
 
           # AppProject configuration
@@ -481,15 +481,15 @@ jobs:
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
-          keycloak_url                 = ${{ secrets.KEYCLOAK_URL }}
-          keycloak_user                = ${{ secrets.KEYCLOAK_USER }}
-          keycloak_password            = ${{ secrets.KEYCLOAK_PASSWORD }}
-          keycloak_realm               = ${{ vars.KEYCLOAK_REALM || 'argocd' }}
-          argocd_url                   = ${{ secrets.ARGOCD_URL }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
-          default_admin_username       = ${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}
-          default_admin_email          = ${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}
-          default_admin_password       = ${{ secrets.DEFAULT_ADMIN_PASSWORD }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
           default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
 
           enable_appproject_sync       = true
