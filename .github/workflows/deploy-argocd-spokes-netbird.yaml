@@ -67,7 +67,7 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key B664878C-2AB7-48B0-9C1F-A8B49BC3BD7 
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
 
       # Verify Netbird connectivity
       - name: Verify Netbird connection
@@ -84,7 +84,17 @@ jobs:
 
           # Test connectivity to spoke clusters via Netbird
           echo "Testing spoke cluster connectivity..."
-          SPOKE_IPS="${{ secrets.SPOKE_1_NETBIRD_IP }} ${{ secrets.SPOKE_2_NETBIRD_IP }} ${{ secrets.SPOKE_3_NETBIRD_IP }}"
+          echo "Reading Netbird IPs from secrets..."
+
+          SPOKE_1_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+          SPOKE_2_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+          SPOKE_3_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
+
+          echo "SPOKE_1_NETBIRD_IP: $SPOKE_1_IP"
+          echo "SPOKE_2_NETBIRD_IP: $SPOKE_2_IP"
+          echo "SPOKE_3_NETBIRD_IP: $SPOKE_3_IP"
+
+          SPOKE_IPS="$SPOKE_1_IP $SPOKE_2_IP $SPOKE_3_IP"
 
           for ip in $SPOKE_IPS; do
             if [ ! -z "$ip" ]; then
@@ -129,13 +139,12 @@ jobs:
 
           # Read spoke cluster list from secrets
           # Expected format: SPOKE_CLUSTERS=spoke-1,spoke-2,spoke-3
-          # DEBUG: Hardcoded to spoke-2 for testing
-          SPOKE_CLUSTERS="spoke-2"
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
 
           if [ -z "$SPOKE_CLUSTERS" ]; then
             echo "⚠ SPOKE_CLUSTERS secret not set"
-            echo "   Using default: spoke-2"
-            SPOKE_CLUSTERS="spoke-2"
+            echo "   Using default: spoke-1"
+            SPOKE_CLUSTERS="spoke-1"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
@@ -398,7 +407,7 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key B664878C-2AB7-48B0-9C1F-A8B49BC3BD7 --hostname github-runner-${{ github.run_number }}
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} --hostname github-runner-${{ github.run_number }}
 
       # Install Terraform CLI
       - name: Setup Terraform
@@ -496,10 +505,9 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          # DEBUG: Hardcoded to spoke-2 for testing
-          SPOKE_CLUSTERS="spoke-2"
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-2"
+            SPOKE_CLUSTERS="spoke-1"
           fi
 
           CLUSTERS_MAP="{"
