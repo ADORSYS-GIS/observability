@@ -238,7 +238,7 @@ jobs:
       # Generate backend-config.tf for remote state storage in GCS
       # State file location: gs://<bucket>/terraform/argocd-spokes/terraform.tfstate
       - name: Configure backend
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR }} 
         run: |
           bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
         env:
