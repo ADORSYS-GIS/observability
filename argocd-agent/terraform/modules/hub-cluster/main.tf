@@ -228,6 +228,10 @@ resource "null_resource" "hub_argocd_server_insecure" {
 resource "kubernetes_manifest" "argocd_server_certificate" {
   count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
 
+  lifecycle {
+    ignore_changes = all
+  }
+
   manifest = {
     apiVersion = "cert-manager.io/v1"
     kind       = "Certificate"
