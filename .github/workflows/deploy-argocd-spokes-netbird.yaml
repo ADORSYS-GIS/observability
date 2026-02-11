@@ -483,8 +483,11 @@ jobs:
       # Install argocd-agentctl for certificate generation
       - name: Install argocd-agentctl
         run: |
-          curl -L https://github.com/argoproj-labs/argocd-agent/releases/latest/download/argocd-agentctl-linux-amd64 -o /usr/local/bin/argocd-agentctl
-          chmod +x /usr/local/bin/argocd-agentctl
+          curl -L -f https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64 -o /tmp/argocd-agentctl
+          file /tmp/argocd-agentctl
+          chmod +x /tmp/argocd-agentctl
+          sudo mv /tmp/argocd-agentctl /usr/local/bin/argocd-agentctl
+          /usr/local/bin/argocd-agentctl version
 
           # Configure hub cluster
           gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
