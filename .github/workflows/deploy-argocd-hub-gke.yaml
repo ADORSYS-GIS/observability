@@ -320,6 +320,10 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Install argocd-agentctl
+        run: |
+          bash $GITHUB_WORKSPACE/argocd-agent/scripts/install_agentctl.sh
+
       # Authenticate to GCP for cluster and state bucket access
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v3
