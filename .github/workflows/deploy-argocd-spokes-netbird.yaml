@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+  # Auto-trigger on push to any branch
+  push:
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-spokes-netbird.yaml'
 
 # Required permissions for workflow operations
 permissions:
@@ -346,6 +351,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [terraform-plan]
     if: |
+      (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
       name: production
