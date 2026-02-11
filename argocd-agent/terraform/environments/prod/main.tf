@@ -88,11 +88,6 @@ module "hub_cluster" {
   default_admin_email                      = var.default_admin_email
   default_admin_password                   = var.default_admin_password
   default_admin_password_temporary         = var.default_admin_password_temporary
-
-  depends_on = [
-    module.cert_manager,
-    module.ingress_nginx
-  ]
 }
 
 # =============================================================================
