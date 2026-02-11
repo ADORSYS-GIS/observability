@@ -84,20 +84,28 @@ jobs:
 
           # Test connectivity to spoke clusters via Netbird
           echo "Testing spoke cluster connectivity..."
-          echo "DEBUG: Using hardcoded spoke IP for testing"
+          echo "Reading Netbird IPs from secrets..."
 
-          SPOKE_IP="100.69.142.233"
+          SPOKE_1_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+          SPOKE_2_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+          SPOKE_3_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
 
-          echo "SPOKE_IP: $SPOKE_IP"
+          echo "SPOKE_1_NETBIRD_IP: $SPOKE_1_IP"
+          echo "SPOKE_2_NETBIRD_IP: $SPOKE_2_IP"
+          echo "SPOKE_3_NETBIRD_IP: $SPOKE_3_IP"
 
-          if [ ! -z "$SPOKE_IP" ]; then
-            echo "Testing connectivity to $SPOKE_IP..."
-            if ping -c 3 -W 5 $SPOKE_IP; then
-              echo "✅ Reachable: $SPOKE_IP"
-            else
-              echo "⚠ Cannot reach: $SPOKE_IP (may not be configured)"
+          SPOKE_IPS="$SPOKE_1_IP $SPOKE_2_IP $SPOKE_3_IP"
+
+          for ip in $SPOKE_IPS; do
+            if [ ! -z "$ip" ]; then
+              echo "Testing connectivity to $ip..."
+              if ping -c 3 -W 5 $ip; then
+                echo "✅ Reachable: $ip"
+              else
+                echo "⚠ Cannot reach: $ip (may not be configured)"
+              fi
             fi
-          fi
+          done
 
       # Authenticate to GCP (needed for hub cluster context and state bucket access)
       - name: Setup GCP credentials
