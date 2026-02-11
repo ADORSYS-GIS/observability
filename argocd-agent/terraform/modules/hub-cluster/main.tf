@@ -224,30 +224,37 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
-# 1.4.1 Create cert-manager Certificate for ArgoCD UI
-resource "kubernetes_manifest" "argocd_server_certificate" {
+# 1.4.1 Create cert-manager Certificate for ArgoCD UI (only if it doesn't exist)
+resource "null_resource" "argocd_server_certificate" {
   count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
 
-  lifecycle {
-    ignore_changes = all
-  }
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "argocd-server-tls"
-      namespace = var.hub_namespace
-    }
-    spec = {
-      secretName = "argocd-server-tls"
-      issuerRef = {
-        name = var.cert_issuer_name
-        kind = var.cert_issuer_kind
-      }
-      commonName = var.argocd_host
-      dnsNames    = [var.argocd_host]
-    }
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      # Check if Certificate already exists
+      if kubectl get certificate argocd-server-tls -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "Certificate argocd-server-tls already exists, skipping creation"
+      else
+        echo "Creating Certificate argocd-server-tls..."
+        kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server-tls
+  namespace: ${var.hub_namespace}
+spec:
+  secretName: argocd-server-tls
+  issuerRef:
+    name: ${var.cert_issuer_name}
+    kind: ${var.cert_issuer_kind}
+  commonName: ${var.argocd_host}
+  dnsNames:
+    - ${var.argocd_host}
+EOF
+        echo "✓ Certificate argocd-server-tls created"
+      fi
+    EOT
   }
 
   depends_on = [
@@ -273,7 +280,7 @@ resource "null_resource" "argocd_server_certificate_wait" {
   }
 
   depends_on = [
-    kubernetes_manifest.argocd_server_certificate
+    null_resource.argocd_server_certificate
   ]
 }
 
