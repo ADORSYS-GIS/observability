@@ -68,6 +68,13 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          if ! command -v gke-gcloud-auth-plugin >/dev/null 2>&1; then
+            gcloud components install gke-gcloud-auth-plugin --quiet || true
+          fi
+          command -v gke-gcloud-auth-plugin
+
       # Debug: Verify cluster configuration and detect zone vs region
       - name: Verify cluster exists and detect location type
         id: cluster_location
