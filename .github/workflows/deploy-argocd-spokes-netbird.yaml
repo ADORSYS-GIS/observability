@@ -205,7 +205,8 @@ jobs:
               kubectl config set-cluster $cluster \
                 --server=https://$NETBIRD_IP:6443 \
                 --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
-                --embed-certs=true
+                --embed-certs=true \
+                --insecure-skip-tls-verify=true
 
               kubectl config set-credentials $cluster-admin \
                 --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
@@ -526,7 +527,8 @@ jobs:
               kubectl config set-cluster $cluster \
                 --server=https://$NETBIRD_IP:6443 \
                 --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
-                --embed-certs=true
+                --embed-certs=true \
+                --insecure-skip-tls-verify=true
 
               kubectl config set-credentials $cluster-admin \
                 --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
