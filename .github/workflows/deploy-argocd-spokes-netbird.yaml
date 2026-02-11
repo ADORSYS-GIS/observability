@@ -69,6 +69,31 @@ jobs:
         run: |
           netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
 
+      # Wait for Netbird peer sync
+      - name: Wait for Netbird peer sync
+        run: |
+          echo "⏳ Waiting for Netbird peer sync..."
+          MAX_WAIT=60
+          WAITED=0
+          
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
+            echo "Current peers: $PEERS (waited ${WAITED}s)"
+            
+            # Check if we have connected peers (format: X/Y Connected)
+            if echo "$PEERS" | grep -q "/.*Connected" && ! echo "$PEERS" | grep -q "0/0"; then
+              echo "✅ Peers synced!"
+              netbird status
+              exit 0
+            fi
+            
+            sleep 5
+            WAITED=$((WAITED + 5))
+          done
+          
+          echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
+          netbird status
+
       # Verify Netbird connectivity
       - name: Verify Netbird connection
         run: |
@@ -407,7 +432,32 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} --hostname github-runner-${{ github.run_number }}
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
+
+      # Wait for Netbird peer sync
+      - name: Wait for Netbird peer sync
+        run: |
+          echo "⏳ Waiting for Netbird peer sync..."
+          MAX_WAIT=60
+          WAITED=0
+          
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
+            echo "Current peers: $PEERS (waited ${WAITED}s)"
+            
+            # Check if we have connected peers (format: X/Y Connected)
+            if echo "$PEERS" | grep -q "/.*Connected" && ! echo "$PEERS" | grep -q "0/0"; then
+              echo "✅ Peers synced!"
+              netbird status
+              exit 0
+            fi
+            
+            sleep 5
+            WAITED=$((WAITED + 5))
+          done
+          
+          echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
+          netbird status--hostname github-runner-${{ github.run_number }}
 
       # Install Terraform CLI
       - name: Setup Terraform
