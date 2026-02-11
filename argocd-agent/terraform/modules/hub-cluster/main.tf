@@ -224,6 +224,55 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
+# 1.4.1 Create cert-manager Certificate for ArgoCD UI
+resource "kubernetes_manifest" "argocd_server_certificate" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "argocd-server-tls"
+      namespace = var.hub_namespace
+    }
+    spec = {
+      secretName = "argocd-server-tls"
+      issuerRef = {
+        name = var.cert_issuer_name
+        kind = var.cert_issuer_kind
+      }
+      commonName = var.argocd_host
+      dnsNames    = [var.argocd_host]
+    }
+  }
+
+  depends_on = [
+    null_resource.hub_argocd_server_insecure
+  ]
+}
+
+# 1.4.2 Wait for certificate to be issued
+resource "null_resource" "argocd_server_certificate_wait" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      echo "Waiting for argocd-server-tls certificate to be ready..."
+      kubectl wait certificate argocd-server-tls -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} \
+        --for=condition=Ready \
+        --timeout=600s
+      echo "✓ Certificate argocd-server-tls is ready"
+    EOT
+  }
+
+  depends_on = [
+    kubernetes_manifest.argocd_server_certificate
+  ]
+}
+
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
   count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
@@ -233,9 +282,8 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     name      = "argocd-server"
     namespace = var.hub_namespace
     annotations = {
-      "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/force-ssl-redirect"                                           = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
+      "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
     }
   }
 
@@ -268,6 +316,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
 
   depends_on = [
     null_resource.hub_argocd_server_insecure
+    null_resource.argocd_server_certificate_wait
   ]
 }
 
