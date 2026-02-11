@@ -315,7 +315,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   }
 
   depends_on = [
-    null_resource.hub_argocd_server_insecure
+    null_resource.hub_argocd_server_insecure,
     null_resource.argocd_server_certificate_wait
   ]
 }
