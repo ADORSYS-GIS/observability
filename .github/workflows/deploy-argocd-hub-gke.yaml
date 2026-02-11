@@ -79,23 +79,34 @@ jobs:
           echo "Input Location: ${{ secrets.HUB_CLUSTER_LOCATION }}"
           echo "Cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
           echo ""
-          echo "Listing all clusters to find actual location..."
-          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}")
+          echo "Listing all clusters in project..."
+          gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+          echo ""
+          
+          echo "Searching for cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}\s" || true)
           
           if [ -z "$CLUSTER_INFO" ]; then
-            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found in project!"
+            echo ""
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found in project '${{ secrets.GCP_PROJECT_ID }}'!"
+            echo ""
+            echo "Please verify:"
+            echo "  1. Secret 'HUB_CLUSTER_NAME' matches the exact cluster name"
+            echo "  2. Secret 'GCP_PROJECT_ID' is correct"
+            echo "  3. Service account has 'container.clusters.list' permission"
+            echo ""
             exit 1
           fi
           
           ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
-          echo "Found cluster at location: $ACTUAL_LOCATION"
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
           
           # Detect if it's a zone (has -a, -b, -c suffix) or region
           if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
-            echo "Detected ZONAL cluster"
+            echo "✓ Detected ZONAL cluster"
             LOCATION_FLAG="--zone"
           else
-            echo "Detected REGIONAL cluster"
+            echo "✓ Detected REGIONAL cluster"
             LOCATION_FLAG="--region"
           fi
           
@@ -103,6 +114,7 @@ jobs:
           echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
           echo ""
           echo "Will use: gcloud ... $LOCATION_FLAG=$ACTUAL_LOCATION"
+          echo "========================================="
 
       # Install kubectl and configure cluster access for Terraform kubernetes provider
       - name: Setup kubectl
@@ -310,12 +322,24 @@ jobs:
       - name: Detect cluster location
         id: cluster_location
         run: |
-          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}")
+          echo "Detecting cluster location..."
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}\s" || true)
+          
+          if [ -z "$CLUSTER_INFO" ]; then
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
+            gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+            exit 1
+          fi
+          
           ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
+          
           if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
             LOCATION_FLAG="--zone"
+            echo "✓ Using zonal cluster configuration"
           else
             LOCATION_FLAG="--region"
+            echo "✓ Using regional cluster configuration"
           fi
           echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
           echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
