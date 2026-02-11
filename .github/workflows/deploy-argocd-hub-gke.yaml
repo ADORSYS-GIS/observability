@@ -84,7 +84,7 @@ jobs:
           echo ""
           
           echo "Searching for cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
-          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}\s" || true)
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
           
           if [ -z "$CLUSTER_INFO" ]; then
             echo ""
@@ -323,7 +323,7 @@ jobs:
         id: cluster_location
         run: |
           echo "Detecting cluster location..."
-          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}\s" || true)
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
           
           if [ -z "$CLUSTER_INFO" ]; then
             echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
