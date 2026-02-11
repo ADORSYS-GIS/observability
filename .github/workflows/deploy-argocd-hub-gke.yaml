@@ -23,10 +23,8 @@ on:
         required: false
         type: boolean
         default: false
-  # Auto-trigger on push to main branch
+  # Auto-trigger on push to any branch
   push:
-    branches:
-      - main
     paths:
       - 'argocd-agent/terraform/**'
       - '.github/workflows/deploy-argocd-hub-gke.yaml'
