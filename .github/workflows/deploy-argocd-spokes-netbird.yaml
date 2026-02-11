@@ -510,12 +510,24 @@ jobs:
             case "$cluster" in
               spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                # Strip /32 suffix if present (CIDR notation)
+                NETBIRD_IP="${NETBIRD_IP%/32}"
                 CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
+              spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+                # Strip /32 suffix if present (CIDR notation)
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
+                echo "  Expected cluster name: spoke-1 or spoke-2"
+                echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
             esac
