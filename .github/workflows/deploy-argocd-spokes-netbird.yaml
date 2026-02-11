@@ -129,18 +129,21 @@ jobs:
 
           # Read spoke cluster list from secrets
           # Expected format: SPOKE_CLUSTERS=spoke-1,spoke-2,spoke-3
-          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          # DEBUG: Hardcoded to spoke-2 for testing
+          SPOKE_CLUSTERS="spoke-2"
 
           if [ -z "$SPOKE_CLUSTERS" ]; then
             echo "⚠ SPOKE_CLUSTERS secret not set"
-            echo "   Using default: spoke-1,spoke-2,spoke-3"
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            echo "   Using default: spoke-2"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
 
           for cluster in "${CLUSTERS[@]}"; do
             cluster=$(echo "$cluster" | xargs)  # Trim whitespace
+
+            echo "Processing cluster: '$cluster'"
 
             # Get Netbird IP and certificates based on cluster name
             case "$cluster" in
@@ -150,8 +153,16 @@ jobs:
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
+              spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
+                echo "  Expected cluster name: spoke-1 or spoke-2"
+                echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
             esac
