@@ -37,6 +37,8 @@ resource "null_resource" "hub_argocd_base_install" {
         # Use kubectl apply with -k flag for kustomize directory
         if kubectl apply -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
+          --server-side \
+          --force-conflicts \
           -k ${local.argocd_base_install_url} 2>&1 | tee -a "$LOG_FILE"; then
           echo "✓ Principal-specific Argo CD manifests applied successfully" | tee -a "$LOG_FILE"
           echo "  Components: server, dex, redis, repo-server, applicationset-controller" | tee -a "$LOG_FILE"
