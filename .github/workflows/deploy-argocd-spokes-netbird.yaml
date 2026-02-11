@@ -67,7 +67,7 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
+          netbird up --setup-key B664878C-2AB7-48B0-9C1F-A8B49BC3BD7 
 
       # Verify Netbird connectivity
       - name: Verify Netbird connection
@@ -398,7 +398,7 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} --hostname github-runner-${{ github.run_number }}
+          netbird up --setup-key B664878C-2AB7-48B0-9C1F-A8B49BC3BD7 --hostname github-runner-${{ github.run_number }}
 
       # Install Terraform CLI
       - name: Setup Terraform
@@ -496,9 +496,10 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          # DEBUG: Hardcoded to spoke-2 for testing
+          SPOKE_CLUSTERS="spoke-2"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           CLUSTERS_MAP="{"
