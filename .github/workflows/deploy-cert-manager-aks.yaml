@@ -37,7 +37,7 @@ permissions:
 
 # Global environment variables used across all jobs
 env:
-  TERRAFORM_VERSION: '1.6.0'
+  TERRAFORM_VERSION: '1.9.0'
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'cert-manager/terraform'
   CLOUD_PROVIDER: 'aks'

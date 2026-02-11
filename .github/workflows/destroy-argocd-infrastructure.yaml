@@ -34,7 +34,7 @@ permissions:
 
 # Global environment variables
 env:
-  TERRAFORM_VERSION: '1.6.0'
+  TERRAFORM_VERSION: '1.9.0'
   KUBECTL_VERSION: '1.28.0'
   WORKING_DIR: 'argocd-agent/terraform/environments/prod'
   CLOUD_PROVIDER: 'gke'

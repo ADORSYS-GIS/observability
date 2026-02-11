@@ -14,10 +14,6 @@
 # 3. Spokes only: deploy_hub=false, deploy_spokes=true (requires external principal)
 # =============================================================================
 
-terraform {
-  required_version = ">= 1.0"
-}
-
 # =============================================================================
 # INFRASTRUCTURE MODULES (Cert-Manager, Ingress)
 # =============================================================================
