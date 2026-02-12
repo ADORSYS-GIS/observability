@@ -18,6 +18,11 @@ on:
           - plan
           - apply
         default: 'plan'
+      force_reinstall_argocd:
+        description: 'Force re-run ArgoCD base install (replaces module.hub_cluster[0].null_resource.hub_argocd_base_install). Use after deleting the argocd namespace manually.'
+        required: false
+        type: boolean
+        default: false
       adopt_existing_resources:
         description: 'Import existing ArgoCD resources into Terraform state'
         required: false
@@ -459,14 +464,23 @@ jobs:
 
       # Download the plan artifact generated in terraform-plan job
       - name: Download plan
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.force_reinstall_argocd != true }}
         uses: actions/download-artifact@v7
         with:
           name: tfplan-argocd-hub-gke
           path: ${{ env.WORKING_DIR }}
 
+      - name: Terraform Apply (force ArgoCD reinstall)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply' && inputs.force_reinstall_argocd == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -replace='module.hub_cluster[0].null_resource.hub_argocd_base_install'
+
       # Execute the plan to deploy ArgoCD Agent hub cluster
       # Updates remote state in GCS: gs://<bucket>/terraform/argocd-hub/terraform.tfstate
       - name: Terraform Apply
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.force_reinstall_argocd != true }}
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
