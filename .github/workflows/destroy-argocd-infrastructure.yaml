@@ -26,17 +26,6 @@ on:
         required: false
         type: boolean
         default: false
-      force_unlock_lock_id:
-        description: 'Lock ID to force-unlock. If provided, only the unlock job will run.'
-        required: false
-        type: string
-      force_unlock_target:
-        description: 'Which state to unlock (hub or spokes). Required if force_unlock_lock_id is set.'
-        required: false
-        type: choice
-        options:
-          - hub
-          - spokes
 
   push:
     paths:
@@ -62,7 +51,6 @@ jobs:
   validate-destroy:
     name: Validate Destroy Request
     runs-on: ubuntu-latest
-    if: github.event.inputs.force_unlock_lock_id == ''
     outputs:
       destroy_hub: ${{ steps.validate.outputs.destroy_hub }}
       destroy_spokes: ${{ steps.validate.outputs.destroy_spokes }}
@@ -374,46 +362,6 @@ jobs:
               echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} already removed from $cluster"
             fi
           done
-
-
-  # Force unlock Terraform state
-  force-unlock-state:
-    name: Force Unlock Terraform State
-    runs-on: ubuntu-latest
-    if: github.event.inputs.force_unlock_lock_id != '' && github.event.inputs.force_unlock_target != ''
-    environment:
-      name: production-destroy
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Setup GCP credentials
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Configure backend
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-${{ github.event.inputs.force_unlock_target }}"
-        env:
-          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
-
-      - name: Terraform Init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init
-
-      - name: Force unlock state
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "Attempting to force-unlock the 'argocd-${{ github.event.inputs.force_unlock_target }}' state with lock ID ${{ github.event.inputs.force_unlock_lock_id }}..."
-          terraform force-unlock -force ${{ github.event.inputs.force_unlock_lock_id }}
 
 
   # Destroy hub cluster
