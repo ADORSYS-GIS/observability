@@ -324,9 +324,32 @@ jobs:
             echo "Checking $cluster..."
 
             if kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
-              echo "✓ Found namespace ${{ env.SPOKE_NAMESPACE }} on $cluster, deleting..."
-              kubectl delete namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster --ignore-not-found=true
-              echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} deleted from $cluster"
+              echo "✓ Found namespace ${{ env.SPOKE_NAMESPACE }} on $cluster, attempting clean deletion..."
+              
+              # Check for failing APIServices that block discovery and namespace termination
+              FAILING_SERVICES=$(kubectl get apiservice --context $cluster | grep "False" | awk '{print $1}' || true)
+              if [ ! -z "$FAILING_SERVICES" ]; then
+                echo "⚠ Found failing APIServices that may block namespace deletion:"
+                echo "$FAILING_SERVICES"
+                for svc in $FAILING_SERVICES; do
+                  echo "Deleting failing APIService: $svc"
+                  kubectl delete apiservice $svc --context $cluster --ignore-not-found=true --timeout=30s || true
+                done
+              fi
+
+              # Normal delete first
+              kubectl delete namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster --ignore-not-found=true --timeout=60s || true
+              
+              # If still exists, use the finalize API method
+              if kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
+                echo "⚠ Namespace still exists, attempting finalizer removal via API..."
+                kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster -o json | \
+                  sed 's/"finalizers": \[[^]]*\]/"finalizers": []/' > tmp_ns.json
+                kubectl replace --raw "/api/v1/namespaces/${{ env.SPOKE_NAMESPACE }}/finalize" -f tmp_ns.json --context $cluster || true
+                rm tmp_ns.json
+              fi
+              
+              echo "✓ Cleanup attempt completed for $cluster"
             else
               echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} already removed from $cluster"
             fi
@@ -340,7 +363,6 @@ jobs:
     needs: [validate-destroy, destroy-spokes]
     if: |
       always() &&
-      false &&
       needs.validate-destroy.outputs.destroy_hub == 'true' &&
       (needs.destroy-spokes.result == 'success' || needs.destroy-spokes.result == 'skipped')
     environment:
