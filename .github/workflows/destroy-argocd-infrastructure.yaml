@@ -9,14 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Infrastructure'
-        required: true
+        description: 'What to destroy (hub, spokes, all)'
+        required: false
+        default: 'hub'
         type: choice
         options:
           - hub
           - spokes
           - all
-        default: 'all'
       confirm_destroy:
         description: 'Type "DESTROY" to confirm (case-sensitive)'
         required: true
