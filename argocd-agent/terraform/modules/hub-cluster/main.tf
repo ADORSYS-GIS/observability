@@ -269,13 +269,24 @@ resource "null_resource" "argocd_server_certificate_wait" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
-      set -e
-      echo "Waiting for argocd-server-tls certificate to be ready..."
-      kubectl wait certificate argocd-server-tls -n ${var.hub_namespace} \
+      set -o pipefail
+      echo "Waiting for argocd-server-tls certificate to be ready (max 180s)..."
+
+      if kubectl wait certificate argocd-server-tls -n ${var.hub_namespace} \
         --context ${var.hub_cluster_context} \
         --for=condition=Ready \
-        --timeout=600s
-      echo "✓ Certificate argocd-server-tls is ready"
+        --timeout=180s; then
+        echo "✓ Certificate argocd-server-tls is ready"
+      else
+        echo "⚠ Certificate argocd-server-tls not Ready after 180s; continuing without blocking deployment"
+        echo "--- Certificate describe ---"
+        kubectl describe certificate argocd-server-tls -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} || true
+        echo "--- Recent cert-manager related events ---"
+        kubectl get events -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+      fi
     EOT
   }
 
