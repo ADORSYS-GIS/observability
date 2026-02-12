@@ -112,6 +112,25 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Detect cluster location
+        id: cluster_location
+        run: |
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
+          if [ -z "$CLUSTER_INFO" ]; then
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
+            gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+            exit 1
+          fi
+          ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
+          if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
+            LOCATION_FLAG="--zone"
+          else
+            LOCATION_FLAG="--region"
+          fi
+          echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
+          echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
+
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
@@ -120,7 +139,7 @@ jobs:
 
           # Configure hub cluster (needed for PKI operations)
           gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
-            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
       # Generate kubeconfig for spoke clusters (needed for resource cleanup)
@@ -282,18 +301,21 @@ jobs:
           sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
           gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
-            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
       # CRITICAL: Backup PKI before destroying
       - name: Backup PKI CA certificate
         run: |
           echo "🔐 Backing up PKI CA certificate..."
-          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
 
-          if kubectl get secret argocd-agent-ca -n ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
+          if kubectl get secret argocd-agent-pki-ca -n ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
+            kubectl get secret argocd-agent-pki-ca -n ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT -o yaml > pki-ca-final-backup-$(date +%Y%m%d-%H%M%S).yaml
+            echo "✅ PKI CA backed up (argocd-agent-pki-ca)"
+          elif kubectl get secret argocd-agent-ca -n ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
             kubectl get secret argocd-agent-ca -n ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT -o yaml > pki-ca-final-backup-$(date +%Y%m%d-%H%M%S).yaml
-            echo "✅ PKI CA backed up"
+            echo "✅ PKI CA backed up (argocd-agent-ca)"
           else
             echo "⚠ PKI CA secret not found (may have been deleted already)"
           fi
@@ -312,7 +334,7 @@ jobs:
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-hub"
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-hub"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
@@ -338,7 +360,7 @@ jobs:
       - name: Terraform destroy plan
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
 
           cat > terraform.tfvars <<EOF
           deploy_hub                   = true
@@ -382,7 +404,7 @@ jobs:
       - name: Cleanup remaining resources
         run: |
           echo "Checking for remaining hub cluster resources..."
-          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
 
           if kubectl get namespace ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
             echo "⚠ Namespace ${{ env.HUB_NAMESPACE }} still exists on hub cluster"
