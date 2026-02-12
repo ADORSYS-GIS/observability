@@ -361,7 +361,7 @@ jobs:
           done
 
 
-  # Destroy hub cluster (should be done AFTER spokes for clean PKI cleanup)
+  # Destroy hub cluster
   destroy-hub:
     name: Destroy Hub Cluster
     runs-on: ubuntu-latest
