@@ -2,24 +2,35 @@ serviceAccount:
   create: false
   name: ${k8s_service_account_name}
   annotations:
-    iam.gke.io/gcp-service-account: ${gcp_service_account_email}
+    %{ if cloud_provider == "gke" }iam.gke.io/gcp-service-account: ${gcp_service_account_email}%{ endif }
+    %{ if cloud_provider == "eks" }eks.amazonaws.com/role-arn: ${aws_role_arn}%{ endif }
 
 mimir:
   structuredConfig:
     multitenancy_enabled: false
 
-    
-    # GCS Storage Configuration
     common:
       storage:
-        backend: gcs
+        backend: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+        %{ if cloud_provider == "gke" }
         gcs:
           bucket_name: ${mimir_blocks_bucket}
+        %{ else }
+        s3:
+          bucket_name: ${mimir_blocks_bucket}
+          region: ${aws_region}
+        %{ endif }
     
     blocks_storage:
-      backend: gcs
+      backend: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+      %{ if cloud_provider == "gke" }
       gcs:
         bucket_name: ${mimir_blocks_bucket}
+      %{ else }
+      s3:
+        bucket_name: ${mimir_blocks_bucket}
+        region: ${aws_region}
+      %{ endif }
       tsdb:
         dir: /data/mimir-data/tsdb
         retention_period: 720h
@@ -27,14 +38,26 @@ mimir:
         sync_dir: /data/mimir-data/tsdb-sync
     
     alertmanager_storage:
-      backend: gcs
+      backend: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+      %{ if cloud_provider == "gke" }
       gcs:
         bucket_name: ${mimir_ruler_bucket}
+      %{ else }
+      s3:
+        bucket_name: ${mimir_ruler_bucket}
+        region: ${aws_region}
+      %{ endif }
     
     ruler_storage:
-      backend: gcs
+      backend: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
+      %{ if cloud_provider == "gke" }
       gcs:
         bucket_name: ${mimir_ruler_bucket}
+      %{ else }
+      s3:
+        bucket_name: ${mimir_ruler_bucket}
+        region: ${aws_region}
+      %{ endif }
     
     server:
       log_level: info

@@ -1,6 +1,17 @@
-variable "project_id" {
-  description = "GCP Project ID"
+variable "cloud_provider" {
+  description = "Cloud provider (gke, eks, or generic)"
   type        = string
+  default     = "gke"
+  validation {
+    condition     = contains(["gke", "eks", "generic"], var.cloud_provider)
+    error_message = "The cloud provider must be one of the following: gke, eks, or generic."
+  }
+}
+
+variable "project_id" {
+  description = "GCP Project ID (required for GKE)"
+  type        = string
+  default     = ""
 }
 
 variable "region" {
@@ -15,8 +26,28 @@ variable "cluster_name" {
 }
 
 variable "cluster_location" {
-  description = "GKE Cluster Location"
+  description = "GKE Cluster Location (for GKE)"
   type        = string
+  default     = ""
+}
+
+variable "bucket_suffix" {
+  description = "Suffix to append to bucket names to avoid conflicts"
+  type        = string
+  default     = "v1"
+}
+
+# AWS-specific variables
+variable "eks_oidc_provider_arn" {
+  description = "EKS OIDC Provider ARN (required for EKS)"
+  type        = string
+  default     = ""
+}
+
+variable "aws_region" {
+  description = "AWS Region (for EKS)"
+  type        = string
+  default     = "us-east-1"
 }
 
 variable "namespace" {
@@ -164,4 +195,22 @@ variable "cert_issuer_kind" {
   description = "Kind of Issuer to create (ClusterIssuer or Issuer)"
   type        = string
   default     = "ClusterIssuer"
+}
+
+variable "gke_endpoint" {
+  description = "GKE Cluster Endpoint"
+  type        = string
+  default     = ""
+}
+
+variable "gke_ca_certificate" {
+  description = "GKE Cluster CA Certificate"
+  type        = string
+  default     = ""
+}
+
+variable "force_destroy" {
+  description = "Whether to force destroy storage buckets even if they contain data"
+  type        = bool
+  default     = false
 }

@@ -154,6 +154,7 @@ resource "null_resource" "letsencrypt_issuer" {
     cert_issuer_name = var.cert_issuer_name
     namespace        = local.issuer_namespace
     manifest_hash    = md5(local.issuer_manifest)
+    force_update     = var.force_issuer_apply ? timestamp() : "static"
   }
 
   provisioner "local-exec" {

@@ -23,99 +23,90 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
+  project = var.project_id != "" ? var.project_id : null
   region  = var.region
 }
 
+# AWS provider - required by EKS module even when not used (count=0)
+provider "aws" {
+  region                      = var.aws_region
+  skip_credentials_validation = true
+  skip_requesting_account_id  = true
+  skip_metadata_api_check     = true
+  access_key                  = "mock_access_key"
+  secret_key                  = "mock_secret_key"
+}
+
+# The kubernetes and helm providers will use the configuration established
+# by gcloud/kubectl in the workflow (via ~/.kube/config), but for GKE
+# we explicitly configure them using values passed from the workflow
+# to ensure zero-config connectivity in CI.
 provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.primary.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+  host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
+  token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+  cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
 }
 
 provider "helm" {
   kubernetes {
-    host                   = "https://${data.google_container_cluster.primary.endpoint}"
-    token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+    host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
+    token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+    cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
   }
 }
 
-# Data sources
-data "google_client_config" "default" {}
-
-data "google_container_cluster" "primary" {
-  name     = var.cluster_name
-  location = var.cluster_location
+data "google_client_config" "default" {
+  count = var.cloud_provider == "gke" ? 1 : 0
 }
 
-# GCS Buckets
+# Modular Cloud Resources
+module "cloud_gke" {
+  count  = var.cloud_provider == "gke" ? 1 : 0
+  source = "./modules/storage-gke"
+
+  project_id               = var.project_id
+  region                   = var.region
+  service_account_name     = var.gcp_service_account_name
+  k8s_namespace            = var.namespace
+  k8s_service_account_name = var.k8s_service_account_name
+  environment              = var.environment
+  bucket_suffix            = var.bucket_suffix
+  force_destroy_buckets    = var.force_destroy
+}
+
+module "eks_storage" {
+  count  = var.cloud_provider == "eks" ? 1 : 0
+  source = "./modules/storage-eks"
+
+  bucket_prefix            = var.cluster_name
+  cluster_name             = var.cluster_name
+  eks_oidc_provider_arn    = var.eks_oidc_provider_arn
+  k8s_namespace            = var.namespace
+  k8s_service_account_name = var.k8s_service_account_name
+  bucket_suffix            = var.bucket_suffix
+  force_destroy_buckets    = var.force_destroy
+}
+
+module "cloud_generic" {
+  count  = var.cloud_provider == "generic" ? 1 : 0
+  source = "./modules/storage-local"
+
+  k8s_namespace = var.namespace
+}
+
+# Local variables for unified access to cloud resources
 locals {
-  buckets = [
-    "loki-chunks",
-    "loki-ruler",
-    "mimir-blocks",
-    "mimir-ruler",
-    "tempo-traces",
-  ]
+  storage_config = {
+    type = var.cloud_provider
 
-  bucket_prefix         = var.project_id
-  loki_schema_from_date = var.loki_schema_from_date
-}
+    # GKE values
+    gcp_sa_email = var.cloud_provider == "gke" ? module.cloud_gke[0].service_account_email : ""
+    buckets      = var.cloud_provider == "gke" ? module.cloud_gke[0].storage_buckets : {}
 
-
-resource "google_storage_bucket" "observability_buckets" {
-  for_each = toset(local.buckets)
-
-  name          = "${local.bucket_prefix}-${each.key}"
-  location      = var.region
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
+    # EKS values
+    aws_role_arn = var.cloud_provider == "eks" ? module.eks_storage[0].irsa_role_arn : ""
+    s3_buckets   = var.cloud_provider == "eks" ? module.eks_storage[0].storage_buckets : {}
   }
-
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  labels = {
-    environment = var.environment
-    managed-by  = "terraform"
-    component   = "observability"
-  }
-}
-
-# GCP Service Account
-resource "google_service_account" "observability_sa" {
-  account_id   = var.gcp_service_account_name
-  display_name = "GKE Observability Service Account"
-  description  = "Service account for Loki, Tempo, Grafana, Mimir, and Prometheus in GKE"
-}
-
-# Grant Storage Object Admin role on all buckets
-resource "google_storage_bucket_iam_member" "bucket_object_admin" {
-  for_each = toset(local.buckets)
-
-  bucket = google_storage_bucket.observability_buckets[each.key].name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.observability_sa.email}"
-}
-
-# Grant Legacy Bucket Writer role on all buckets
-resource "google_storage_bucket_iam_member" "bucket_legacy_writer" {
-  for_each = toset(local.buckets)
-
-  bucket = google_storage_bucket.observability_buckets[each.key].name
-  role   = "roles/storage.legacyBucketWriter"
-  member = "serviceAccount:${google_service_account.observability_sa.email}"
 }
 
 # Kubernetes Namespace
@@ -136,21 +127,15 @@ resource "kubernetes_service_account" "observability_sa" {
     name      = var.k8s_service_account_name
     namespace = kubernetes_namespace.observability.metadata[0].name
 
-    annotations = {
-      "iam.gke.io/gcp-service-account" = google_service_account.observability_sa.email
-    }
+    annotations = merge(
+      var.cloud_provider == "gke" ? { "iam.gke.io/gcp-service-account" = local.storage_config.gcp_sa_email } : {},
+      var.cloud_provider == "eks" ? { "eks.amazonaws.com/role-arn" = local.storage_config.aws_role_arn } : {}
+    )
 
     labels = {
       managed-by = "terraform"
     }
   }
-}
-
-# Workload Identity Binding
-resource "google_service_account_iam_member" "workload_identity_binding" {
-  service_account_id = google_service_account.observability_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }
 
 # Cert-Manager Module
@@ -194,22 +179,27 @@ resource "helm_release" "loki" {
 
   values = [
     templatefile("values/loki-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      loki_chunks_bucket        = google_storage_bucket.observability_buckets["loki-chunks"].name
-      loki_ruler_bucket         = google_storage_bucket.observability_buckets["loki-ruler"].name
-      loki_admin_bucket         = google_storage_bucket.observability_buckets["loki-chunks"].name
-      loki_schema_from_date     = local.loki_schema_from_date
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      loki_chunks_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-chunks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-chunks"] : "")
+      loki_ruler_bucket  = var.cloud_provider == "gke" ? local.storage_config.buckets["loki-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["loki-ruler"] : "")
+
+      aws_region            = var.aws_region
+      loki_schema_from_date = var.loki_schema_from_date
+      monitoring_domain     = var.monitoring_domain
+      ingress_class_name    = var.ingress_class_name
+      cert_issuer_name      = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.eks_storage
   ]
 }
 
@@ -223,21 +213,27 @@ resource "helm_release" "mimir" {
 
   values = [
     templatefile("values/mimir-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      mimir_blocks_bucket       = google_storage_bucket.observability_buckets["mimir-blocks"].name
-      mimir_ruler_bucket        = google_storage_bucket.observability_buckets["mimir-ruler"].name
-      mimir_alertmanager_bucket = google_storage_bucket.observability_buckets["mimir-ruler"].name
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      mimir_blocks_bucket       = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-blocks"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-blocks"] : "")
+      mimir_ruler_bucket        = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
+      mimir_alertmanager_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["mimir-ruler"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["mimir-ruler"] : "")
+
+      aws_region         = var.aws_region
+      monitoring_domain  = var.monitoring_domain
+      ingress_class_name = var.ingress_class_name
+      cert_issuer_name   = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.eks_storage
   ]
 }
 
@@ -251,19 +247,25 @@ resource "helm_release" "tempo" {
 
   values = [
     templatefile("values/tempo-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
-      tempo_traces_bucket       = google_storage_bucket.observability_buckets["tempo-traces"].name
-      monitoring_domain         = var.monitoring_domain
-      ingress_class_name        = var.ingress_class_name
-      cert_issuer_name          = var.cert_issuer_name
+
+      # Storage buckets
+      tempo_traces_bucket = var.cloud_provider == "gke" ? local.storage_config.buckets["tempo-traces"] : (var.cloud_provider == "eks" ? local.storage_config.s3_buckets["tempo-traces"] : "")
+
+      aws_region         = var.aws_region
+      monitoring_domain  = var.monitoring_domain
+      ingress_class_name = var.ingress_class_name
+      cert_issuer_name   = var.cert_issuer_name
     })
   ]
 
   depends_on = [
     kubernetes_service_account.observability_sa,
-    google_service_account_iam_member.workload_identity_binding,
-    google_storage_bucket_iam_member.bucket_object_admin
+    module.cloud_gke,
+    module.eks_storage
   ]
 }
 
@@ -277,7 +279,10 @@ resource "helm_release" "prometheus" {
 
   values = [
     templatefile("values/prometheus-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
+      aws_region                = var.aws_region
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
       monitoring_domain         = var.monitoring_domain
       cluster_name              = var.cluster_name
@@ -294,7 +299,7 @@ resource "helm_release" "prometheus" {
     helm_release.loki
   ]
 
-  timeout = 600
+  timeout = 1200
 }
 
 # Grafana
@@ -307,7 +312,10 @@ resource "helm_release" "grafana" {
 
   values = [
     templatefile("values/grafana-values.yaml", {
-      gcp_service_account_email = google_service_account.observability_sa.email
+      cloud_provider            = var.cloud_provider
+      gcp_service_account_email = local.storage_config.gcp_sa_email
+      aws_role_arn              = local.storage_config.aws_role_arn
+      aws_region                = var.aws_region
       k8s_service_account_name  = kubernetes_service_account.observability_sa.metadata[0].name
       monitoring_domain         = var.monitoring_domain
       grafana_admin_password    = var.grafana_admin_password
@@ -331,19 +339,20 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
   metadata {
     name      = "monitoring-stack-ingress"
     namespace = kubernetes_namespace.observability.metadata[0].name
-    annotations = {
-      "kubernetes.io/ingress.class"                       = var.ingress_class_name
-      "cert-manager.io/issuer"                            = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/ssl-redirect"          = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"      = "HTTP"
-      "nginx.ingress.kubernetes.io/proxy-connect-timeout" = "300"
-      "nginx.ingress.kubernetes.io/proxy-send-timeout"    = "300"
-      "nginx.ingress.kubernetes.io/proxy-read-timeout"    = "300"
-      "nginx.ingress.kubernetes.io/proxy-body-size"       = "50m"
-    }
+    annotations = merge(
+      {
+        "nginx.org/redirect-to-https"     = "true"
+        "nginx.org/proxy-connect-timeout" = "300s"
+        "nginx.org/proxy-read-timeout"    = "300s"
+        "nginx.org/proxy-send-timeout"    = "300s"
+        "nginx.org/client-max-body-size"  = "50m"
+      },
+      var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
+    )
   }
 
   spec {
+    ingress_class_name = var.ingress_class_name
     tls {
       hosts = [
         "grafana.${var.monitoring_domain}",
@@ -482,12 +491,16 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
   metadata {
     name      = "monitoring-stack-ingress-grpc"
     namespace = kubernetes_namespace.observability.metadata[0].name
-    annotations = {
-      "kubernetes.io/ingress.class"                  = var.ingress_class_name
-      "cert-manager.io/issuer"                       = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/ssl-redirect"     = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol" = "GRPC"
-    }
+    annotations = merge(
+      {
+        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/proxy-connect-timeout" = "300s"
+        "nginx.org/proxy-read-timeout"    = "300s"
+        "nginx.org/proxy-send-timeout"    = "300s"
+        "nginx.org/client-max-body-size"  = "50m"
+      },
+      var.cert_issuer_kind == "ClusterIssuer" ? { "cert-manager.io/cluster-issuer" = var.cert_issuer_name } : { "cert-manager.io/issuer" = var.cert_issuer_name }
+    )
   }
 
   spec {

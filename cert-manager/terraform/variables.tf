@@ -108,3 +108,9 @@ variable "ingress_class_name" {
   type        = string
   default     = "nginx"
 }
+
+variable "force_issuer_apply" {
+  description = "Whether to force apply the issuer manifest even if it hasn't changed"
+  type        = bool
+  default     = false
+}
