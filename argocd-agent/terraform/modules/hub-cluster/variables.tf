@@ -113,6 +113,11 @@ variable "keycloak_url" {
   description = "Keycloak URL (e.g., https://keycloak.example.com)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.keycloak_url == "" || can(regex("^https?://", var.keycloak_url))
+    error_message = "keycloak_url must start with http:// or https:// when set."
+  }
 }
 
 variable "keycloak_user" {
@@ -126,6 +131,11 @@ variable "keycloak_password" {
   type        = string
   sensitive   = true
   default     = ""
+
+  validation {
+    condition     = var.keycloak_password == "" || length(trimspace(var.keycloak_password)) > 0
+    error_message = "keycloak_password must not be only whitespace."
+  }
 }
 
 variable "keycloak_realm" {
@@ -138,6 +148,11 @@ variable "argocd_url" {
   description = "ArgoCD URL for Keycloak redirect URIs (e.g., https://argocd.example.com)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.argocd_url == "" || can(regex("^https?://", var.argocd_url))
+    error_message = "argocd_url must start with http:// or https:// when set."
+  }
 }
 
 variable "keycloak_client_id" {
