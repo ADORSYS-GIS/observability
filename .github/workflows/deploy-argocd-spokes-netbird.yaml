@@ -318,7 +318,7 @@ jobs:
             SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
           fi
 
-          # Convert comma-separated list to Terraform map format
+          # Convert comma-separated list to Terraform map format 
           CLUSTERS_MAP="{"
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
           for i in "${!CLUSTERS[@]}"; do
