@@ -1195,7 +1195,7 @@ resource "keycloak_realm" "argocd" {
 
 # Main ArgoCD OIDC Client with Client Authentication (Confidential)
 resource "keycloak_openid_client" "argocd" {
-  count = var.enable_keycloak && !var.keycloak_enable_pkce ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak && !var.keycloak_enable_pkce ? 1 : 0
 
   realm_id                     = keycloak_realm.argocd[0].id
   client_id                    = var.keycloak_client_id
@@ -1244,7 +1244,7 @@ resource "keycloak_openid_client" "argocd" {
 
 # PKCE Client (Public Flow, for CLI authentication)
 resource "keycloak_openid_client" "argocd_pkce" {
-  count = var.enable_keycloak && var.keycloak_enable_pkce ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak && var.keycloak_enable_pkce ? 1 : 0
 
   realm_id                     = keycloak_realm.argocd[0].id
   client_id                    = var.keycloak_client_id
@@ -1306,7 +1306,7 @@ resource "keycloak_openid_client_scope" "groups" {
 # Group Membership Protocol Mapper
 # Maps Keycloak groups to "groups" claim in token
 resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   realm_id        = keycloak_realm.argocd[0].id
   client_scope_id = keycloak_openid_client_scope.groups[0].id
@@ -1320,7 +1320,7 @@ resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
 # either to the Default or to the Optional Client Scope. If you put it in the Optional 
 # category you will need to make sure that ArgoCD requests the scope in its OIDC configuration."
 resource "keycloak_openid_client_default_scopes" "argocd" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   realm_id  = keycloak_realm.argocd[0].id
   client_id = var.keycloak_enable_pkce ? one(keycloak_openid_client.argocd_pkce[*].id) : one(keycloak_openid_client.argocd[*].id)
@@ -1486,7 +1486,7 @@ resource "keycloak_user_groups" "argocd_admin_groups" {
 
 # Patch ArgoCD ConfigMap with OIDC configuration
 resource "null_resource" "hub_keycloak_oidc_config" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1555,7 +1555,7 @@ resource "null_resource" "hub_keycloak_secret" {
 
 # Patch ArgoCD RBAC ConfigMap with group-to-role mappings
 resource "null_resource" "hub_keycloak_rbac" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1590,7 +1590,7 @@ EOF
 
 # Disable admin user when Keycloak is enabled (force SSO login only)
 resource "null_resource" "hub_disable_admin_user" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1613,7 +1613,7 @@ resource "null_resource" "hub_disable_admin_user" {
 
 # Restart ArgoCD server to apply OIDC and RBAC changes
 resource "null_resource" "hub_keycloak_restart_server" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
