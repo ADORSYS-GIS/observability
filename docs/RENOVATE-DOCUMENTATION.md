@@ -91,7 +91,7 @@ Each PR includes:
 
 **[Pull Request](https://docs.renovatebot.com/key-concepts/pull-requests/)** - Learn more about Renovate pull requests.
 
-## 🔄 What Happens After You Accept the Config PR
+## What Happens After You Accept the Config PR
 
 ### 1. Renovate Bot Initialization
 
@@ -350,7 +350,7 @@ Even if Renovate knows where the repo is, it still must read it.
 
   - No obvious error in the PR
 
-Why?
+**Why?**
 
 Because **version metadata comes from the registry**, not the repo.
 Changelog fetching requires **repo access**.
