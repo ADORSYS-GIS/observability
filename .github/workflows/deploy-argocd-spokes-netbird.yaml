@@ -247,180 +247,36 @@ jobs:
           CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
           echo "context=$CONTEXT" >> $GITHUB_OUTPUT
 
-      # Generate terraform.tfvars with spoke deployment configuration
-      - name: Create terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          # Build workload_clusters map from SPOKE_CLUSTERS  secret
-          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
-          if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
-          fi
-
-          # Convert comma-separated list to Terraform map format 
-          CLUSTERS_MAP="{"
-          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
-          for i in "${!CLUSTERS[@]}"; do
-            cluster=$(echo "${CLUSTERS[$i]}" | xargs)
-            #  Derive agent namespace name from cluster name.
-            # Example: spoke-2 -> agent-2, spoke2 -> agent-2 
-            agent="$cluster"
-            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
-            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
-            if [ $i -gt 0 ]; then
-              CLUSTERS_MAP="$CLUSTERS_MAP, "
-            fi
-            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
-          done
-          CLUSTERS_MAP="$CLUSTERS_MAP}"
-
-          cat > terraform.tfvars <<EOF
-          # Deployment control
-          deploy_hub                   = false
-          deploy_spokes                = true
-
-          # Cluster configuration
-          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
-          workload_clusters            = $CLUSTERS_MAP
-
-          # ArgoCD configuration
-          argocd_version               = "${{ env.ARGOCD_VERSION }}"
-          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
-          spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
-
-          # Principal connection (from hub deployment)
-          principal_address            = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
-          principal_port               = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
-
-          # Keycloak integration (optional)
-          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
-          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
-          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
-          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
-          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
-          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
-          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
-          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
-          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
-          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
-
-          # AppProject configuration
-          enable_appproject_sync       = true
-          appproject_default_source_namespaces = ["*"]
-          appproject_default_dest_server       = "*"
-          appproject_default_dest_namespaces   = ["*"]
-          EOF
-
-          echo "Generated terraform.tfvars:"
-          cat terraform.tfvars
-
-      # Generate terraform.tfvars with spoke deployment configuration
-      - name: Create terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          # Build workload_clusters map from SPOKE_CLUSTERS  secret
-          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
-          if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
-          fi
-
-          # Convert comma-separated list to Terraform map format 
-          CLUSTERS_MAP="{"
-          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
-          for i in "${!CLUSTERS[@]}"; do
-            cluster=$(echo "${CLUSTERS[$i]}" | xargs)
-            #  Derive agent namespace name from cluster name.
-            # Example: spoke-2 -> agent-2, spoke2 -> agent-2 
-            agent="$cluster"
-            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
-            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
-            if [ $i -gt 0 ]; then
-              CLUSTERS_MAP="$CLUSTERS_MAP, "
-            fi
-            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
-          done
-          CLUSTERS_MAP="$CLUSTERS_MAP}"
-
-          cat > terraform.tfvars <<EOF
-          # Deployment control
-          deploy_hub                   = false
-          deploy_spokes                = true
-
-          # Cluster configuration
-          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
-          workload_clusters            = $CLUSTERS_MAP
-
-          # ArgoCD configuration
-          argocd_version               = "${{ env.ARGOCD_VERSION }}"
-          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
-          spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
-
-          # Principal connection (from hub deployment)
-          principal_address            = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
-          principal_port               = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
-
-          # Keycloak integration (optional)
-          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
-          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
-          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
-          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
-          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
-          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
-          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
-          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
-          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
-          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
-
-          # AppProject configuration
-          enable_appproject_sync       = true
-          appproject_default_source_namespaces = ["*"]
-          appproject_default_dest_server       = "*"
-          appproject_default_dest_namespaces   = ["*"]
-          EOF
-
-          echo "Generated terraform.tfvars:"
-          cat terraform.tfvars
-
       # Install Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      # Remove stale backend configuration files
-      - name: Cleanup old backend configs
+      # This group of steps configures the files needed for Terraform to run.
+      - name: Configure Terraform environment
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          # Clean up any previous backend configs
           rm -f backend.tf backend-config.tf
 
-      # Generate backend-config.tf for remote state storage in GCS
-      # State file location: gs://<bucket>/terraform/argocd-spokes/terraform.tfstate
-      - name: Configure backend
-        working-directory: ${{ env.WORKING_DIR }} 
-        run: |
+          echo "--- Configuring Terraform Backend ---"
           bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
-        env:
-          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
-      # Generate terraform.tfvars with spoke deployment configuration
-      - name: Create terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          # Build workload_clusters map from SPOKE_CLUSTERS  secret
+          echo "--- Creating terraform.tfvars file ---"
+          # Build workload_clusters map from SPOKE_CLUSTERS secret
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
             SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
           fi
 
-          # Convert comma-separated list to Terraform map format 
+          # Convert comma-separated list to Terraform map format
           CLUSTERS_MAP="{"
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
           for i in "${!CLUSTERS[@]}"; do
             cluster=$(echo "${CLUSTERS[$i]}" | xargs)
-            #  Derive agent namespace name from cluster name.
-            # Example: spoke-2 -> agent-2, spoke2 -> agent-2 
+            # Derive agent namespace name from cluster name.
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
             agent="$cluster"
             agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
             agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
@@ -471,27 +327,13 @@ jobs:
 
           echo "Generated terraform.tfvars:"
           cat terraform.tfvars
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
       # Initialize Terraform
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
-
-      - name: Check if hub deployment is enabled
-        id: deploy_hub_check
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          if grep -q "deploy_hub\s*=\s*true" terraform.tfvars; then
-            echo "deploy_hub=true" >> $GITHUB_OUTPUT
-          else
-            echo "deploy_hub=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Import Hub Resources
-        if: steps.deploy_hub_check.outputs.deploy_hub == 'true'
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
 
       # Validate Terraform syntax
       - name: Terraform Validate
@@ -684,34 +526,55 @@ jobs:
           CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
           echo "context=$CONTEXT" >> $GITHUB_OUTPUT
 
-      # Recreate terraform.tfvars (must match plan job)
-      - name: Create terraform.tfvars
+      # This group of steps configures the files needed for Terraform to run.
+      - name: Configure Terraform environment
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          # Clean up any previous backend configs
+          rm -f backend.tf backend-config.tf
+
+          echo "--- Configuring Terraform Backend ---"
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
+
+          echo "--- Creating terraform.tfvars file ---"
+          # Build workload_clusters map from SPOKE_CLUSTERS secret
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1"
+            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
           fi
 
+          # Convert comma-separated list to Terraform map format
           CLUSTERS_MAP="{"
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
           for i in "${!CLUSTERS[@]}"; do
             cluster=$(echo "${CLUSTERS[$i]}" | xargs)
+            # Derive agent namespace name from cluster name.
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
+            agent="$cluster"
+            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
+            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
             if [ $i -gt 0 ]; then
               CLUSTERS_MAP="$CLUSTERS_MAP, "
             fi
-            CLUSTERS_MAP="$CLUSTERS_MAP\"$cluster\" = \"$cluster\""
+            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
           done
           CLUSTERS_MAP="$CLUSTERS_MAP}"
 
           cat > terraform.tfvars <<EOF
+          # Deployment control
           deploy_hub                   = false
           deploy_spokes                = true
+
+          # Cluster configuration
           hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
           workload_clusters            = $CLUSTERS_MAP
+
+          # ArgoCD configuration
           argocd_version               = "${{ env.ARGOCD_VERSION }}"
           hub_namespace                = "${{ env.HUB_NAMESPACE }}"
           spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
+
+          # Principal connection (from hub deployment)
           principal_address            = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
           principal_port               = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
 
@@ -728,27 +591,19 @@ jobs:
           default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
           default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
 
+          # AppProject configuration
           enable_appproject_sync       = true
           appproject_default_source_namespaces = ["*"]
           appproject_default_dest_server       = "*"
           appproject_default_dest_namespaces   = ["*"]
           EOF
 
-      # Remove stale backend configs
-      - name: Cleanup old backend configs
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          rm -f backend.tf backend-config.tf
-
-      # Regenerate backend configuration
-      - name: Configure backend
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
+          echo "Generated terraform.tfvars:"
+          cat terraform.tfvars
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
-      # Re-initialize Terraform
+      # Initialize Terraform
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
