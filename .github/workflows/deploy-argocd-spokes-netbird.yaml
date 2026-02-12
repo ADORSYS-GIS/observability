@@ -268,40 +268,10 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-      # Import existing resources (optional)
-      - name: Import Existing Resources
-        if: ${{ inputs.adopt_existing_resources == true }}
+      - name: Import Hub Resources
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Checking for existing ArgoCD agent resources to import..."
-          echo "════════════════════════════════════════════════════════════════"
-
-          # Read spoke cluster list
-          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
-          if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
-          fi
-
-          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
-
-          for cluster in "${CLUSTERS[@]}"; do
-            cluster=$(echo "$cluster" | xargs)
-            echo "Checking $cluster..."
-
-            # Check if namespace exists
-            if kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
-              echo "✓ Found existing argocd namespace on $cluster"
-              # Note: Terraform module uses for_each, import syntax would be complex
-              # null_resource imports not needed, they'll re-run idempotently
-            else
-              echo "ℹ No existing argocd namespace on $cluster"
-            fi
-          done
-
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Import check complete! Proceeding with Terraform operations..."
-          echo "════════════════════════════════════════════════════════════════"
+          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
 
       # Validate Terraform syntax
       - name: Terraform Validate
