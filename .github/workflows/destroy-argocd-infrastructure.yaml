@@ -365,8 +365,11 @@ jobs:
   destroy-hub:
     name: Destroy Hub Cluster
     runs-on: ubuntu-latest
-    needs: [validate-destroy]
-    if: needs.validate-destroy.outputs.destroy_hub == 'true'
+    needs: [validate-destroy, destroy-Spokes]
+    if: |
+      always() && 
+      needs.validate-destroy.outputs.destroy_hub == 'true' &&
+      (needs.destroy-spokes.result == 'success' || needs.destroy-spokes.result == 'skipped')
     environment:
       name: production-destroy
 
