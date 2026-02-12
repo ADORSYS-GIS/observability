@@ -16,7 +16,7 @@ on:
           - hub
           - spokes
           - all
-        default: 'spokes'
+        default: 'all'
       confirm_destroy:
         description: 'Type "DESTROY" to confirm (case-sensitive)'
         required: true
