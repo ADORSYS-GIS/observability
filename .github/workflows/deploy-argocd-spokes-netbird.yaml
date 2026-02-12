@@ -324,7 +324,7 @@ jobs:
           for i in "${!CLUSTERS[@]}"; do
             cluster=$(echo "${CLUSTERS[$i]}" | xargs)
             #  Derive agent namespace name from cluster name.
-            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2 
             agent="$cluster"
             agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
             agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
