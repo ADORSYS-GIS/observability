@@ -126,25 +126,6 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Detect cluster location
-        id: cluster_location
-        run: |
-          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
-          if [ -z "$CLUSTER_INFO" ]; then
-            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
-            gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
-            exit 1
-          fi
-          ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
-          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
-          if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
-            LOCATION_FLAG="--zone"
-          else
-            LOCATION_FLAG="--region"
-          fi
-          echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
-          echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
-
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
@@ -153,7 +134,7 @@ jobs:
 
           # Configure hub cluster (needed for PKI operations)
           gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
-            ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} \
+            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
       # Generate kubeconfig for spoke clusters (needed for resource cleanup)
@@ -303,6 +284,25 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Detect cluster location
+        id: cluster_location
+        run: |
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
+          if [ -z "$CLUSTER_INFO" ]; then
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
+            gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+            exit 1
+          fi
+          ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
+          if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
+            LOCATION_FLAG="--zone"
+          else
+            LOCATION_FLAG="--region"
+          fi
+          echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
+          echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
 
       - name: Setup kubectl
         run: |
