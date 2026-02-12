@@ -291,8 +291,11 @@ jobs:
             echo "Checking $cluster..."
 
             if kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
-              echo "⚠ Namespace ${{ env.SPOKE_NAMESPACE }} still exists on $cluster"
-              echo "   Manual cleanup may be required"
+              echo "✓ Found namespace ${{ env.SPOKE_NAMESPACE }} on $cluster, deleting..."
+              kubectl delete namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster --ignore-not-found=true
+              echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} deleted from $cluster"
+            else
+              echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} already removed from $cluster"
             fi
           done
 
