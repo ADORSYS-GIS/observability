@@ -263,21 +263,6 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
-      # Initialize Terraform
-      - name: Terraform Init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init
-
-      - name: Import Hub Resources
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
-
-      # Validate Terraform syntax
-      - name: Terraform Validate
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform validate
-
       # Generate terraform.tfvars with spoke deployment configuration
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
@@ -345,6 +330,21 @@ jobs:
 
           echo "Generated terraform.tfvars:"
           cat terraform.tfvars
+
+      # Initialize Terraform
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Import Hub Resources
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
+
+      # Validate Terraform syntax
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
 
       # Execute Terraform plan
       - name: Terraform Plan
