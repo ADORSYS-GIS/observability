@@ -195,6 +195,11 @@ variable "default_admin_password" {
   type        = string
   sensitive   = true
   default     = ""
+
+  # validation {
+  #   condition     = !(var.enable_keycloak && var.create_default_admin_user && var.default_admin_password == "")
+  #   error_message = "The default_admin_password is required when create_default_admin_user is true. Set TF_VAR_default_admin_password environment variable."
+  # }
 }
 
 variable "default_admin_password_temporary" {
