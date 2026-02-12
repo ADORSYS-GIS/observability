@@ -216,6 +216,17 @@ jobs:
           spoke_namespace       = "${{ env.SPOKE_NAMESPACE }}"
           principal_address     = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
           principal_port        = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
           enable_appproject_sync = true
           appproject_default_source_namespaces = ["*"]
           appproject_default_dest_server = "*"
@@ -355,6 +366,42 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
+
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
+
+          cat > terraform.tfvars <<EOF
+          deploy_hub                   = true
+          deploy_spokes                = false
+          hub_cluster_context          = "$HUB_CONTEXT"
+          argocd_version               = "${{ vars.ARGOCD_VERSION || 'v0.5.3' }}"
+          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
+          ui_expose_method             = "${{ vars.UI_EXPOSE_METHOD || 'ingress' }}"
+          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
+          argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
+          install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'false' }}
+          install_nginx_ingress        = ${{ vars.INSTALL_NGINX_INGRESS || 'false' }}
+          cert_manager_version         = "${{ vars.CERT_MANAGER_VERSION || 'v1.16.2' }}"
+          nginx_ingress_version        = "${{ vars.NGINX_INGRESS_VERSION || '4.11.3' }}"
+          letsencrypt_email            = "${{ secrets.LETSENCRYPT_EMAIL }}"
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
+          enable_appproject_sync       = true
+          appproject_default_source_namespaces = ["*"]
+          appproject_default_dest_server       = "*"
+          appproject_default_dest_namespaces   = ["*"]
+          EOF
 
       # Backup state before destruction
       - name: Backup Terraform state
