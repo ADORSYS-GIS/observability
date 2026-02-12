@@ -369,7 +369,7 @@ jobs:
     if: |
       always() &&
       needs.validate-destroy.outputs.destroy_hub == 'true' &&
-      (needs.destroy-spokes.result == 'success' || needs.destroy-spokes.result == 'skipped')
+      (needs.destroy-spokes.result == 'success' || needs.destroy-spokes.result == 'skipped' || needs.destroy-spokes.result == 'cancelled')
     environment:
       name: production-destroy
 
