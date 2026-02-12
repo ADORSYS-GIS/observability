@@ -14,57 +14,22 @@
 # 3. Spokes only: deploy_hub=false, deploy_spokes=true (requires external principal)
 # =============================================================================
 
-terraform {
-  required_version = ">= 1.0"
-}
-
 # =============================================================================
 # INFRASTRUCTURE MODULES (Cert-Manager, Ingress)
 # =============================================================================
-
-module "cert_manager" {
-  count  = var.deploy_hub && var.install_cert_manager ? 1 : 0
-  source = "../../../../cert-manager/terraform"
-
-  providers = {
-    kubernetes = kubernetes.hub
-    helm       = helm.hub
-  }
-
-  install_cert_manager = true
-  create_issuer        = false
-  cert_manager_version = var.cert_manager_version
-  release_name         = var.cert_manager_release_name
-  namespace            = var.cert_manager_namespace
-  letsencrypt_email    = var.letsencrypt_email
-  cert_issuer_name     = var.cert_issuer_name
-  cert_issuer_kind     = var.cert_issuer_kind
-  issuer_namespace     = var.hub_namespace
-  ingress_class_name   = var.ingress_class_name
-}
-
-module "ingress_nginx" {
-  count  = var.deploy_hub && var.install_nginx_ingress ? 1 : 0
-  source = "../../../../ingress-controller/terraform"
-
-  providers = {
-    kubernetes = kubernetes.hub
-    helm       = helm.hub
-  }
-
-  install_nginx_ingress = true
-  nginx_ingress_version = var.nginx_ingress_version
-  release_name          = var.nginx_ingress_release_name
-  namespace             = var.nginx_ingress_namespace
-  ingress_class_name    = var.ingress_class_name
-}
-
+# NOTE: Cert-Manager and Ingress-Controller must be deployed separately
+# using their respective workflows:
+# - .github/workflows/deploy-cert-manager-gke.yaml
+# - .github/workflows/deploy-ingress-controller-gke.yaml
+#
+# These modules cannot be included here because they contain their own
+# provider configurations, which prevents using count/for_each.
 # =============================================================================
 # HUB CLUSTER MODULE
 # =============================================================================
 
 module "hub_cluster" {
-  count  = var.deploy_hub ? 1 : 0
+  count  = var.deploy_hub || var.deploy_spokes ? 1 : 0
   source = "../../modules/hub-cluster"
 
   providers = {
@@ -123,11 +88,6 @@ module "hub_cluster" {
   default_admin_email                      = var.default_admin_email
   default_admin_password                   = var.default_admin_password
   default_admin_password_temporary         = var.default_admin_password_temporary
-
-  depends_on = [
-    module.cert_manager,
-    module.ingress_nginx
-  ]
 }
 
 # =============================================================================

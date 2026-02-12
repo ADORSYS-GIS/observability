@@ -1,0 +1,569 @@
+# Automated deployment of ArgoCD Agent Hub Cluster to Google Kubernetes Engine (GKE)
+# Optimized 2-job workflow: terraform-plan + terraform-apply-and-verify
+# - Infrastructure planning with Terraform
+# - Hub cluster deployment (ArgoCD control plane + Agent Principal)
+# - Remote state management in Google Cloud Storage
+# - Integrated deployment verification with PKI setup
+name: Deploy ArgoCD Hub (GKE)
+
+on:
+  # Manual trigger with plan/apply option
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      force_reinstall_argocd:
+        description: 'Force re-run ArgoCD base install (replaces module.hub_cluster[0].null_resource.hub_argocd_base_install). Use after deleting the argocd namespace manually.'
+        required: false
+        type: boolean
+        default: false
+      adopt_existing_resources:
+        description: 'Import existing ArgoCD resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
+  # Auto-trigger on push to any branch
+  push:
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/deploy-argocd-hub-gke.yaml'
+
+# Required permissions for workflow operations
+permissions:
+  contents: read           # Read repository content
+  id-token: write         # Google Cloud Workload Identity
+
+# Global environment variables used across all jobs
+env:
+  TERRAFORM_VERSION: '1.9.0'
+  KUBECTL_VERSION: '1.28.0'
+  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
+  CLOUD_PROVIDER: 'gke'
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  ARGOCD_VERSION: ${{ vars.ARGOCD_VERSION || 'v0.5.3' }}
+  HUB_NAMESPACE: ${{ vars.HUB_NAMESPACE || 'argocd' }}
+
+jobs:
+  # Job 1: Generate and review Terraform infrastructure plan
+  # Creates deployment plan for review
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
+
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Authenticate to GCP (needed for state bucket access)
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud CLI
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          if ! command -v gke-gcloud-auth-plugin >/dev/null 2>&1; then
+            gcloud components install gke-gcloud-auth-plugin --quiet || true
+          fi
+          command -v gke-gcloud-auth-plugin
+
+      # Debug: Verify cluster configuration and detect zone vs region
+      - name: Verify cluster exists and detect location type
+        id: cluster_location
+        run: |
+          echo "========================================="
+          echo "Verifying GKE cluster configuration..."
+          echo "========================================="
+          echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
+          echo "Input Location: ${{ secrets.HUB_CLUSTER_LOCATION }}"
+          echo "Cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
+          echo ""
+          echo "Listing all clusters in project..."
+          gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+          echo ""
+          
+          echo "Searching for cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
+          
+          if [ -z "$CLUSTER_INFO" ]; then
+            echo ""
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found in project '${{ secrets.GCP_PROJECT_ID }}'!"
+            echo ""
+            echo "Please verify:"
+            echo "  1. Secret 'HUB_CLUSTER_NAME' matches the exact cluster name"
+            echo "  2. Secret 'GCP_PROJECT_ID' is correct"
+            echo "  3. Service account has 'container.clusters.list' permission"
+            echo ""
+            exit 1
+          fi
+          
+          ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
+          
+          # Detect if it's a zone (has -a, -b, -c suffix) or region
+          if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
+            echo "✓ Detected ZONAL cluster"
+            LOCATION_FLAG="--zone"
+          else
+            echo "✓ Detected REGIONAL cluster"
+            LOCATION_FLAG="--region"
+          fi
+          
+          echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
+          echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Will use: gcloud ... $LOCATION_FLAG=$ACTUAL_LOCATION"
+          echo "========================================="
+
+      # Install kubectl and configure cluster access for Terraform kubernetes provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+          # Configure kubeconfig for Terraform kubernetes provider
+          gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
+            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      # Extract GKE cluster endpoint and CA certificate for Terraform provider configuration
+      # These values are required by the Kubernetes provider to communicate with the cluster
+      - name: Get GKE Cluster Info
+        id: cluster_info
+        run: |
+          ENDPOINT=$(gcloud container clusters describe ${{ secrets.HUB_CLUSTER_NAME }} ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(endpoint)')
+          CA_CERT=$(gcloud container clusters describe ${{ secrets.HUB_CLUSTER_NAME }} ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(masterAuth.clusterCaCertificate)')
+          CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
+          echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
+          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Remove stale backend configuration files to ensure clean regeneration
+      # IMPORTANT: State files in GCS are NEVER deleted - only local config files
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          # Remove only backend config files (NOT state files)
+          # State files remain safely in GCS bucket across all runs
+          # This ensures clean regeneration of backend configuration
+          rm -f backend.tf backend-config.tf
+
+      # Generate backend-config.tf for remote state storage in GCS
+      # State file location: gs://<bucket>/terraform/argocd-hub/terraform.tfstate
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-hub"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+      # Initialize Terraform: download providers, configure backend, migrate/load state
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing ArgoCD resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+
+          # Check if ArgoCD namespace exists
+          if kubectl get namespace ${{ env.HUB_NAMESPACE }} --context ${{ steps.cluster_info.outputs.context }} 2>/dev/null; then
+            echo "✓ Found existing argocd namespace"
+            echo "Importing into Terraform state..."
+            terraform import 'module.hub_cluster[0].kubernetes_namespace.hub_argocd' ${{ env.HUB_NAMESPACE }} || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing argocd namespace found"
+          fi
+
+          # Check if Helm release exists
+          if helm list -n ${{ env.HUB_NAMESPACE }} 2>/dev/null | grep -q "argocd"; then
+            echo "✓ Found existing ArgoCD Helm release"
+            # Note: null_resource imports not needed, they'll re-run idempotently
+          else
+            echo "ℹ No existing ArgoCD Helm release found"
+          fi
+
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
+
+      # Validate Terraform syntax and configuration
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # Generate terraform.tfvars with deployment configuration
+      # Includes GKE-specific settings and ArgoCD Agent hub configuration
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          # Deployment control
+          deploy_hub                   = true
+          deploy_spokes                = false
+
+          # Cluster configuration
+          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
+
+          # ArgoCD configuration
+          argocd_version               = "${{ env.ARGOCD_VERSION }}"
+          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
+
+          # Exposure configuration
+          ui_expose_method             = "${{ vars.UI_EXPOSE_METHOD || 'ingress' }}"
+          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
+          argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
+
+          # Infrastructure modules
+          install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'false' }}
+          install_nginx_ingress        = ${{ vars.INSTALL_NGINX_INGRESS || 'false' }}
+          cert_manager_version         = "${{ vars.CERT_MANAGER_VERSION || 'v1.16.2' }}"
+          nginx_ingress_version        = "${{ vars.NGINX_INGRESS_VERSION || '4.11.3' }}"
+          letsencrypt_email            = "${{ secrets.LETSENCRYPT_EMAIL }}"
+
+          # Keycloak integration (optional)
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
+
+          # AppProject configuration
+          enable_appproject_sync       = true
+          appproject_default_source_namespaces = ["*"]
+          appproject_default_dest_server       = "*"
+          appproject_default_dest_namespaces   = ["*"]
+          EOF
+
+      # Execute Terraform plan and capture exit code
+      # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e  # Don't exit on non-zero status
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+
+          # Save exit code for downstream jobs
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Fail only if plan had errors (exit code 1)
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+
+          # Generate human-readable plan output for PR comments
+          terraform show tfplan > plan.txt
+          exit 0
+
+      # Save plan artifacts for apply job (tfplan binary + human-readable output)
+      - name: Upload plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan-argocd-hub-gke
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+
+  # Job 2: Apply Terraform plan and verify deployment
+  # Only runs on: push to main OR manual workflow_dispatch with 'apply' action
+  # Combines infrastructure deployment with verification for efficiency
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: |
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment:
+      name: production  # Requires approval if environment protection rules are configured
+
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3 
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Install argocd-agentctl
+        run: |
+          bash $GITHUB_WORKSPACE/argocd-agent/scripts/install_agentctl.sh
+
+      # Authenticate to GCP for cluster and state bucket access
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud CLI
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Detect cluster location type (zone vs region)
+      - name: Detect cluster location
+        id: cluster_location
+        run: |
+          echo "Detecting cluster location..."
+          CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
+          
+          if [ -z "$CLUSTER_INFO" ]; then
+            echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
+            gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
+            exit 1
+          fi
+          
+          ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
+          echo "✓ Found cluster at location: $ACTUAL_LOCATION"
+          
+          if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
+            LOCATION_FLAG="--zone"
+            echo "✓ Using zonal cluster configuration"
+          else
+            LOCATION_FLAG="--region"
+            echo "✓ Using regional cluster configuration"
+          fi
+          echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
+          echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
+
+      # Install kubectl and configure cluster access for Terraform kubernetes provider
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+          # Use auto-detected location and flag
+          gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
+            ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      # Extract cluster connection details for Terraform provider
+      - name: Get GKE Cluster Info
+        id: cluster_info
+        run: |
+          ENDPOINT=$(gcloud container clusters describe ${{ secrets.HUB_CLUSTER_NAME }} ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(endpoint)')
+          CA_CERT=$(gcloud container clusters describe ${{ secrets.HUB_CLUSTER_NAME }} ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} --project=${{ secrets.GCP_PROJECT_ID }} --format='value(masterAuth.clusterCaCertificate)')
+          CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
+          echo "ca_cert=$CA_CERT" >> $GITHUB_OUTPUT
+          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+      # Recreate terraform.tfvars (must match plan job configuration)
+      - name: Create terraform.tfvars
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars <<EOF
+          # Deployment control
+          deploy_hub                   = true
+          deploy_spokes                = false
+
+          # Cluster configuration
+          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
+
+          # ArgoCD configuration
+          argocd_version               = "${{ env.ARGOCD_VERSION }}"
+          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
+
+          # Exposure configuration
+          ui_expose_method             = "${{ vars.UI_EXPOSE_METHOD || 'ingress' }}"
+          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
+          argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
+
+          # Infrastructure modules
+          install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'true' }}
+          install_nginx_ingress        = ${{ vars.INSTALL_NGINX_INGRESS || 'true' }}
+          cert_manager_version         = "${{ vars.CERT_MANAGER_VERSION || 'v1.16.2' }}"
+          nginx_ingress_version        = "${{ vars.NGINX_INGRESS_VERSION || '4.11.3' }}"
+          letsencrypt_email            = "${{ secrets.LETSENCRYPT_EMAIL }}"
+
+          # Keycloak integration (optional)
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
+          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
+          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
+
+          # AppProject configuration
+          enable_appproject_sync       = true
+          appproject_default_source_namespaces = ["*"]
+          appproject_default_dest_server       = "*"
+          appproject_default_dest_namespaces   = ["*"]
+          EOF
+
+      # Remove stale backend configs
+      - name: Cleanup old backend configs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          # Remove only backend config files (NOT state files)
+          # State files remain safely in GCS bucket across all runs
+          # This ensures clean regeneration of backend configuration
+          rm -f backend.tf backend-config.tf
+
+      # Regenerate backend configuration (must match plan job)
+      - name: Configure backend
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-hub"
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+      # Re-initialize Terraform with backend configuration
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Download the plan artifact generated in terraform-plan job
+      - name: Download plan
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.force_reinstall_argocd != true }}
+        uses: actions/download-artifact@v7
+        with:
+          name: tfplan-argocd-hub-gke
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply (force ArgoCD reinstall)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply' && inputs.force_reinstall_argocd == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -replace='module.hub_cluster[0].null_resource.hub_argocd_base_install'
+
+      # Execute the plan to deploy ArgoCD Agent hub cluster
+      # Updates remote state in GCS: gs://<bucket>/terraform/argocd-hub/terraform.tfstate
+      - name: Terraform Apply
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.force_reinstall_argocd != true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # Extract Terraform outputs (deployment metadata, Principal address, etc.)
+      - name: Output deployment info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform output -json > terraform-outputs.json
+
+      # Save outputs as artifact for potential downstream jobs or auditing
+      - name: Upload outputs
+        uses: actions/upload-artifact@v6
+        with:
+          name: terraform-outputs-argocd-hub-gke
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+      # Verify successful deployment
+      # kubectl and cluster access already configured in previous steps
+      # 1. Verify namespace exists
+      # 2. Verify all ArgoCD server pods are ready (5-minute timeout)
+      # 3. Verify Principal deployment is ready
+      # 4. Verify Principal service has external IP
+      - name: Verify ArgoCD Hub deployment
+        run: |
+          echo "🔍 Verifying ArgoCD Agent Hub deployment..."
+
+          # Check namespace creation
+          echo "Checking argocd namespace..."
+          kubectl get namespace ${{ env.HUB_NAMESPACE }} --context ${{ steps.cluster_info.outputs.context }}
+
+          # Check ArgoCD server pod status and wait for ready state
+          echo "Checking ArgoCD server pods..."
+          kubectl get pods -n ${{ env.HUB_NAMESPACE }} --context ${{ steps.cluster_info.outputs.context }}
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=argocd-server \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }} \
+            --timeout=300s
+
+          # Check Principal deployment
+          echo "Checking Principal deployment..."
+          kubectl get deployment argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }}
+          kubectl wait --for=condition=available deployment/argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }} \
+            --timeout=300s
+
+          # Verify Principal service
+          echo "Checking Principal service..."
+          kubectl get svc argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }}
+
+          # Extract Principal address (LoadBalancer IP or hostname)
+          PRINCIPAL_ADDRESS=$(kubectl get svc argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          if [ -z "$PRINCIPAL_ADDRESS" ]; then
+            # Try hostname if IP is not available
+            PRINCIPAL_ADDRESS=$(kubectl get svc argocd-agent-principal \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context ${{ steps.cluster_info.outputs.context }} \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          fi
+
+          if [ -z "$PRINCIPAL_ADDRESS" ]; then
+            echo "⚠ Principal LoadBalancer address not yet allocated (may take a few minutes)"
+            echo "   Check status with: kubectl get svc argocd-agent-principal -n ${{ env.HUB_NAMESPACE }}"
+          else
+            echo "✅ Principal accessible at: $PRINCIPAL_ADDRESS"
+          fi
+
+          # Verify PKI initialization
+          echo "Checking PKI secrets..."
+          kubectl get secret argocd-agent-ca \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context ${{ steps.cluster_info.outputs.context }}
+
+          echo ""
+          echo "══════════════════════════════════════════════════════════════"
+          echo "✅ ArgoCD Agent Hub deployment verified successfully!"
+          echo "══════════════════════════════════════════════════════════════"

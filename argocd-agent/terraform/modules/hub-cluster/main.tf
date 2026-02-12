@@ -4,7 +4,7 @@
 
 # 1.1 Create Namespace
 resource "kubernetes_namespace" "hub_argocd" {
-
+  count = var.deploy_hub ? 1 : 0
   provider = kubernetes
 
   metadata {
@@ -15,6 +15,7 @@ resource "kubernetes_namespace" "hub_argocd" {
 # 1.2 Install Base Argo CD (Step 1 - WITHOUT Principal)
 # Installs core ArgoCD components on hub cluster: server, repo-server, application-controller
 resource "null_resource" "hub_argocd_base_install" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -37,6 +38,8 @@ resource "null_resource" "hub_argocd_base_install" {
         # Use kubectl apply with -k flag for kustomize directory
         if kubectl apply -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
+          --server-side \
+          --force-conflicts \
           -k ${local.argocd_base_install_url} 2>&1 | tee -a "$LOG_FILE"; then
           echo "✓ Principal-specific Argo CD manifests applied successfully" | tee -a "$LOG_FILE"
           echo "  Components: server, dex, redis, repo-server, applicationset-controller" | tee -a "$LOG_FILE"
@@ -108,6 +111,7 @@ resource "null_resource" "hub_argocd_base_install" {
 # Allows applications to be created in any namespace (required for agent architecture)
 # Also configures extended timeouts for resource-proxy communication
 resource "null_resource" "hub_argocd_apps_any_namespace" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -155,6 +159,7 @@ resource "null_resource" "hub_argocd_apps_any_namespace" {
 # Customizes health assessment to handle Ingress resources without LoadBalancer
 # Prevents applications from stuck in "Progressing" state due to missing ingress IPs
 resource "null_resource" "hub_argocd_resource_health_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -222,6 +227,77 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
+# 1.4.1 Create cert-manager Certificate for ArgoCD UI (only if it doesn't exist)
+resource "null_resource" "argocd_server_certificate" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      # Check if Certificate already exists
+      if kubectl get certificate argocd-server-tls -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "Certificate argocd-server-tls already exists, skipping creation"
+      else
+        echo "Creating Certificate argocd-server-tls..."
+        kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server-tls
+  namespace: ${var.hub_namespace}
+spec:
+  secretName: argocd-server-tls
+  issuerRef:
+    name: ${var.cert_issuer_name}
+    kind: ${var.cert_issuer_kind}
+  commonName: ${var.argocd_host}
+  dnsNames:
+    - ${var.argocd_host}
+EOF
+        echo "✓ Certificate argocd-server-tls created"
+      fi
+    EOT
+  }
+
+  depends_on = [
+    null_resource.hub_argocd_server_insecure
+  ]
+}
+
+# 1.4.2 Wait for certificate to be issued
+resource "null_resource" "argocd_server_certificate_wait" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -o pipefail
+      echo "Waiting for argocd-server-tls certificate to be ready (max 180s)..."
+
+      if kubectl wait certificate argocd-server-tls -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} \
+        --for=condition=Ready \
+        --timeout=180s; then
+        echo "✓ Certificate argocd-server-tls is ready"
+      else
+        echo "⚠ Certificate argocd-server-tls not Ready after 180s; continuing without blocking deployment"
+        echo "--- Certificate describe ---"
+        kubectl describe certificate argocd-server-tls -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} || true
+        echo "--- Recent cert-manager related events ---"
+        kubectl get events -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+      fi
+    EOT
+  }
+
+  depends_on = [
+    null_resource.argocd_server_certificate
+  ]
+}
+
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
   count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
@@ -231,9 +307,8 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     name      = "argocd-server"
     namespace = var.hub_namespace
     annotations = {
-      "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/force-ssl-redirect"                                           = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
+      "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
     }
   }
 
@@ -265,13 +340,14 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   }
 
   depends_on = [
-    null_resource.hub_argocd_server_insecure
+    null_resource.hub_argocd_server_insecure,
+    null_resource.argocd_server_certificate_wait
   ]
 }
 
 # 1.4 Expose ArgoCD UI via LoadBalancer
 resource "null_resource" "argocd_ui_loadbalancer" {
-  count = var.ui_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.ui_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -297,6 +373,7 @@ resource "null_resource" "argocd_ui_loadbalancer" {
 # 2.1 Initialize PKI (after ArgoCD apps-in-any-namespace is configured)
 # Creates the root CA certificate authority for agent mTLS authentication
 resource "null_resource" "hub_pki_initialization" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -334,6 +411,7 @@ resource "null_resource" "hub_pki_initialization" {
 # 2.1.1 Issue Principal Server Certificate (BEFORE deployment so pod can start)
 # Creates initial server certificate for Principal service (will be updated with LoadBalancer IP later)
 resource "null_resource" "hub_pki_principal_server_cert_initial" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -367,6 +445,7 @@ resource "null_resource" "hub_pki_principal_server_cert_initial" {
 
 # Deploys ArgoCD Agent Principal component (agent management server)
 resource "null_resource" "hub_principal_installation" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -445,6 +524,7 @@ resource "null_resource" "hub_principal_installation" {
 
 # Patches ArgoCD Redis NetworkPolicy to allow Principal component access
 resource "null_resource" "hub_redis_network_policy_patch" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -476,7 +556,7 @@ resource "null_resource" "hub_redis_network_policy_patch" {
 
 # Exposes Principal service via LoadBalancer for external agent connectivity
 resource "null_resource" "hub_principal_loadbalancer_service" {
-  count = var.principal_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -505,7 +585,7 @@ resource "null_resource" "hub_principal_loadbalancer_service" {
 
 # Exposes Principal service via NodePort for local/development clusters
 resource "null_resource" "hub_principal_nodeport_service" {
-  count = var.principal_expose_method == "nodeport" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "nodeport" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -654,6 +734,7 @@ resource "kubernetes_ingress_v1" "hub_principal_ingress" {
 
 # Updates Principal server certificate with LoadBalancer IP after service is exposed
 resource "null_resource" "hub_pki_principal_server_cert_updated" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -713,6 +794,7 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
 resource "null_resource" "hub_pki_resource_proxy_cert" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -746,6 +828,7 @@ resource "null_resource" "hub_pki_resource_proxy_cert" {
 
 # Creates JWT signing key for agent authentication tokens
 resource "null_resource" "hub_pki_jwt_signing_key" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -776,6 +859,7 @@ resource "null_resource" "hub_pki_jwt_signing_key" {
 
 # Configures Principal with allowed agent namespaces for authorization
 resource "null_resource" "hub_principal_allowed_namespaces_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -815,6 +899,7 @@ resource "null_resource" "hub_principal_allowed_namespaces_config" {
 # Configures resource-proxy timeout settings for agent architecture
 # Required for API discovery through multi-hop agent connections
 resource "null_resource" "hub_principal_resource_proxy_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -859,6 +944,7 @@ resource "null_resource" "hub_principal_resource_proxy_config" {
 # Patches Principal deployment with resource-proxy environment variables
 # Maps ConfigMap values to environment variables for runtime configuration
 resource "null_resource" "hub_principal_env_vars_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -959,7 +1045,7 @@ resource "null_resource" "hub_principal_env_vars_config" {
 
 # Restarts Principal deployment to apply PKI and configuration changes
 resource "null_resource" "hub_principal_restart" {
-
+  count = var.deploy_hub ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1058,8 +1144,7 @@ resource "null_resource" "spoke_agent_creation" {
   }
 
   depends_on = [
-    null_resource.hub_principal_restart,
-
+    # null_resource.hub_principal_restart (removed to allow running without full hub deploy)
   ]
 
   triggers = {
