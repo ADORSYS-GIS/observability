@@ -53,8 +53,8 @@ jobs:
           
           # Get EKS cluster credentials
           aws eks update-kubeconfig \
-            --name ${{ secrets.CLUSTER_NAME || 'mock-cluster' }} \
-            --region ${{ secrets.AWS_REGION || 'us-east-1' }}
+            --name ${{ secrets.CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }}
           
           # Test cluster connectivity
           kubectl cluster-info
@@ -75,14 +75,14 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME || 'mock-cluster' }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -129,7 +129,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -141,7 +141,7 @@ jobs:
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
-          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME || 'mock-cluster' }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
@@ -196,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-environment, terraform-plan]
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/25-setup-pipeline-for-deploying-terraform-scripts')) ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' && inputs.terraform_action == 'apply')
     environment:
       name: production
@@ -258,7 +258,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Setup kubectl
         run: |
