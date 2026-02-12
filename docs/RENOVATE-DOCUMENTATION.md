@@ -2,6 +2,37 @@
 
 Renovate is an automated dependency update tool. It helps to update dependencies in your code without needing to do it manually. When Renovate runs on your repo, it looks for references to dependencies (both public and private) and, if there are newer versions available, Renovate can create pull requests to update your versions automatically.  
 
+## Table of Contents
+
+- [Features](#features)
+- [Languages and package managers](#languages-and-package-managers)
+- [Supported Platforms](#supported-platforms)
+- [Ways to run Renovate](#ways-to-run-renovate)
+  - [Mend Renovate Community (Cloud-Hosted)](#-mend-renovate-community-cloud-hosted)
+  - [Mend Renovate Community (Self-Hosted)](#-mend-renovate-community-self-hosted)
+- [Renovate Pull Requests](#renovate-pull-requests)
+  - [How Renovate Creates PRs](#how-renovate-creates-prs)
+- [What Happens After You Accept the Config PR](#what-happens-after-you-accept-the-config-pr)
+  - [1. Renovate Bot Initialization](#1-renovate-bot-initialization)
+  - [2. Scanning Dependencies](#2-scanning-dependencies)
+  - [3. Update Triggers](#3-update-triggers)
+- [What About Breaking Changes?](#%EF%B8%8F-what-about-breaking-changes)
+  - [Example Scenario](#example-scenario)
+- [Job scheduling and Renovate Status](#job-scheduling-and-renovate-status)
+- [Renovate and Changelogs](#renovate-and-changelogs)
+  - [What is a changelog?](#what-is-a-changelog)
+  - [Where does Renovate look for changelogs?](#where-does-renovate-look-for-changelogs)
+- [Concept of private packages](#concept-of-private-packages)
+  - [The short truth (before details)](#the-short-truth-before-details)
+  - [How Renovate normally succeeds (baseline)](#how-renovate-normally-succeeds-baseline)
+  - [Failure mode #1 (MOST COMMON): missing source repository metadata](#failure-mode-1-most-common-missing-source-repository-metadata)
+  - [Failure mode #2: Renovate cannot access the source repo (auth problem)](#failure-mode-2-renovate-cannot-access-the-source-repo-auth-problem)
+- [Renovate Presets](#renovate-presets)
+  - [What Are Presets?](#what-are-presets)
+  - [Basic Concept](#basic-concept)
+- [References](#-references)
+
+
 ## Features
 
 - Delivers update PRs directly to your repo
