@@ -169,7 +169,7 @@ jobs:
           rm -f backend.tf backend-config.tf
 
       # Generate backend-config.tf for remote state storage in GCS
-      # State file location: gs://<bucket>/terraform/argocd-hub/terraform.tfstate
+      # State file location:  gs://<bucket>/terraform/argocd-hub/terraform.tfstate
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
