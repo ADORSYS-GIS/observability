@@ -74,7 +74,7 @@ jobs:
           # Set outputs based on target
           TARGET="${{ inputs.target }}"
           if [ "${{ github.event_name }}" = "push" ]; then
-            TARGET="hub"
+            TARGET="spokes"
           fi
 
           if [ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ]; then
@@ -107,11 +107,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Connect to Netbird to access spoke clusters
+      - name: Install Netbird CLI
+        run: |
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
       - name: Connect to Netbird
-        uses: Alemiz112/netbird-connect@v1
-        with:
-          setup_key: ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
+        run: |
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
+
+      - name: Wait for Netbird peer sync
+        run: |
+          echo "⏳ Waiting for Netbird peer sync..."
+          MAX_WAIT=60
+          WAITED=0
+
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
+            echo "Current peers: $PEERS (waited ${WAITED}s)"
+
+            if echo "$PEERS" | grep -q "/.*Connected" && ! echo "$PEERS" | grep -q "0/0"; then
+              echo "✅ Peers synced!"
+              netbird status
+              exit 0
+            fi
+
+            sleep 5
+            WAITED=$((WAITED + 5))
+          done
+
+          echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
+          netbird status
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -197,10 +222,15 @@ jobs:
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
           for i in "${!CLUSTERS[@]}"; do
             cluster=$(echo "${CLUSTERS[$i]}" | xargs)
+            # Derive agent namespace name from cluster name.
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
+            agent="$cluster"
+            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
+            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
             if [ $i -gt 0 ]; then
               CLUSTERS_MAP="$CLUSTERS_MAP, "
             fi
-            CLUSTERS_MAP="$CLUSTERS_MAP\"$cluster\" = \"$cluster\""
+            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
           done
           CLUSTERS_MAP="$CLUSTERS_MAP}"
 
@@ -274,6 +304,7 @@ jobs:
     needs: [validate-destroy, destroy-spokes]
     if: |
       always() &&
+      false &&
       needs.validate-destroy.outputs.destroy_hub == 'true' &&
       (needs.destroy-spokes.result == 'success' || needs.destroy-spokes.result == 'skipped')
     environment:
