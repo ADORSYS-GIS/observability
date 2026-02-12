@@ -2,6 +2,27 @@
 
 A step-by-step guide to installing, configuring, and testing [Renovate Bot](https://docs.renovatebot.com/) for automated dependency updates in this repository.
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Step 1: Install the Renovate GitHub App](#step-1-install-the-renovate-github-app)
+- [Step 2: Review the Onboarding PR](#step-2-review-the-onboarding-pr)
+- [Step 3: Configure Renovate](#step-3-configure-renovate)
+  - [Key Configuration Options](#key-configuration-options)
+- [Step 4: Test Renovate](#step-4-test-renovate)
+  - [Check the Dependency Dashboard](#check-the-dependency-dashboard)
+  - [Trigger a Test Run](#trigger-a-test-run)
+  - [Verify Detected Managers](#verify-detected-managers)
+- [Step 5: Manage Renovate PRs](#step-5-manage-renovate-prs)
+  - [PR Workflow](#pr-workflow)
+  - [Handling Major Updates](#handling-major-updates)
+- [Troubleshooting](#troubleshooting)
+  - [Renovate is not opening PRs](#renovate-is-not-opening-prs)
+  - [Too many PRs at once](#too-many-prs-at-once)
+  - [Renovate is not detecting a dependency](#renovate-is-not-detecting-a-dependency)
+- [References](#references)
+
+
 ## Prerequisites
 
 - Admin or maintainer access to the GitHub repository
