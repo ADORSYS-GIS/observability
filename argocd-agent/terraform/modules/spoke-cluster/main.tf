@@ -111,7 +111,14 @@ resource "null_resource" "spoke_argocd_installation" {
         deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} \
         --context ${each.value} 2>&1 | tee -a "$$LOG_FILE"; then
         echo "✗ ERROR: ${var.argocd_repo_server_name} deployment failed. Check logs: $$LOG_FILE" | tee -a "$$LOG_FILE"
+        echo "\n=== DEPLOYMENT DIAGNOSTICS ===" | tee -a "$$LOG_FILE"
         kubectl describe deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} --context ${each.value} | tee -a "$$LOG_FILE"
+        echo "\n=== POD STATUS ===" | tee -a "$$LOG_FILE"
+        kubectl get pods -n ${var.spoke_namespace} -l app.kubernetes.io/name=${var.argocd_repo_server_name} --context ${each.value} -o wide | tee -a "$$LOG_FILE"
+        echo "\n=== POD LOGS (most recent) ===" | tee -a "$$LOG_FILE"
+        kubectl logs -n ${var.spoke_namespace} -l app.kubernetes.io/name=${var.argocd_repo_server_name} --context ${each.value} --tail=100 2>&1 | tee -a "$$LOG_FILE" || true
+        echo "\n=== RECENT EVENTS ===" | tee -a "$$LOG_FILE"
+        kubectl get events -n ${var.spoke_namespace} --context ${each.value} --sort-by='.lastTimestamp' | head -50 | tee -a "$$LOG_FILE"
         exit 1
       fi
 
@@ -331,7 +338,14 @@ resource "null_resource" "spoke_argocd_readiness_check" {
         deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} \
         --context ${each.value} 2>&1 | tee -a "$$LOG_FILE"; then
         echo "✗ ERROR: ${var.argocd_repo_server_name} failed. Check logs: $$LOG_FILE" | tee -a "$$LOG_FILE"
+        echo "\n=== DEPLOYMENT DIAGNOSTICS ===" | tee -a "$$LOG_FILE"
         kubectl describe deployment/${var.argocd_repo_server_name} -n ${var.spoke_namespace} --context ${each.value} | tee -a "$$LOG_FILE"
+        echo "\n=== POD STATUS ===" | tee -a "$$LOG_FILE"
+        kubectl get pods -n ${var.spoke_namespace} -l app.kubernetes.io/name=${var.argocd_repo_server_name} --context ${each.value} -o wide | tee -a "$$LOG_FILE"
+        echo "\n=== POD LOGS (most recent) ===" | tee -a "$$LOG_FILE"
+        kubectl logs -n ${var.spoke_namespace} -l app.kubernetes.io/name=${var.argocd_repo_server_name} --context ${each.value} --tail=100 2>&1 | tee -a "$$LOG_FILE" || true
+        echo "\n=== RECENT EVENTS ===" | tee -a "$$LOG_FILE"
+        kubectl get events -n ${var.spoke_namespace} --context ${each.value} --sort-by='.lastTimestamp' | head -50 | tee -a "$$LOG_FILE"
         exit 1
       fi
       
