@@ -186,7 +186,7 @@ jobs:
       - name: Configure backend
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          bash ../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
