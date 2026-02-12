@@ -540,6 +540,11 @@ jobs:
           keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
           keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
           argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
           enable_appproject_sync       = true
           appproject_default_source_namespaces = ["*"]
           appproject_default_dest_server = "*"
