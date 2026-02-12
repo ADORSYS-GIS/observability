@@ -173,11 +173,44 @@ jobs:
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+
           for cluster in "${CLUSTERS[@]}"; do
             cluster=$(echo "$cluster" | xargs)
             echo "Configuring $cluster..."
-            # Simplified - actual implementation would use secrets as in deploy workflow
+
+            # Get Netbird IP and certificates based on cluster name
+            case "$cluster" in
+              spoke-1|spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              *)
+                echo "  ⚠ Unknown cluster: $cluster, skipping"
+                continue
+                ;;
+            esac
+
+            if [ ! -z "$NETBIRD_IP" ]; then
+              kubectl config set-cluster $cluster \
+                --server=https://$NETBIRD_IP:6443 \
+                --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
+                --embed-certs=true
+
+              kubectl config set-credentials $cluster-admin \
+                --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
+                --client-key=<(echo "$CLIENT_KEY" | base64 -d) \
+                --embed-certs=true
+
+              kubectl config set-context $cluster \
+                --cluster=$cluster \
+                --user=$cluster-admin
+            fi
           done
+
+          kubectl config get-contexts
 
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
