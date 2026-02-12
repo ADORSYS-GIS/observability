@@ -11,7 +11,7 @@ on:
       target:
         description: 'What to destroy (hub, spokes, all)'
         required: false
-        default: 'hub'
+        default: 'all'
         type: choice
         options:
           - hub
@@ -77,7 +77,7 @@ jobs:
             # On a push event, we don't want to destroy anything automatically.
             # By setting TARGET to empty, the subsequent checks will not match
             # 'hub', 'spokes', or 'all', so no destroy jobs will be triggered.
-            TARGET="hub"
+            TARGET="all"
           fi
 
           if [ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ]; then
