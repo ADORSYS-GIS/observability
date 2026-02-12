@@ -27,6 +27,11 @@ on:
         type: boolean
         default: false
 
+  push:
+    paths:
+      - 'argocd-agent/terraform/**'
+      - '.github/workflows/destroy-argocd-infrastructure.yaml'
+
 # Required permissions
 permissions:
   contents: read
@@ -54,30 +59,39 @@ jobs:
       - name: Validate confirmation
         id: validate
         run: |
-          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
-            echo "❌ ERROR: Confirmation failed!"
-            echo "   You must type 'DESTROY' (case-sensitive) to proceed"
-            exit 1
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "⚠ Push trigger: skipping DESTROY confirmation validation"
+          else
+            if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+              echo "❌ ERROR: Confirmation failed!"
+              echo "   You must type 'DESTROY' (case-sensitive) to proceed"
+              exit 1
+            fi
           fi
 
           echo "✅ Destroy confirmation validated"
 
           # Set outputs based on target
-          if [ "${{ inputs.target }}" == "hub" ] || [ "${{ inputs.target }}" == "all" ]; then
+          TARGET="${{ inputs.target }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TARGET="hub"
+          fi
+
+          if [ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ]; then
             echo "destroy_hub=true" >> $GITHUB_OUTPUT
           else
             echo "destroy_hub=false" >> $GITHUB_OUTPUT
           fi
 
-          if [ "${{ inputs.target }}" == "spokes" ] || [ "${{ inputs.target }}" == "all" ]; then
+          if [ "$TARGET" == "spokes" ] || [ "$TARGET" == "all" ]; then
             echo "destroy_spokes=true" >> $GITHUB_OUTPUT
           else
             echo "destroy_spokes=false" >> $GITHUB_OUTPUT
           fi
 
-          echo "Target: ${{ inputs.target }}"
-          echo "Destroy Hub: $([ "${{ inputs.target }}" == "hub" ] || [ "${{ inputs.target }}" == "all" ] && echo 'YES' || echo 'NO')"
-          echo "Destroy Spokes: $([ "${{ inputs.target }}" == "spokes" ] || [ "${{ inputs.target }}" == "all" ] && echo 'YES' || echo 'NO')"
+          echo "Target: $TARGET"
+          echo "Destroy Hub: $([ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ] && echo 'YES' || echo 'NO')"
+          echo "Destroy Spokes: $([ "$TARGET" == "spokes" ] || [ "$TARGET" == "all" ] && echo 'YES' || echo 'NO')"
 
 
   # Destroy spoke clusters first (must be destroyed before hub for clean PKI removal)
