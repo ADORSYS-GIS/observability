@@ -341,7 +341,18 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      - name: Check if hub deployment is enabled
+        id: deploy_hub_check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if grep -q "deploy_hub\s*=\s*true" terraform.tfvars; then
+            echo "deploy_hub=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_hub=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Import Hub Resources
+        if: steps.deploy_hub_check.outputs.deploy_hub == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
