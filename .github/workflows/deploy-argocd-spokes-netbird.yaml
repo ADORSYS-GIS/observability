@@ -312,7 +312,7 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          # Build workload_clusters map from SPOKE_CLUSTERS secret
+          # Build workload_clusters map from SPOKE_CLUSTERS  secret
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
             SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
