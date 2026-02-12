@@ -56,7 +56,6 @@ Works with GitHub, GitLab, Bitbucket, Azure DevOps, and more.
 
 ## Renovate Pull Requests
 
-### What Are Pull Requests?
 Pull requests are the actual code changes that Renovate creates in your repository. Each PR represents one dependency update.
 
 ### How Renovate Creates PRs
