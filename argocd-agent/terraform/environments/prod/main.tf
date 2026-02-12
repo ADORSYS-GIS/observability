@@ -29,7 +29,7 @@
 # =============================================================================
 
 module "hub_cluster" {
-  count  = var.deploy_hub ? 1 : 0
+  count  = var.deploy_hub || var.deploy_spokes ? 1 : 0
   source = "../../modules/hub-cluster"
 
   providers = {

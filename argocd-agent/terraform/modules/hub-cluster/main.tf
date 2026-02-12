@@ -4,7 +4,7 @@
 
 # 1.1 Create Namespace
 resource "kubernetes_namespace" "hub_argocd" {
-
+  count = var.deploy_hub ? 1 : 0
   provider = kubernetes
 
   metadata {
@@ -15,6 +15,7 @@ resource "kubernetes_namespace" "hub_argocd" {
 # 1.2 Install Base Argo CD (Step 1 - WITHOUT Principal)
 # Installs core ArgoCD components on hub cluster: server, repo-server, application-controller
 resource "null_resource" "hub_argocd_base_install" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -110,6 +111,7 @@ resource "null_resource" "hub_argocd_base_install" {
 # Allows applications to be created in any namespace (required for agent architecture)
 # Also configures extended timeouts for resource-proxy communication
 resource "null_resource" "hub_argocd_apps_any_namespace" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -157,6 +159,7 @@ resource "null_resource" "hub_argocd_apps_any_namespace" {
 # Customizes health assessment to handle Ingress resources without LoadBalancer
 # Prevents applications from stuck in "Progressing" state due to missing ingress IPs
 resource "null_resource" "hub_argocd_resource_health_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -344,7 +347,7 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
 
 # 1.4 Expose ArgoCD UI via LoadBalancer
 resource "null_resource" "argocd_ui_loadbalancer" {
-  count = var.ui_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.ui_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -370,6 +373,7 @@ resource "null_resource" "argocd_ui_loadbalancer" {
 # 2.1 Initialize PKI (after ArgoCD apps-in-any-namespace is configured)
 # Creates the root CA certificate authority for agent mTLS authentication
 resource "null_resource" "hub_pki_initialization" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -407,6 +411,7 @@ resource "null_resource" "hub_pki_initialization" {
 # 2.1.1 Issue Principal Server Certificate (BEFORE deployment so pod can start)
 # Creates initial server certificate for Principal service (will be updated with LoadBalancer IP later)
 resource "null_resource" "hub_pki_principal_server_cert_initial" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -440,6 +445,7 @@ resource "null_resource" "hub_pki_principal_server_cert_initial" {
 
 # Deploys ArgoCD Agent Principal component (agent management server)
 resource "null_resource" "hub_principal_installation" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -518,6 +524,7 @@ resource "null_resource" "hub_principal_installation" {
 
 # Patches ArgoCD Redis NetworkPolicy to allow Principal component access
 resource "null_resource" "hub_redis_network_policy_patch" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -549,7 +556,7 @@ resource "null_resource" "hub_redis_network_policy_patch" {
 
 # Exposes Principal service via LoadBalancer for external agent connectivity
 resource "null_resource" "hub_principal_loadbalancer_service" {
-  count = var.principal_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -578,7 +585,7 @@ resource "null_resource" "hub_principal_loadbalancer_service" {
 
 # Exposes Principal service via NodePort for local/development clusters
 resource "null_resource" "hub_principal_nodeport_service" {
-  count = var.principal_expose_method == "nodeport" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "nodeport" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -727,6 +734,7 @@ resource "kubernetes_ingress_v1" "hub_principal_ingress" {
 
 # Updates Principal server certificate with LoadBalancer IP after service is exposed
 resource "null_resource" "hub_pki_principal_server_cert_updated" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -786,6 +794,7 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
 resource "null_resource" "hub_pki_resource_proxy_cert" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -819,6 +828,7 @@ resource "null_resource" "hub_pki_resource_proxy_cert" {
 
 # Creates JWT signing key for agent authentication tokens
 resource "null_resource" "hub_pki_jwt_signing_key" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -849,6 +859,7 @@ resource "null_resource" "hub_pki_jwt_signing_key" {
 
 # Configures Principal with allowed agent namespaces for authorization
 resource "null_resource" "hub_principal_allowed_namespaces_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -888,6 +899,7 @@ resource "null_resource" "hub_principal_allowed_namespaces_config" {
 # Configures resource-proxy timeout settings for agent architecture
 # Required for API discovery through multi-hop agent connections
 resource "null_resource" "hub_principal_resource_proxy_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -932,6 +944,7 @@ resource "null_resource" "hub_principal_resource_proxy_config" {
 # Patches Principal deployment with resource-proxy environment variables
 # Maps ConfigMap values to environment variables for runtime configuration
 resource "null_resource" "hub_principal_env_vars_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -1032,7 +1045,7 @@ resource "null_resource" "hub_principal_env_vars_config" {
 
 # Restarts Principal deployment to apply PKI and configuration changes
 resource "null_resource" "hub_principal_restart" {
-
+  count = var.deploy_hub ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1131,8 +1144,7 @@ resource "null_resource" "spoke_agent_creation" {
   }
 
   depends_on = [
-    null_resource.hub_principal_restart,
-
+    # null_resource.hub_principal_restart (removed to allow running without full hub deploy)
   ]
 
   triggers = {
