@@ -36,7 +36,7 @@ on:
 
 # Required permissions for workflow operations
 permissions:
-  contents: read           # Read repository content
+  contents: read          # Read repository content
   id-token: write         # Google Cloud Workload Identity
 
 # Global environment variables used across all jobs
@@ -177,46 +177,6 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
-      # Initialize Terraform: download providers, configure backend, migrate/load state
-      - name: Terraform Init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init
-
-      # Import existing resources (optional)
-      - name: Import Existing Resources
-        if: ${{ inputs.adopt_existing_resources == true }}
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Checking for existing ArgoCD resources to import..."
-          echo "════════════════════════════════════════════════════════════════"
-
-          # Check if ArgoCD namespace exists
-          if kubectl get namespace ${{ env.HUB_NAMESPACE }} --context ${{ steps.cluster_info.outputs.context }} 2>/dev/null; then
-            echo "✓ Found existing argocd namespace"
-            echo "Importing into Terraform state..."
-            terraform import 'module.hub_cluster[0].kubernetes_namespace.hub_argocd' ${{ env.HUB_NAMESPACE }} || echo "⚠ Already in state or import failed (will continue)"
-          else
-            echo "ℹ No existing argocd namespace found"
-          fi
-
-          # Check if Helm release exists
-          if helm list -n ${{ env.HUB_NAMESPACE }} 2>/dev/null | grep -q "argocd"; then
-            echo "✓ Found existing ArgoCD Helm release"
-            # Note: null_resource imports not needed, they'll re-run idempotently
-          else
-            echo "ℹ No existing ArgoCD Helm release found"
-          fi
-
-          echo "════════════════════════════════════════════════════════════════"
-          echo "Import check complete! Proceeding with Terraform operations..."
-          echo "════════════════════════════════════════════════════════════════"
-
-      # Validate Terraform syntax and configuration
-      - name: Terraform Validate
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform validate
-
       # Generate terraform.tfvars with deployment configuration
       # Includes GKE-specific settings and ArgoCD Agent hub configuration
       - name: Create terraform.tfvars
@@ -265,6 +225,21 @@ jobs:
           appproject_default_dest_server       = "*"
           appproject_default_dest_namespaces   = ["*"]
           EOF
+
+      # Initialize Terraform: download providers, configure backend, migrate/load state
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Import Hub Resources
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
+
+      # Validate Terraform syntax and configuration
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
 
       # Execute Terraform plan and capture exit code
       # Exit codes: 0 = no changes, 1 = error, 2 = changes detected
