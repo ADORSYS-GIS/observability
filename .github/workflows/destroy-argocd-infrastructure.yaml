@@ -222,6 +222,44 @@ jobs:
 
           kubectl config get-contexts
 
+      # Validate that all clusters in SPOKE_CLUSTERS have their contexts configured
+      - name: Validate spoke cluster contexts
+        run: |
+          echo "Validating that all spoke clusters have kubectl contexts configured..."
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            echo "⚠ SPOKE_CLUSTERS not configured, skipping validation"
+            exit 0
+          fi
+
+          MISSING_CONTEXTS=""
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+          for cluster in "${CLUSTERS[@]}"; do
+            cluster=$(echo "$cluster" | xargs)
+            if ! kubectl config get-contexts -o name | grep -q "^${cluster}$"; then
+              MISSING_CONTEXTS="$MISSING_CONTEXTS\n  - $cluster"
+            fi
+          done
+
+          if [ ! -z "$MISSING_CONTEXTS" ]; then
+            echo ""
+            echo "❌ ERROR: The following clusters are in SPOKE_CLUSTERS but their kubectl contexts were not created:"
+            echo -e "$MISSING_CONTEXTS"
+            echo ""
+            echo "This usually means the required secrets are missing. For each spoke cluster, you need:"
+            echo "  - SPOKE_N_NETBIRD_IP"
+            echo "  - SPOKE_N_CA_CERT"
+            echo "  - SPOKE_N_CLIENT_CERT"
+            echo "  - SPOKE_N_CLIENT_KEY"
+            echo ""
+            echo "Either:"
+            echo "  1. Add the missing secrets to GitHub for these clusters, OR"
+            echo "  2. Remove these clusters from the SPOKE_CLUSTERS secret"
+            exit 1
+          fi
+
+          echo "✅ All spoke clusters have valid contexts configured"
+
       - name: Cleanup old backend configs
         working-directory: ${{ env.WORKING_DIR }}
         run: rm -f backend.tf backend-config.tf
