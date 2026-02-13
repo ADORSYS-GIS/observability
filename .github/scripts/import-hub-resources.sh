@@ -39,13 +39,13 @@ echo "----------------------------------------------------------------------"
 # or doesn't exist in Keycloak, the command will fail gracefully.
 # We will rely on the error message to determine the outcome.
 echo "Checking for Keycloak realm 'argocd'..."
-if terraform state list | grep -q "module.hub_cluster\[0\].keycloak_realm.argocd"; then
+if terraform state list | grep -q "module.hub_cluster\[0\].keycloak_realm.argocd\[0\]"; then
   echo "ℹ Keycloak realm is already in the Terraform state. Skipping import."
 else
   echo "Attempting to import Keycloak realm 'argocd'..."
   # The import will fail if the realm doesn't exist, which is the desired behavior.
   # The error is ignored because Terraform will create it on the next run.
-  terraform import "module.hub_cluster[0].keycloak_realm.argocd" "argocd" || true
+  terraform import "module.hub_cluster[0].keycloak_realm.argocd[0]" "argocd" || true
   echo "✓ Keycloak realm import check complete. Terraform will create it if it's missing."
 fi
 
