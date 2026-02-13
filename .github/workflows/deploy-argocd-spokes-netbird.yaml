@@ -463,7 +463,7 @@ jobs:
             --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
-      # Generate kubeconfig for spoke clusters (same as plan job)
+      # Generate kubeconfig for spoke clusters(same as plan job)
       - name: Generate kubeconfig for spoke clusters
         run: |
           echo "🔧 Generating kubeconfig for local spoke clusters..."
