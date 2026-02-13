@@ -318,10 +318,26 @@ jobs:
             exit 1
           fi
 
-          PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
-            -n ${{ env.HUB_NAMESPACE }} \
-            --context "$CONTEXT" \
-            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "443")
+          # Determine port based on exposure method
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+         
+          if [ "$EXPOSE_METHOD" = "ingress" ]; then
+            # Ingress uses standard HTTPS port
+            PRINCIPAL_PORT="443"
+            echo "✅ Using ingress exposure: port 443"
+          else
+            # LoadBalancer/NodePort - fetch actual service port
+            PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)
+            
+            if [ -z "$PRINCIPAL_PORT" ]; then
+              echo "❌ ERROR: Could not fetch principal service port"
+              exit 1
+            fi
+            echo "✅ Using $EXPOSE_METHOD exposure: port $PRINCIPAL_PORT"
+          fi
 
           echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
           echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT
@@ -641,10 +657,26 @@ jobs:
             exit 1
           fi
 
-          PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
-            -n ${{ env.HUB_NAMESPACE }} \
-            --context "$CONTEXT" \
-            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "443")
+          # Determine port based on exposure method
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+          
+          if [ "$EXPOSE_METHOD" = "ingress" ]; then
+            # Ingress uses standard HTTPS port
+            PRINCIPAL_PORT="443"
+            echo "✅ Using ingress exposure: port 443"
+          else
+            # LoadBalancer/NodePort - fetch actual service port
+            PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)
+            
+            if [ -z "$PRINCIPAL_PORT" ]; then
+              echo "❌ ERROR: Could not fetch principal service port"
+              exit 1
+            fi
+            echo "✅ Using $EXPOSE_METHOD exposure: port $PRINCIPAL_PORT"
+          fi
 
           echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
           echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT

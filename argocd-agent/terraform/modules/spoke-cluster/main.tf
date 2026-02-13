@@ -142,10 +142,6 @@ resource "null_resource" "spoke_argocd_installation" {
     EOT
   }
 
-  depends_on = [
-    null_resource.spoke_namespace
-  ]
-
   triggers = {
     version      = var.argocd_version
     manifest_url = local.agent_spoke_managed_install_url
@@ -553,8 +549,7 @@ resource "null_resource" "spoke_agent_installation" {
   }
 
   depends_on = [
-    null_resource.spoke_agent_ca_propagation,
-    null_resource.spoke_namespace
+    null_resource.spoke_agent_ca_propagation
   ]
 
   triggers = {
@@ -756,7 +751,7 @@ EOT
     EOT
   }
 
-  depends_on = [null_resource.spoke_namespace]
+
 
   triggers = {
     source_namespaces = jsonencode(var.appproject_default_source_namespaces)
