@@ -91,27 +91,16 @@ Works with GitHub, GitLab, Bitbucket, Azure DevOps, and more.
 
 ```mermaid
 graph TD
-    Start((Start)) -->|Schedule / Webhook| Scan[Scan Repository]
+    Start[Renovate Starts] --> Scan[Scans your files]
+    Scan --> Check{New Update Found?}
     
-    subgraph Discovery
-    Scan -->|Read Manifests| Deps[Identify Dependencies]
-    Deps -->|package.json, pom.xml, etc.| Current[Extract Current Versions]
-    end
+    Check -- No --> Sleep[Do nothing]
+    Check -- Yes --> PR[Create Pull Request]
     
-    subgraph Analysis
-    Current -->|Query Registries| Updates{New Version?}
-    Updates -->|No| Stop((End))
-    Updates -->|Yes| Config{Check Config}
-    Config -->|Restricted/Ignored| Stop
-    Config -->|Allowed| Branch[Create/Update Branch]
-    end
+    PR --> Test[Run Automated Tests]
     
-    subgraph Execution
-    Branch --> PR[Create Pull Request]
-    PR --> CI[Trigger CI/CD]
-    CI -->|Pass| Merge[Ready to Merge]
-    CI -->|Fail| Review[Manual Review]
-    end
+    Test -- Pass --> Merge[Ready to Merge! 🚀]
+    Test -- Fail --> Fix[Needs Human Review 🛠️]
 ```
 
 **Step 1: Discovery**
