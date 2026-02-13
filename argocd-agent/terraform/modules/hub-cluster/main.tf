@@ -756,39 +756,22 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
       set -o pipefail
       
       LOG_FILE="/tmp/argocd-pki-principal-cert-update-$$(date +%Y%m%d-%H%M%S).log"
-      PRINCIPAL_ADDRESS="${data.external.hub_principal_address.result.address}"
-      EXPOSE_METHOD="${var.principal_expose_method}"
+      PRINCIPAL_IP="${data.external.hub_principal_address.result.address}"
       
       echo "Updating Principal certificate with external address..." | tee -a "$LOG_FILE"
-      echo "Exposure method: $EXPOSE_METHOD" | tee -a "$LOG_FILE"
-      echo "Principal address: $PRINCIPAL_ADDRESS" | tee -a "$LOG_FILE"
+      echo "Principal address: $PRINCIPAL_IP" | tee -a "$LOG_FILE"
       
-      # For ingress mode, address should be a hostname
-      # For loadbalancer/nodeport, address should be an IP
-      if [ "$PRINCIPAL_ADDRESS" = "pending" ] || [ "$PRINCIPAL_ADDRESS" = "error" ]; then
-        echo "✗ ERROR: Principal address not ready yet" | tee -a "$LOG_FILE"
+      if [ "$PRINCIPAL_IP" = "pending" ] || [ "$PRINCIPAL_IP" = "error" ]; then
+        echo "✗ ERROR: Cannot update certificate - LoadBalancer not ready" | tee -a "$LOG_FILE"
         exit 1
-      fi
-      
-      # Build certificate parameters based on exposure method
-      if [ "$EXPOSE_METHOD" = "ingress" ]; then
-        # Ingress: add hostname to DNS field
-        CERT_IP="127.0.0.1"
-        CERT_DNS="localhost,${local.principal_dns},$PRINCIPAL_ADDRESS"
-        echo "Ingress mode: Using DNS=$CERT_DNS" | tee -a "$LOG_FILE"
-      else
-        # LoadBalancer/NodePort: add IP to IP field
-        CERT_IP="127.0.0.1,$PRINCIPAL_ADDRESS"
-        CERT_DNS="${local.principal_dns}"
-        echo "LoadBalancer/NodePort mode: Using IP=$CERT_IP, DNS=$CERT_DNS" | tee -a "$LOG_FILE"
       fi
       
       echo "Issuing updated Principal server certificate..." | tee -a "$LOG_FILE"
       if ! ${var.argocd_agentctl_path} pki issue principal \
         --principal-context ${var.hub_cluster_context} \
         --principal-namespace ${var.hub_namespace} \
-        --ip "$CERT_IP" \
-        --dns "$CERT_DNS" \
+        --ip "127.0.0.1,$PRINCIPAL_IP" \
+        --dns "${local.principal_dns}" \
         --upsert 2>&1 | tee -a "$LOG_FILE"; then
         echo "✗ ERROR: Failed to update Principal certificate. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
         exit 1

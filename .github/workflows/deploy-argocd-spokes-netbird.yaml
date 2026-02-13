@@ -319,7 +319,7 @@ jobs:
           fi
 
           # Determine port based on exposure method
-          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
          
           if [ "$EXPOSE_METHOD" = "ingress" ]; then
             # Ingress uses standard HTTPS port
@@ -658,7 +658,7 @@ jobs:
           fi
 
           # Determine port based on exposure method
-          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
           
           if [ "$EXPOSE_METHOD" = "ingress" ]; then
             # Ingress uses standard HTTPS port
