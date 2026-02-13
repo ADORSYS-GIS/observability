@@ -58,10 +58,9 @@ jobs:
         id: validate
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "⚡ Push trigger on branch — using input defaults for destroy toggles"
-            # On push: use the destroy_hub/destroy_spokes input defaults (both true)
-            # Since inputs are not available on push, we must hardcode the defaults or use logic
-            DESTROY_HUB="true"
+            echo "⚡ Push trigger on branch — destroying SPOKES only (preserving hub)"
+            # On push: only destroy spokes for testing, preserve the working hub
+            DESTROY_HUB="false"
             DESTROY_SPOKES="true"
           else
             # On workflow_dispatch: require DESTROY confirmation
