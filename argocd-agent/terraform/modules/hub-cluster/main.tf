@@ -308,7 +308,7 @@ resource "null_resource" "argocd_server_certificate_wait" {
 
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
-  count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
+  count    = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
   provider = kubernetes
 
   metadata {
@@ -396,7 +396,11 @@ resource "null_resource" "hub_pki_initialization" {
       echo "Principal context: ${var.hub_cluster_context}" | tee -a "$LOG_FILE"
       echo "Principal namespace: ${var.hub_namespace}" | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} pki init \
+      # Idempotency: skip if CA secret already exists
+      if kubectl get secret argocd-agent-ca -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "✓ CA secret already exists, skipping PKI initialization" | tee -a "$LOG_FILE"
+      elif ! ${var.argocd_agentctl_path} pki init \
         --principal-context ${var.hub_cluster_context} \
         --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
         echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
