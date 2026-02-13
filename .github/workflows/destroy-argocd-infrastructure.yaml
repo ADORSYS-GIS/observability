@@ -8,28 +8,26 @@ name: Destroy ArgoCD Infrastructure
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'What to destroy (hub, spokes, all)'
-        required: false
-        default: 'all'
-        type: choice
-        options:
-          - hub
-          - spokes
-          - all
       confirm_destroy:
         description: 'Type "DESTROY" to confirm (case-sensitive)'
         required: true
         type: string
-      skip_confirmation:
-        description: 'Skip manual approval (use with caution!)'
+      destroy_hub:
+        description: 'Destroy hub cluster'
         required: false
         type: boolean
-        default: false
+        default: true
+      destroy_spokes:
+        description: 'Destroy spoke clusters'
+        required: false
+        type: boolean
+        default: true
 
+  # Push trigger for testing on feature branch (remove before merging to main)
   push:
+    branches:
+      - 'pipeline/Argocd'
     paths:
-      - 'argocd-agent/terraform/**'
       - '.github/workflows/destroy-argocd-infrastructure.yaml'
 
 # Required permissions
@@ -47,7 +45,7 @@ env:
   SPOKE_NAMESPACE: ${{ vars.SPOKE_NAMESPACE || 'argocd' }}
 
 jobs:
-  # Validation job: Ensure user confirmation
+  # Validation job: Determine what to destroy
   validate-destroy:
     name: Validate Destroy Request
     runs-on: ubuntu-latest
@@ -60,41 +58,31 @@ jobs:
         id: validate
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "⚠ Push trigger: skipping DESTROY confirmation validation"
+            echo "⚡ Push trigger on branch — using input defaults for destroy toggles"
+            # On push: use the destroy_hub/destroy_spokes input defaults (both true)
+            # Since inputs are not available on push, we must hardcode the defaults or use logic
+            DESTROY_HUB="true"
+            DESTROY_SPOKES="true"
           else
-            if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            # On workflow_dispatch: require DESTROY confirmation
+            CONFIRM="${{ inputs.confirm_destroy }}"
+            if [ "$CONFIRM" != "DESTROY" ]; then
               echo "❌ ERROR: Confirmation failed!"
               echo "   You must type 'DESTROY' (case-sensitive) to proceed"
               exit 1
             fi
+            echo "✅ Destroy confirmation validated"
+
+            # Use toggle inputs directly
+            DESTROY_HUB="${{ inputs.destroy_hub }}"
+            DESTROY_SPOKES="${{ inputs.destroy_spokes }}"
           fi
 
-          echo "✅ Destroy confirmation validated"
+          echo "destroy_hub=$DESTROY_HUB" >> $GITHUB_OUTPUT
+          echo "destroy_spokes=$DESTROY_SPOKES" >> $GITHUB_OUTPUT
 
-          # Set outputs based on target
-          TARGET="${{ inputs.target }}"
-          if [ "${{ github.event_name }}" = "push" ]; then
-            # On a push event, we don't want to destroy anything automatically.
-            # By setting TARGET to empty, the subsequent checks will not match
-            # 'hub','spokes', or 'all', so no destroy jobs will be triggered.
-            TARGET="spokes"
-          fi
-
-          if [ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ]; then
-            echo "destroy_hub=true" >> $GITHUB_OUTPUT
-          else
-            echo "destroy_hub=false" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "$TARGET" == "spokes" ] || [ "$TARGET" == "all" ]; then
-            echo "destroy_spokes=true" >> $GITHUB_OUTPUT
-          else
-            echo "destroy_spokes=false" >> $GITHUB_OUTPUT
-          fi
-
-          echo "Target: $TARGET"
-          echo "Destroy Hub: $([ "$TARGET" == "hub" ] || [ "$TARGET" == "all" ] && echo 'YES' || echo 'NO')"
-          echo "Destroy Spokes: $([ "$TARGET" == "spokes" ] || [ "$TARGET" == "all" ] && echo 'YES' || echo 'NO')"
+          echo "Destroy Hub: $DESTROY_HUB"
+          echo "Destroy Spokes: $DESTROY_SPOKES"
 
 
   # Destroy spoke clusters first (must be destroyed before hub for clean PKI removal)
@@ -188,12 +176,26 @@ jobs:
 
             # Get Netbird IP and certificates based on cluster name
             case "$cluster" in
-              spoke-1|spoke-2)
+              spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 NETBIRD_IP="${NETBIRD_IP%/32}"
                 CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                ;;
+              spoke-3)
+                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster, skipping"
@@ -277,6 +279,23 @@ jobs:
 
           HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
 
+          # Dynamically resolve principal address from hub cluster
+          PRINCIPAL_IP=$(kubectl get svc argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$HUB_CONTEXT" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+          if [ -z "$PRINCIPAL_IP" ]; then
+            PRINCIPAL_IP=$(kubectl get svc argocd-agent-principal \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$HUB_CONTEXT" \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          fi
+          PRINCIPAL_PORT=$(kubectl get svc argocd-agent-principal \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$HUB_CONTEXT" \
+            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "443")
+          echo "Principal address: ${PRINCIPAL_IP:-unknown}:$PRINCIPAL_PORT"
+
           cat > terraform.tfvars <<EOF
           deploy_hub            = false
           deploy_spokes         = true
@@ -285,8 +304,8 @@ jobs:
           argocd_version        = "${{ vars.ARGOCD_VERSION || 'v0.5.3' }}"
           hub_namespace         = "${{ env.HUB_NAMESPACE }}"
           spoke_namespace       = "${{ env.SPOKE_NAMESPACE }}"
-          principal_address     = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
-          principal_port        = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
+          principal_address     = "${PRINCIPAL_IP:-}"
+          principal_port        = ${PRINCIPAL_PORT:-443}
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
           keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
           keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
