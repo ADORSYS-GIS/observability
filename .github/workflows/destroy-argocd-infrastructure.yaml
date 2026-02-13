@@ -58,9 +58,10 @@ jobs:
         id: validate
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "⚡ Push trigger on branch — destroying SPOKES only (preserving hub)"
-            # On push: only destroy spokes for testing, preserve the working hub
-            DESTROY_HUB="false"
+            echo "⚡ Push trigger on branch — using input defaults for destroy toggles"
+            # On push: use the destroy_hub/destroy_spokes input defaults (both true)
+            # Since inputs are not available on push, we must hardcode the defaults or use logic
+            DESTROY_HUB="true"
             DESTROY_SPOKES="true"
           else
             # On workflow_dispatch: require DESTROY confirmation
@@ -418,6 +419,24 @@ jobs:
               echo "✓ Namespace ${{ env.SPOKE_NAMESPACE }} already removed from $cluster"
             fi
           done
+
+      # Trigger deploy workflow after successful destroy (only on push events AND if hub was preserved)
+      - name: Trigger deploy spokes workflow
+        # Only run if push event AND we did NOT destroy the hub
+        if: github.event_name == 'push' && needs.validate-destroy.outputs.destroy_hub == 'false'
+        run: |
+          echo "🔄 Triggering deploy workflow after successful spoke destruction..."
+          
+          # Use GitHub CLI to trigger the deploy workflow
+          # We use terraform_action=apply to actually deploy the spokes
+          gh workflow run deploy-argocd-spokes-netbird.yaml \
+            --ref ${{ github.ref_name }} \
+            -f terraform_action=apply
+          
+          echo "✅ Deploy workflow triggered successfully"
+          echo "   Check the Actions tab to monitor the deployment"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
 
   # Destroy hub cluster
