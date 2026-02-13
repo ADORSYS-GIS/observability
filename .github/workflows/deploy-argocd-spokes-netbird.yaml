@@ -112,14 +112,10 @@ jobs:
           echo "Reading Netbird IPs from secrets..."
 
           SPOKE_1_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
-          SPOKE_2_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-          SPOKE_3_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
 
           echo "SPOKE_1_NETBIRD_IP: $SPOKE_1_IP"
-          echo "SPOKE_2_NETBIRD_IP: $SPOKE_2_IP"
-          echo "SPOKE_3_NETBIRD_IP: $SPOKE_3_IP"
 
-          SPOKE_IPS="$SPOKE_1_IP $SPOKE_2_IP $SPOKE_3_IP"
+          SPOKE_IPS="$SPOKE_1_IP"
 
           for ip in $SPOKE_IPS; do
             if [ ! -z "$ip" ]; then
@@ -169,7 +165,7 @@ jobs:
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
             echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-1"
-            SPOKE_CLUSTERS="spoke-1"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
@@ -180,23 +176,13 @@ jobs:
 
             # Get secrets based on cluster name
             case "$cluster" in
-              spoke-1)
+
+              spoke-2)
+                # Helper: User wants to use spoke-2 context but with spoke-1 credentials
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
-                ;;
-              spoke-2)
-                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-                CA_CERT_B64="${{ secrets.SPOKE_2_CA_CERT }}"
-                CLIENT_CERT_B64="${{ secrets.SPOKE_2_CLIENT_CERT }}"
-                CLIENT_KEY_B64="${{ secrets.SPOKE_2_CLIENT_KEY }}"
-                ;;
-              spoke-3)
-                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
-                CA_CERT_B64="${{ secrets.SPOKE_3_CA_CERT }}"
-                CLIENT_CERT_B64="${{ secrets.SPOKE_3_CLIENT_CERT }}"
-                CLIENT_KEY_B64="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
@@ -355,7 +341,7 @@ jobs:
           # Build workload_clusters map from SPOKE_CLUSTERS secret
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           # Convert comma-separated list to Terraform map format
@@ -559,8 +545,8 @@ jobs:
           # Read spoke cluster list from secrets
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-1"
-            SPOKE_CLUSTERS="spoke-1"
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-2"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
@@ -571,23 +557,13 @@ jobs:
 
             # Get secrets based on cluster name
             case "$cluster" in
-              spoke-1)
+
+              spoke-2)
+                # Helper: User wants to use spoke-2 context but with spoke-1 credentials
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
-                ;;
-              spoke-2)
-                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-                CA_CERT_B64="${{ secrets.SPOKE_2_CA_CERT }}"
-                CLIENT_CERT_B64="${{ secrets.SPOKE_2_CLIENT_CERT }}"
-                CLIENT_KEY_B64="${{ secrets.SPOKE_2_CLIENT_KEY }}"
-                ;;
-              spoke-3)
-                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
-                CA_CERT_B64="${{ secrets.SPOKE_3_CA_CERT }}"
-                CLIENT_CERT_B64="${{ secrets.SPOKE_3_CLIENT_CERT }}"
-                CLIENT_KEY_B64="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
@@ -701,7 +677,7 @@ jobs:
           # Build workload_clusters map from SPOKE_CLUSTERS secret
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           # Convert comma-separated list to Terraform map format
@@ -801,7 +777,7 @@ jobs:
 
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
