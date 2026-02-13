@@ -23,7 +23,7 @@ on:
         required: false
         type: boolean
         default: false
-  # Auto-trigger on push to any branch
+  # Auto-trigger on push to any branch (for testing)
   push:
     paths:
       - 'argocd-agent/terraform/**'
