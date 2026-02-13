@@ -231,10 +231,6 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-      - name: Import Hub Resources
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          bash ../../../../.github/scripts/import-hub-resources.sh "${{ env.HUB_NAMESPACE }}" "${{ steps.cluster_info.outputs.context }}"
 
       # Validate Terraform syntax and configuration
       - name: Terraform Validate
