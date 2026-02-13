@@ -195,9 +195,9 @@ jobs:
 
           # Exposure configuration
           ui_expose_method             = "${{ vars.UI_EXPOSE_METHOD || 'ingress' }}"
-          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
           principal_ingress_host       = "${{ secrets.PRINCIPAL_INGRESS_HOST }}"
-          enable_principal_ingress     = true
+          enable_principal_ingress     = false
           argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
 
           # Infrastructure modules
@@ -382,9 +382,9 @@ jobs:
 
           # Exposure configuration
           ui_expose_method             = "${{ vars.UI_EXPOSE_METHOD || 'ingress' }}"
-          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'ingress' }}"
+          principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
           principal_ingress_host       = "${{ secrets.PRINCIPAL_INGRESS_HOST }}"
-          enable_principal_ingress     = true
+          enable_principal_ingress     = false
           argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
 
           # Infrastructure modules
