@@ -76,7 +76,7 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             # On a push event, we don't want to destroy anything automatically.
             # By setting TARGET to empty, the subsequent checks will not match
-            # 'hub', 'spokes', or 'all', so no destroy jobs will be triggered.
+            # 'hub','spokes', or 'all', so no destroy jobs will be triggered.
             TARGET="all"
           fi
 
