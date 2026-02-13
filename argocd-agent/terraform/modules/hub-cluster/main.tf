@@ -3,12 +3,20 @@
 # =============================================================================
 
 # 1.1 Create Namespace
-resource "kubernetes_namespace" "hub_argocd" {
+resource "null_resource" "hub_argocd_namespace" {
   count = var.deploy_hub ? 1 : 0
-  provider = kubernetes
 
-  metadata {
-    name = var.hub_namespace
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      if ! kubectl get namespace ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "Creating namespace ${var.hub_namespace}..."
+        kubectl create namespace ${var.hub_namespace} --context ${var.hub_cluster_context}
+      else
+        echo "Namespace ${var.hub_namespace} already exists."
+      fi
+    EOT
   }
 }
 
@@ -1187,6 +1195,24 @@ resource "keycloak_realm" "argocd" {
   count   = var.deploy_hub && var.enable_keycloak ? 1 : 0
   realm   = var.keycloak_realm
   enabled = true
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      # This provisioner runs on a separate null_resource to check for the realm's existence before creation.
+      # This is a workaround to prevent "realm already exists" errors.
+      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%{http_code}" "${var.keycloak_url}/realms/${var.keycloak_realm}")
+      if [ "$REALM_EXISTS" = "200" ]; then
+        echo "Keycloak realm '${var.keycloak_realm}' already exists, skipping creation."
+        # The presence of this file will cause the keycloak_realm resource's count to be 0 on the next apply.
+        touch "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
+      else
+        echo "Keycloak realm '${var.keycloak_realm}' does not exist, proceeding with creation."
+        rm -f "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
+      fi
+    EOT
+  }
 }
 
 # =============================================================================
