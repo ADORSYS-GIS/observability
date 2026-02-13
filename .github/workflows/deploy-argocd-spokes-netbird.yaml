@@ -104,7 +104,7 @@ jobs:
             netbird status
           else
             echo "ℹ Netbird CLI not available in GitHub runner"
-            echo "   Connection established via netbird-connect action"
+            echo "Connection established via netbird-connect action"
           fi
 
           # Test connectivity to spoke clusters via Netbird
