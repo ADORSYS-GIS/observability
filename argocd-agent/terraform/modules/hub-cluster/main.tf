@@ -1202,7 +1202,7 @@ resource "keycloak_realm" "argocd" {
       set -e
       # This provisioner runs on a separate null_resource to check for the realm's existence before creation.
       # This is a workaround to prevent "realm already exists" errors.
-      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%{http_code}" "${var.keycloak_url}/realms/${var.keycloak_realm}")
+      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%%{http_code}" "${var.keycloak_url}/auth/realms/${var.keycloak_realm_name}")
       if [ "$REALM_EXISTS" = "200" ]; then
         echo "Keycloak realm '${var.keycloak_realm}' already exists, skipping creation."
         # The presence of this file will cause the keycloak_realm resource's count to be 0 on the next apply.
