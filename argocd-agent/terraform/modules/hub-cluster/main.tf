@@ -785,18 +785,18 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
         exit 1
       fi
       
-      echo "Waiting for Principal pods to be ready..." | tee -a "$LOG_FILE"
-      if ! kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/name=${var.principal_service_name} \
+      echo "Waiting for Principal deployment rollout..." | tee -a "$LOG_FILE"
+      if ! kubectl rollout status deployment/${var.principal_service_name} \
         -n ${var.hub_namespace} \
         --context ${var.hub_cluster_context} \
         --timeout=${var.kubectl_timeout} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Principal pods failed to become ready after restart" | tee -a "$LOG_FILE"
+        echo "✗ ERROR: Principal deployment failed to complete rollout" | tee -a "$LOG_FILE"
+        kubectl describe deployment/${var.principal_service_name} -n ${var.hub_namespace} --context ${var.hub_cluster_context} | tee -a "$LOG_FILE"
         kubectl describe pods -l app.kubernetes.io/name=${var.principal_service_name} -n ${var.hub_namespace} --context ${var.hub_cluster_context} | tee -a "$LOG_FILE"
         exit 1
       fi
       
-      echo "✓ Principal certificate updated successfully" | tee -a "$LOG_FILE"
+      echo "✓ Principal certificate updated and deployment restarted successfully" | tee -a "$LOG_FILE"
       echo "Update logs saved to: $LOG_FILE"
     EOT
   }

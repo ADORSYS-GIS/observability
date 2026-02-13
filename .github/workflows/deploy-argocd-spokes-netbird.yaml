@@ -186,15 +186,27 @@ jobs:
 
             # Get Netbird IP and certificates based on cluster name
             case "$cluster" in
-              spoke-1|spoke-2)
+              spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
+              spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                ;;
+              spoke-3)
+                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
+                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
+                ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
-                echo "  Expected cluster name: spoke-1 or spoke-2"
+                echo "  Expected cluster name: spoke-1, spoke-2, or spoke-3"
                 echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
@@ -240,12 +252,42 @@ jobs:
         env:
           SECRET_PREFIX: ""  # Will be set dynamically in loop
 
-      # Get hub cluster context
+      # Get hub cluster context and dynamically resolve principal address
       - name: Get Hub Cluster Info
         id: cluster_info
         run: |
           CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
           echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+          # Dynamically resolve principal address from hub cluster
+          echo "Fetching principal address from hub cluster..."
+          PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+          
+          if [ -z "$PRINCIPAL_IP" ]; then
+            PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          fi
+          
+          if [ -z "$PRINCIPAL_IP" ]; then
+            echo "❌ ERROR: Could not resolve principal address from hub cluster."
+            echo "   Ensure the hub has been deployed and the principal service has an external IP."
+            kubectl get svc -n ${{ env.HUB_NAMESPACE }} --context "$CONTEXT" || true
+            exit 1
+          fi
+
+          PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "443")
+
+          echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
+          echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT
+          echo "✅ Principal address resolved: $PRINCIPAL_IP:$PRINCIPAL_PORT"
 
       # Install Terraform CLI
       - name: Setup Terraform
@@ -301,9 +343,9 @@ jobs:
           hub_namespace                = "${{ env.HUB_NAMESPACE }}"
           spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
 
-          # Principal connection (from hub deployment)
-          principal_address            = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
-          principal_port               = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
+          # Principal connection (dynamically resolved from hub cluster)
+          principal_address            = "${{ steps.cluster_info.outputs.principal_address }}"
+          principal_port               = ${{ steps.cluster_info.outputs.principal_port }}
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
@@ -480,7 +522,7 @@ jobs:
 
             # Get Netbird IP and certificates based on cluster name
             case "$cluster" in
-              spoke-1|spoke-2)
+              spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 # Strip /32 suffix if present (CIDR notation)
                 NETBIRD_IP="${NETBIRD_IP%/32}"
@@ -488,9 +530,23 @@ jobs:
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
+              spoke-2)
+                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                ;;
+              spoke-3)
+                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
+                NETBIRD_IP="${NETBIRD_IP%/32}"
+                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
+                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
+                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
+                ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
-                echo "  Expected cluster name: spoke-1 or spoke-2"
+                echo "  Expected cluster name: spoke-1, spoke-2, or spoke-3"
                 echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
@@ -519,12 +575,42 @@ jobs:
 
           kubectl config get-contexts
 
-      # Get hub context
+      # Get hub context and dynamically resolve principal address
       - name: Get Hub Cluster Info
         id: cluster_info
         run: |
           CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
           echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+          # Dynamically resolve principal address from hub cluster
+          echo "Fetching principal address from hub cluster..."
+          PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+          
+          if [ -z "$PRINCIPAL_IP" ]; then
+            PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          fi
+          
+          if [ -z "$PRINCIPAL_IP" ]; then
+            echo "❌ ERROR: Could not resolve principal address from hub cluster."
+            echo "   Ensure the hub has been deployed and the principal service has an external IP."
+            kubectl get svc -n ${{ env.HUB_NAMESPACE }} --context "$CONTEXT" || true
+            exit 1
+          fi
+
+          PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "443")
+
+          echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
+          echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT
+          echo "✅ Principal address resolved: $PRINCIPAL_IP:$PRINCIPAL_PORT"
 
       # This group of steps configures the files needed for Terraform to run.
       - name: Configure Terraform environment
@@ -574,9 +660,9 @@ jobs:
           hub_namespace                = "${{ env.HUB_NAMESPACE }}"
           spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
 
-          # Principal connection (from hub deployment)
-          principal_address            = "${{ secrets.HUB_PRINCIPAL_ADDRESS }}"
-          principal_port               = ${{ secrets.HUB_PRINCIPAL_PORT || 443 }}
+          # Principal connection (dynamically resolved from hub cluster)
+          principal_address            = "${{ steps.cluster_info.outputs.principal_address }}"
+          principal_port               = ${{ steps.cluster_info.outputs.principal_port }}
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
