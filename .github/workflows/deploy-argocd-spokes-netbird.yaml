@@ -164,91 +164,83 @@ jobs:
       - name: Generate kubeconfig for spoke clusters
         run: |
           echo "🔧 Generating kubeconfig for local spoke clusters..."
-          echo "Spoke clusters are pre-configured in Netbird with known IPs"
-          echo ""
-
+          
           # Read spoke cluster list from secrets
-          # Expected format: SPOKE_CLUSTERS=spoke-1,spoke-2,spoke-3
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
-
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            echo "⚠ SPOKE_CLUSTERS secret not set"
-            echo "   Using default: spoke-1"
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-1"
             SPOKE_CLUSTERS="spoke-1"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
 
           for cluster in "${CLUSTERS[@]}"; do
-            cluster=$(echo "$cluster" | xargs)  # Trim whitespace
+            cluster=$(echo "$cluster" | xargs)
+            echo "--- Processing cluster: $cluster ---"
 
-            echo "Processing cluster: '$cluster'"
-
-            # Get Netbird IP and certificates based on cluster name
+            # Get secrets based on cluster name
             case "$cluster" in
               spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
-                CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
               spoke-2)
                 NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_2_CLIENT_KEY }}"
                 ;;
               spoke-3)
                 NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
-                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_3_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_3_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
-                echo "  Expected cluster name: spoke-1, spoke-2, or spoke-3"
-                echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
             esac
 
-            # Use GitHub secrets syntax to get values
-            echo "Configuring kubectl for $cluster..."
-
-            if [ ! -z "$NETBIRD_IP" ]; then
-              echo "  Netbird IP: $NETBIRD_IP"
-
-              # Create kubeconfig entries
-              kubectl config set-cluster $cluster \
-                --server=https://$NETBIRD_IP:6443 \
-                --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
-                --embed-certs=true
-
-              kubectl config set-credentials $cluster-admin \
-                --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
-                --client-key=<(echo "$CLIENT_KEY" | base64 -d) \
-                --embed-certs=true
-
-              kubectl config set-context $cluster \
-                --cluster=$cluster \
-                --user=$cluster-admin
-
-              # Verify connectivity via Netbird
-              echo "  Testing cluster API access..."
-              if kubectl cluster-info --context $cluster >/dev/null 2>&1; then
-                echo "  ✅ Cluster API accessible: $cluster"
-              else
-                echo "  ⚠ Cannot access cluster API: $cluster"
-              fi
-            else
-              echo "  ⚠ Netbird IP not configured for $cluster"
+            # Validation: Fail early if required secrets are missing
+            if [ -z "$NETBIRD_IP" ] || [ -z "$CA_CERT_B64" ] || [ -z "$CLIENT_CERT_B64" ] || [ -z "$CLIENT_KEY_B64" ]; then
+              echo "  ❌ ERROR: Missing secrets for $cluster. Ensure NETBIRD_IP, CA_CERT, CLIENT_CERT, and CLIENT_KEY are set."
+              exit 1
             fi
 
-            echo ""
+            # Clean IPs
+            NETBIRD_IP="${NETBIRD_IP%/32}"
+
+            # Create temporary files for certificates to ensure reliable kubeconfig embedding
+            CA_FILE=$(mktemp)
+            CERT_FILE=$(mktemp)
+            KEY_FILE=$(mktemp)
+            
+            echo "$CA_CERT_B64" | base64 -d > "$CA_FILE"
+            echo "$CLIENT_CERT_B64" | base64 -d > "$CERT_FILE"
+            echo "$CLIENT_KEY_B64" | base64 -d > "$KEY_FILE"
+
+            echo "  Configuring kubectl context..."
+            kubectl config set-cluster "$cluster" --server="https://$NETBIRD_IP:6443" --certificate-authority="$CA_FILE" --embed-certs=true
+            kubectl config set-credentials "$cluster-admin" --client-certificate="$CERT_FILE" --client-key="$KEY_FILE" --embed-certs=true
+            kubectl config set-context "$cluster" --cluster="$cluster" --user="$cluster-admin"
+
+            # Cleanup temp files
+            rm -f "$CA_FILE" "$CERT_FILE" "$KEY_FILE"
+
+            # Mandatory verification: Fail early if unauthorized
+            echo "  Verifying API access to $cluster..."
+            if ! kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true > /dev/null 2>&1; then
+              echo "  ❌ ERROR: Authentication failed for $cluster (Unauthorized). Verify secrets are correct."
+              kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true || true
+              exit 1
+            fi
+            echo "  ✅ Cluster $cluster is reachable and authorized"
           done
 
-          echo "Kubeconfig contexts configured:"
-          kubectl config get-contexts
+          echo "✅ Kubeconfig configured for all spoke clusters"
 
       # Validate that all clusters in SPOKE_CLUSTERS have their contexts configured
       - name: Validate spoke cluster contexts
@@ -563,70 +555,83 @@ jobs:
       - name: Generate kubeconfig for spoke clusters
         run: |
           echo "🔧 Generating kubeconfig for local spoke clusters..."
-
+          
+          # Read spoke cluster list from secrets
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            SPOKE_CLUSTERS="spoke-1,spoke-2,spoke-3"
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-1"
+            SPOKE_CLUSTERS="spoke-1"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
 
           for cluster in "${CLUSTERS[@]}"; do
             cluster=$(echo "$cluster" | xargs)
+            echo "--- Processing cluster: $cluster ---"
 
-            # Get Netbird IP and certificates based on cluster name
+            # Get secrets based on cluster name
             case "$cluster" in
               spoke-1)
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
-                # Strip /32 suffix if present (CIDR notation)
-                NETBIRD_IP="${NETBIRD_IP%/32}"
-                CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
                 ;;
               spoke-2)
                 NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-                NETBIRD_IP="${NETBIRD_IP%/32}"
-                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_2_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_2_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_2_CLIENT_KEY }}"
                 ;;
               spoke-3)
                 NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
-                NETBIRD_IP="${NETBIRD_IP%/32}"
-                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
+                CA_CERT_B64="${{ secrets.SPOKE_3_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_3_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster"
-                echo "  Expected cluster name: spoke-1, spoke-2, or spoke-3"
-                echo "  Please check your SPOKE_CLUSTERS secret"
                 continue
                 ;;
             esac
 
-            echo "Configuring $cluster..."
-
-            if [ ! -z "$NETBIRD_IP" ]; then
-              echo "  Netbird IP: $NETBIRD_IP"
-
-              kubectl config set-cluster $cluster \
-                --server=https://$NETBIRD_IP:6443 \
-                --certificate-authority=<(echo "$CA_CERT" | base64 -d) \
-                --embed-certs=true
-
-              kubectl config set-credentials $cluster-admin \
-                --client-certificate=<(echo "$CLIENT_CERT" | base64 -d) \
-                --client-key=<(echo "$CLIENT_KEY" | base64 -d) \
-                --embed-certs=true
-
-              kubectl config set-context $cluster \
-                --cluster=$cluster \
-                --user=$cluster-admin
+            # Validation: Fail early if required secrets are missing
+            if [ -z "$NETBIRD_IP" ] || [ -z "$CA_CERT_B64" ] || [ -z "$CLIENT_CERT_B64" ] || [ -z "$CLIENT_KEY_B64" ]; then
+              echo "  ❌ ERROR: Missing secrets for $cluster. Ensure NETBIRD_IP, CA_CERT, CLIENT_CERT, and CLIENT_KEY are set."
+              exit 1
             fi
+
+            # Clean IPs
+            NETBIRD_IP="${NETBIRD_IP%/32}"
+
+            # Create temporary files for certificates to ensure reliable kubeconfig embedding
+            CA_FILE=$(mktemp)
+            CERT_FILE=$(mktemp)
+            KEY_FILE=$(mktemp)
+            
+            echo "$CA_CERT_B64" | base64 -d > "$CA_FILE"
+            echo "$CLIENT_CERT_B64" | base64 -d > "$CERT_FILE"
+            echo "$CLIENT_KEY_B64" | base64 -d > "$KEY_FILE"
+
+            echo "  Configuring kubectl context..."
+            kubectl config set-cluster "$cluster" --server="https://$NETBIRD_IP:6443" --certificate-authority="$CA_FILE" --embed-certs=true
+            kubectl config set-credentials "$cluster-admin" --client-certificate="$CERT_FILE" --client-key="$KEY_FILE" --embed-certs=true
+            kubectl config set-context "$cluster" --cluster="$cluster" --user="$cluster-admin"
+
+            # Cleanup temp files
+            rm -f "$CA_FILE" "$CERT_FILE" "$KEY_FILE"
+
+            # Mandatory verification: Fail early if unauthorized
+            echo "  Verifying API access to $cluster..."
+            if ! kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true > /dev/null 2>&1; then
+              echo "  ❌ ERROR: Authentication failed for $cluster (Unauthorized). Verify secrets are correct."
+              kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true || true
+              exit 1
+            fi
+            echo "  ✅ Cluster $cluster is reachable and authorized"
           done
 
+          echo "✅ Kubeconfig configured for all spoke clusters"
           kubectl config get-contexts
 
       # Get hub context and dynamically resolve principal address
