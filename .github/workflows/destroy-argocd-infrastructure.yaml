@@ -626,8 +626,34 @@ jobs:
           HUB_CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ steps.cluster_location.outputs.actual_location }}_${{ secrets.HUB_CLUSTER_NAME }}"
 
           if kubectl get namespace ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
-            echo "⚠ Namespace ${{ env.HUB_NAMESPACE }} still exists on hub cluster"
-            echo "   Manual cleanup may be required"
+            echo "✓ Found namespace ${{ env.HUB_NAMESPACE }} on hub cluster, attempting clean deletion..."
+            
+            # Check for failing APIServices that block discovery and namespace termination
+            FAILING_SERVICES=$(kubectl get apiservice --context $HUB_CONTEXT | grep "False" | awk '{print $1}' || true)
+            if [ ! -z "$FAILING_SERVICES" ]; then
+              echo "⚠ Found failing APIServices that may block namespace deletion:"
+              echo "$FAILING_SERVICES"
+              for svc in $FAILING_SERVICES; do
+                echo "Deleting failing APIService: $svc"
+                kubectl delete apiservice $svc --context $HUB_CONTEXT --ignore-not-found=true --timeout=30s || true
+              done
+            fi
+
+            # Normal delete first
+            kubectl delete namespace ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT --ignore-not-found=true --timeout=60s || true
+            
+            # If still exists, use the finalize API method
+            if kubectl get namespace ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT 2>/dev/null; then
+              echo "⚠ Namespace still exists, attempting finalizer removal via API..."
+              kubectl get namespace ${{ env.HUB_NAMESPACE }} --context $HUB_CONTEXT -o json | \
+                sed 's/"finalizers": \[[^]]*\]/"finalizers": []/' > tmp_ns_hub.json
+              kubectl replace --raw "/api/v1/namespaces/${{ env.HUB_NAMESPACE }}/finalize" -f tmp_ns_hub.json --context $HUB_CONTEXT || true
+              rm tmp_ns_hub.json
+            fi
+            
+            echo "✓ Cleanup attempt completed for hub cluster"
+          else
+             echo "✓ Namespace ${{ env.HUB_NAMESPACE }} already removed from hub cluster"
           fi
 
       - name: Destroy summary
