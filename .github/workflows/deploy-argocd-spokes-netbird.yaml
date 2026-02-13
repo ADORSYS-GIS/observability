@@ -132,7 +132,7 @@ jobs:
             fi
           done
 
-      # Authenticate to GCP (needed for hub cluster context and state bucket access)
+      # Authenticate to GCP(needed for hub cluster context and state bucket access)
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v3
         with:
