@@ -1196,23 +1196,11 @@ resource "keycloak_realm" "argocd" {
   realm   = var.keycloak_realm
   enabled = true
 
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      set -e
-      # This provisioner runs on a separate null_resource to check for the realm's existence before creation.
-      # This is a workaround to prevent "realm already exists" errors.
-      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%%{http_code}" "${var.keycloak_url}/auth/realms/${var.keycloak_realm}")
-      if [ "$REALM_EXISTS" = "200" ]; then
-        echo "Keycloak realm '${var.keycloak_realm}' already exists, skipping creation."
-        # The presence of this file will cause the keycloak_realm resource's count to be 0 on the next apply.
-        touch "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
-      else
-        echo "Keycloak realm '${var.keycloak_realm}' does not exist, proceeding with creation."
-        # Ensure sentinel file does not exist
-        rm -f "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
-      fi
-    EOT
+  # Prevent 409 Conflict if realm already exists.
+  # On first deploy with an existing realm, run:
+  #   terraform import 'module.hub_cluster[0].keycloak_realm.argocd[0]' argocd
+  lifecycle {
+    ignore_changes = [realm]
   }
 }
 
