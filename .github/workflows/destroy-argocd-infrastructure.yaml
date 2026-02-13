@@ -23,7 +23,7 @@ on:
         type: boolean
         default: true
 
-  # Push trigger for testing on feature branch (remove before merging to main)
+  # Push trigger for testing on feature branch 
   push:
     branches:
       - 'pipeline/Argocd'
