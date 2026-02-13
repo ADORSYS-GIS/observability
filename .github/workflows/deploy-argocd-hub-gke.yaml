@@ -75,10 +75,9 @@ jobs:
 
       - name: Install gke-gcloud-auth-plugin
         run: |
-          if ! command -v gke-gcloud-auth-plugin >/dev/null 2>&1; then
-            gcloud components install gke-gcloud-auth-plugin --quiet || true
-          fi
-          command -v gke-gcloud-auth-plugin
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
       # Debug: Verify cluster configuration and detect zone vs region
       - name: Verify cluster exists and detect location type
@@ -137,7 +136,7 @@ jobs:
 
           # Configure kubeconfig for Terraform kubernetes provider
           gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
-            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            ${{ steps.cluster_location.outputs.location_flag }}=${{ steps.cluster_location.outputs.actual_location }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
       # Extract GKE cluster endpoint and CA certificate for Terraform provider configuration
@@ -207,7 +206,7 @@ jobs:
           letsencrypt_email            = "${{ secrets.LETSENCRYPT_EMAIL }}"
 
           # Keycloak integration (optional)
-          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'true' }}
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
           keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
           keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
           keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
@@ -385,8 +384,8 @@ jobs:
           argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
 
           # Infrastructure modules
-          install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'true' }}
-          install_nginx_ingress        = ${{ vars.INSTALL_NGINX_INGRESS || 'true' }}
+          install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'false' }}
+          install_nginx_ingress        = ${{ vars.INSTALL_NGINX_INGRESS || 'false' }}
           cert_manager_version         = "${{ vars.CERT_MANAGER_VERSION || 'v1.16.2' }}"
           nginx_ingress_version        = "${{ vars.NGINX_INGRESS_VERSION || '4.11.3' }}"
           letsencrypt_email            = "${{ secrets.LETSENCRYPT_EMAIL }}"
