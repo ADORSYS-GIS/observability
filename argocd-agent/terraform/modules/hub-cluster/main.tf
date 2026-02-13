@@ -104,7 +104,7 @@ resource "null_resource" "hub_argocd_base_install" {
   }
 
   depends_on = [
-    kubernetes_namespace.hub_argocd
+    null_resource.hub_argocd_namespace
   ]
 
   triggers = {
@@ -1202,13 +1202,14 @@ resource "keycloak_realm" "argocd" {
       set -e
       # This provisioner runs on a separate null_resource to check for the realm's existence before creation.
       # This is a workaround to prevent "realm already exists" errors.
-      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%%{http_code}" "${var.keycloak_url}/auth/realms/${var.keycloak_realm_name}")
+      REALM_EXISTS=$(curl -s -k -o /dev/null -w "%%{http_code}" "${var.keycloak_url}/auth/realms/${var.keycloak_realm}")
       if [ "$REALM_EXISTS" = "200" ]; then
         echo "Keycloak realm '${var.keycloak_realm}' already exists, skipping creation."
         # The presence of this file will cause the keycloak_realm resource's count to be 0 on the next apply.
         touch "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
       else
         echo "Keycloak realm '${var.keycloak_realm}' does not exist, proceeding with creation."
+        # Ensure sentinel file does not exist
         rm -f "/tmp/keycloak_realm_${var.keycloak_realm}_exists"
       fi
     EOT
