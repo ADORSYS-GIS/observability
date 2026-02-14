@@ -3,7 +3,7 @@
 # - Ephemeral Netbird connection for GitHub Actions runner
 # - Terraform-managed spoke cluster deployment
 # - Agent connectivity verification
-# -Remote state management in Google Cloud Storage
+# - Remote state management in Google Cloud Storage
 name: Deploy ArgoCD Spokes (Netbird)
 
 on:
@@ -11,35 +11,37 @@ on:
   workflow_dispatch:
     inputs:
       terraform_action:
-        description: 'Terraform Action'
+        description: "Terraform Action"
         required: true
         type: choice
         options:
           - plan
           - apply
-        default: 'plan'
+        default: "plan"
       adopt_existing_resources:
-        description: 'Import existing ArgoCD agent resources into Terraform state'
+        description: "Import existing ArgoCD agent resources into Terraform state"
         required: false
         type: boolean
         default: false
-  # Auto-trigger on push to any branch (for testing)
+  # Auto-trigger on push to main branch (for testing)
   push:
+    branches:
+      - 'main'
     paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-spokes-netbird.yaml'
+      - "argocd-agent/terraform/**"
+      - ".github/workflows/deploy-argocd-spokes-netbird.yaml"
 
 # Required permissions for workflow operations
 permissions:
-  contents: read           # Read repository content
-  id-token: write         # Google Cloud Workload Identity
+  contents: read # Read repository content
+  id-token: write # Google Cloud Workload Identity
 
 # Global environment variables used across all jobs
 env:
-  TERRAFORM_VERSION: '1.9.0'
-  KUBECTL_VERSION: '1.28.0'
-  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
-  CLOUD_PROVIDER: 'gke'
+  TERRAFORM_VERSION: "1.9.0"
+  KUBECTL_VERSION: "1.28.0"
+  WORKING_DIR: "argocd-agent/terraform/environments/prod"
+  CLOUD_PROVIDER: "gke"
   # Configurable deployment settings (can be overridden via GitHub variables)
   ARGOCD_VERSION: ${{ vars.ARGOCD_VERSION || 'v0.5.3' }}
   HUB_NAMESPACE: ${{ vars.HUB_NAMESPACE || 'argocd' }}
@@ -52,7 +54,7 @@ jobs:
     name: Terraform Plan
     runs-on: ubuntu-latest
     outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }} # Pass plan result to dependent jobs
 
     steps:
       # Fetch repository code
@@ -67,7 +69,7 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
 
       # Wait for Netbird peer sync
       - name: Wait for Netbird peer sync
@@ -75,7 +77,7 @@ jobs:
           echo "⏳ Waiting for Netbird peer sync..."
           MAX_WAIT=60
           WAITED=0
-          
+
           while [ $WAITED -lt $MAX_WAIT ]; do
             PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
             echo "Current peers: $PEERS (waited ${WAITED}s)"
@@ -90,7 +92,7 @@ jobs:
             sleep 5
             WAITED=$((WAITED + 5))
           done
-          
+
           echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
           netbird status
 
@@ -128,7 +130,7 @@ jobs:
             fi
           done
 
-      # Authenticate to GCP(needed for hub cluster context and state bucket access)
+      # Authenticate to GCP (needed for hub cluster context and state bucket access)
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v3
         with:
@@ -138,7 +140,7 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      # Install kubectl for cluster access 
+      # Install kubectl for cluster access
       - name: Setup kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
@@ -160,7 +162,7 @@ jobs:
       - name: Generate kubeconfig for spoke clusters
         run: |
           echo "🔧 Generating kubeconfig for local spoke clusters..."
-          
+
           # Read spoke cluster list from secrets
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
@@ -266,7 +268,7 @@ jobs:
 
           echo "✅ All spoke clusters have valid contexts configured"
         env:
-          SECRET_PREFIX: ""  # Will be set dynamically in loop
+          SECRET_PREFIX: "" # Will be set dynamically in loop
 
       # Get hub cluster context and dynamically resolve principal address
       - name: Get Hub Cluster Info
@@ -281,14 +283,14 @@ jobs:
             -n ${{ env.HUB_NAMESPACE }} \
             --context "$CONTEXT" \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-          
+
           if [ -z "$PRINCIPAL_IP" ]; then
             PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
               -n ${{ env.HUB_NAMESPACE }} \
               --context "$CONTEXT" \
               -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
           fi
-          
+
           if [ -z "$PRINCIPAL_IP" ]; then
             echo "❌ ERROR: Could not resolve principal address from hub cluster."
             echo "   Ensure the hub has been deployed and the principal service has an external IP."
@@ -298,7 +300,7 @@ jobs:
 
           # Determine port based on exposure method
           EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
-         
+
           if [ "$EXPOSE_METHOD" = "ingress" ]; then
             # Ingress uses standard HTTPS port
             PRINCIPAL_PORT="443"
@@ -444,7 +446,6 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
-
   # Job 2: Apply Terraform plan and verify deployment
   terraform-apply-and-verify:
     name: Terraform Apply & Verify
@@ -469,14 +470,14 @@ jobs:
 
       - name: Connect to Netbird
         run: |
-          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }} 
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
       # Wait for Netbird peer sync
       - name: Wait for Netbird peer sync
         run: |
           echo "⏳ Waiting for Netbird peer sync..."
           MAX_WAIT=60
           WAITED=0
-          
+
           while [ $WAITED -lt $MAX_WAIT ]; do
             PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
             echo "Current peers: $PEERS (waited ${WAITED}s)"
@@ -491,7 +492,7 @@ jobs:
             sleep 5
             WAITED=$((WAITED + 5))
           done
-          
+
           echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
           netbird status
 
@@ -537,11 +538,11 @@ jobs:
             --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
             --project=${{ secrets.GCP_PROJECT_ID }}
 
-      # Generate kubeconfig for spoke clusters(same as plan job)
+      # Generate kubeconfig for spoke clusters (same as plan job)
       - name: Generate kubeconfig for spoke clusters
         run: |
           echo "🔧 Generating kubeconfig for local spoke clusters..."
-          
+
           # Read spoke cluster list from secrets
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
@@ -623,14 +624,14 @@ jobs:
             -n ${{ env.HUB_NAMESPACE }} \
             --context "$CONTEXT" \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-          
+
           if [ -z "$PRINCIPAL_IP" ]; then
             PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
               -n ${{ env.HUB_NAMESPACE }} \
               --context "$CONTEXT" \
               -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
           fi
-          
+
           if [ -z "$PRINCIPAL_IP" ]; then
             echo "❌ ERROR: Could not resolve principal address from hub cluster."
             echo "   Ensure the hub has been deployed and the principal service has an external IP."
@@ -640,7 +641,7 @@ jobs:
 
           # Determine port based on exposure method
           EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
-          
+
           if [ "$EXPOSE_METHOD" = "ingress" ]; then
             # Ingress uses standard HTTPS port
             PRINCIPAL_PORT="443"
