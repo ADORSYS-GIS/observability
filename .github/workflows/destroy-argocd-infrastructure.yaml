@@ -13,34 +13,34 @@ on:
         required: true
         type: string
       destroy_hub:
-        description: 'Destroy hub cluster'
+        description: "Destroy hub cluster"
         required: false
         type: boolean
         default: false
       destroy_spokes:
-        description: 'Destroy spoke clusters'
+        description: "Destroy spoke clusters"
         required: false
         type: boolean
         default: true
 
   # Push trigger for testing on feature branch 
-  push:
-    branches:
-      - 'pipeline/Argocd'
-    paths:
-      - '.github/workflows/destroy-argocd-infrastructure.yaml'
+  # push:
+  #   branches:
+  #     - "pipeline/Argocd"
+  #   paths:
+  #     - ".github/workflows/destroy-argocd-infrastructure.yaml"
 
 # Required permissions
 permissions:
   contents: read
   id-token: write
 
-# Global environment variables 
+# Global environment variables
 env:
-  TERRAFORM_VERSION: '1.9.0'
-  KUBECTL_VERSION: '1.28.0'
-  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
-  CLOUD_PROVIDER: 'gke'
+  TERRAFORM_VERSION: "1.9.0"
+  KUBECTL_VERSION: "1.28.0"
+  WORKING_DIR: "argocd-agent/terraform/environments/prod"
+  CLOUD_PROVIDER: "gke"
   HUB_NAMESPACE: ${{ vars.HUB_NAMESPACE || 'argocd' }}
   SPOKE_NAMESPACE: ${{ vars.SPOKE_NAMESPACE || 'argocd' }}
 
@@ -83,7 +83,6 @@ jobs:
 
           echo "Destroy Hub: $DESTROY_HUB"
           echo "Destroy Spokes: $DESTROY_SPOKES"
-
 
   # Destroy spoke clusters first (must be destroyed before hub for clean PKI removal)
   destroy-spokes:
@@ -413,18 +412,17 @@ jobs:
         if: github.event_name == 'push' && needs.validate-destroy.outputs.destroy_hub == 'false'
         run: |
           echo "🔄 Triggering deploy workflow after successful spoke destruction..."
-          
+
           # Use GitHub CLI to trigger the deploy workflow
           # We use terraform_action=apply to actually deploy the spokes
           gh workflow run deploy-argocd-spokes-netbird.yaml \
             --ref ${{ github.ref_name }} \
             -f terraform_action=apply
-          
+
           echo "✅ Deploy workflow triggered successfully"
           echo "   Check the Actions tab to monitor the deployment"
         env:
           GH_TOKEN: ${{ github.token }}
-
 
   # Destroy hub cluster
   destroy-hub:
