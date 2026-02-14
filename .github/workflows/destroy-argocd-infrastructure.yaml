@@ -23,12 +23,7 @@ on:
         type: boolean
         default: true
 
-  # Push trigger for testing on feature branch 
-  # push:
-  #   branches:
-  #     - "pipeline/Argocd"
-  #   paths:
-  #     - ".github/workflows/destroy-argocd-infrastructure.yaml"
+
 
 # Required permissions
 permissions:
