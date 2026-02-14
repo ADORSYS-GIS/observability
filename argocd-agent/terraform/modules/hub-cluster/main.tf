@@ -317,6 +317,8 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
     annotations = {
       "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
       "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
+      "nginx.org/ssl-redirect"                         = "true"
+      "acme.cert-manager.io/http01-edit-in-place"      = "true"
     }
   }
 

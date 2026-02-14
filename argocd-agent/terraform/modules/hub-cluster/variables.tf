@@ -319,7 +319,7 @@ variable "cert_issuer_name" {
 variable "cert_issuer_kind" {
   description = "Kind of cert-manager issuer: 'Issuer' (namespace-scoped) or 'ClusterIssuer' (cluster-wide)"
   type        = string
-  default     = "Issuer"
+  default     = "ClusterIssuer"
 }
 
 variable "letsencrypt_email" {
