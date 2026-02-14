@@ -164,8 +164,8 @@ jobs:
           echo "Configuring kubectl for spoke clusters..."
           SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
           if [ -z "$SPOKE_CLUSTERS" ]; then
-            echo "⚠ SPOKE_CLUSTERS not configured, skipping kubeconfig setup"
-            exit 0
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-2"
+            SPOKE_CLUSTERS="spoke-2"
           fi
 
           IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
@@ -176,26 +176,13 @@ jobs:
 
             # Get Netbird IP and certificates based on cluster name
             case "$cluster" in
-              spoke-1)
+              spoke-2)
+                # Helper: User wants to use spoke-2 context but with spoke-1 credentials
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 NETBIRD_IP="${NETBIRD_IP%/32}"
                 CA_CERT="${{ secrets.SPOKE_1_CA_CERT }}"
                 CLIENT_CERT="${{ secrets.SPOKE_1_CLIENT_CERT }}"
                 CLIENT_KEY="${{ secrets.SPOKE_1_CLIENT_KEY }}"
-                ;;
-              spoke-2)
-                NETBIRD_IP="${{ secrets.SPOKE_2_NETBIRD_IP }}"
-                NETBIRD_IP="${NETBIRD_IP%/32}"
-                CA_CERT="${{ secrets.SPOKE_2_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_2_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_2_CLIENT_KEY }}"
-                ;;
-              spoke-3)
-                NETBIRD_IP="${{ secrets.SPOKE_3_NETBIRD_IP }}"
-                NETBIRD_IP="${NETBIRD_IP%/32}"
-                CA_CERT="${{ secrets.SPOKE_3_CA_CERT }}"
-                CLIENT_CERT="${{ secrets.SPOKE_3_CLIENT_CERT }}"
-                CLIENT_KEY="${{ secrets.SPOKE_3_CLIENT_KEY }}"
                 ;;
               *)
                 echo "  ⚠ Unknown cluster: $cluster, skipping"
