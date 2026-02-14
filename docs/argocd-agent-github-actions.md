@@ -116,9 +116,9 @@ After successful deployment, you can verify the deployment details in the workfl
 
 
 
-###Step 3: Deploy Spoke Clusters via Netbird
+### Step 3: Deploy Spoke Clusters via Netbird
 
-Deploy ArgoCD agents to local Kubernetes clusters.
+Deploy ArgoCD agents to local Kubernetes clusters in **Agent-Managed** mode.
 
 #### Trigger Workflow
 
@@ -134,45 +134,25 @@ Deploy ArgoCD agents to local Kubernetes clusters.
 #### Monitor Netbird Connection
 
 1. Open the workflow run
-2. Check **"Connect to Netbird"** step
-3. Verify connection successful:
-   ```
-   ✅ Connected to Netbird network
-   ```
+2. Check **"Connect to Netbird"** step to verify VPN mesh connection.
+3. Check **"Verify Netbird connection"** step to confirm pings to spoke IPs.
 
-4. Check **"Verify Netbird connection"** step
-5. Confirm spoke clusters reachable:
-   ```
-   Testing connectivity to 100.64.1.10...
-   ✅ Reachable: 100.64.1.10
-   ```
+#### Review & Apply
 
-#### Review Plan
-
-1. Review **"Terraform Plan"** step
-2. Verify resources to be created:
-   - Namespaces on spoke clusters
-   - ArgoCD Helm releases
-   - Agent configurations
-   - mTLS certificates
-
-#### Apply Changes
-
-1. Run workflow again with **Terraform Action**: `apply`
-2. Wait for deployment (~10-15 minutes)
-   - Netbird connection
-   - Terraform apply
-   - Agent deployment
-   - Certificate issuance
-   - Connectivity verification
+1. Review the **"Terraform Plan"** output.
+2. Run workflow again with **Terraform Action**: `apply`.
+3. Wait for:
+   - Namespace creation (`agent-N`)
+   - Agent deployment & connectivity
+   - Certificate exchange (Hub <-> Spoke)
 
 #### Verify Agent Connectivity
 
-Check the **"Verify ArgoCD Spoke deployment"** step:
+Check the **"Verify ArgoCD Spoke deployment"** step output:
 
 ```
 ═══════════════════════════════════════════════════════════
-Verifying spoke-1...
+Verifying spoke-2...
 ═══════════════════════════════════════════════════════════
 1. Checking namespace...
    ✅ Namespace exists
@@ -183,11 +163,6 @@ Verifying spoke-1...
 4. Checking certificates...
    ✅ Client certificate exists
    ✅ CA certificate exists
-
-📊 Verification Summary
-══════════════════════════════════════════════════════════════
-✅ Successfully connected: 3
-❌ Failed connections: 0
 
 ✅ All spoke clusters deployed and connected successfully!
 ```
@@ -447,50 +422,56 @@ kubectl get secret argocd-initial-admin-secret -n argocd \
 
 ### 3. Deploy Test Application (Agent-Managed Pattern)
 
-In the **Agent-Managed** architecture (recommended), you create the Application on the Hub, but target the **Agent's local cluster**.
+In the verified **Agent-Managed** architecture, you create the Application on the Hub, but the destination server is `https://kubernetes.default.svc`. The Agent on the spoke cluster pulls this configuration and deploys it locally.
 
-**Manifest Example (`guestbook-agent.yaml`):**
+**Manifest Example (`guestbook-helm.yaml`):**
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: guestbook
-  namespace: agent-2  # Namespace on HUB where Agent watches
+  name: guestbook-helm
+  namespace: agent-2  # The namespace on HUB where the Agent is connected
 spec:
+  project: default
   source:
     repoURL: https://github.com/argoproj/argocd-example-apps.git
-    path: guestbook
+    targetRevision: HEAD
+    path: helm-guestbook
   destination:
     # URL for the Agent's LOCAL cluster (the spoke)
+    # The Agent interprets this as "deploy to the cluster I am running in"
     server: https://kubernetes.default.svc
-    namespace: guestbook
+    namespace: guestbook-helm
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
 ```
 
 **Steps:**
 1. Apply the manifest to the **Hub Cluster**:
    ```bash
-   kubectl apply -f guestbook-agent.yaml
+   kubectl apply -f guestbook-helm.yaml
    ```
-2. Wait for the Agent (on Spoke) to pull the config.
+2. Wait for the Agent (on Spoke) to pull the config (~30s).
 3. Check status on Hub:
    ```bash
-   kubectl get application guestbook -n agent-2
+   kubectl get application guestbook-helm -n agent-2
    # Should show: SYNC STATUS: Synced, HEALTH STATUS: Healthy
    ```
 
 ### 4. Verify on Spoke Cluster
 
+You can verify the pods are actually running on the spoke cluster:
+
 ```bash
-# Via Netbird (join network first)
-netbird up --setup-key <NETBIRD_SETUP_KEY_RUNNERS>
+# Using Netbird connection (spoke-2 example context)
+export KUBECONFIG=$HOME/.kube/config:$HOME/.kube/spoke-2.yaml
 
-# Configure kubectl for Spoke
-kubectl config set-cluster spoke-1 ...
-
-# Check deployments
-kubectl get all -n guestbook --context spoke-1
-
-# Expected: guestbook deployment, service, pods running
+kubectl get pods -n guestbook-helm --context spoke-2
+# Expected: guestbook pods running
 ```
 
 ---
