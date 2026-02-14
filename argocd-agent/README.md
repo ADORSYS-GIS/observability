@@ -22,8 +22,13 @@ See [Architecture guide](../docs/argocd-agent-architecture.md) for detailed comp
 
 ## Deployment
 
-### Automated (Terraform)
-Recommended for production with infrastructure-as-code.
+### Automated (GitHub Actions)
+Recommended for CI/CD and production deployments.
+
+See [ArgoCD Agent GitHub Actions Workflow Guide](../docs/argocd-agent-github-actions.md)
+
+### Automated (Terraform CLI)
+For manual infrastructure-as-code execution.
 
 See [Terraform deployment guide](../docs/argocd-agent-terraform-deployment.md)
 
