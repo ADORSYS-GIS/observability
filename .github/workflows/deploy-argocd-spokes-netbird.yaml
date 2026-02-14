@@ -26,7 +26,7 @@ on:
   # Auto-trigger on push to main branch (for testing)
   push:
     branches:
-      - 'main'
+      - 'pipeline/argocd'
     paths:
       - "argocd-agent/terraform/**"
       - ".github/workflows/deploy-argocd-spokes-netbird.yaml"
@@ -180,6 +180,9 @@ jobs:
             case "$cluster" in
 
               spoke-2)
+                # TEST MAPPING: Mapping spoke-2 to use spoke-1 secrets (Netbird IP/Certs)
+                # This allows testing the multi-spoke logic using a single physical cluster.
+                # In a real environment, spoke-2 would have its own unique secrets.
                 # Helper: User wants to use spoke-2 context but with spoke-1 credentials
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
@@ -560,6 +563,9 @@ jobs:
             case "$cluster" in
 
               spoke-2)
+                # TEST MAPPING: Mapping spoke-2 to use spoke-1 secrets (Netbird IP/Certs)
+                # This allows testing the multi-spoke logic using a single physical cluster.
+                # In a real environment, spoke-2 would have its own unique secrets.
                 # Helper: User wants to use spoke-2 context but with spoke-1 credentials
                 NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
                 CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
