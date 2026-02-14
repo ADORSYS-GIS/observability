@@ -11,40 +11,42 @@ on:
   workflow_dispatch:
     inputs:
       terraform_action:
-        description: 'Terraform Action'
+        description: "Terraform Action"
         required: true
         type: choice
         options:
           - plan
           - apply
-        default: 'plan'
+        default: "plan"
       force_reinstall_argocd:
-        description: 'Force re-run ArgoCD base install (replaces module.hub_cluster[0].null_resource.hub_argocd_base_install). Use after deleting the argocd namespace manually.'
+        description: "Force re-run ArgoCD base install (replaces module.hub_cluster[0].null_resource.hub_argocd_base_install). Use after deleting the argocd namespace manually."
         required: false
         type: boolean
         default: false
       adopt_existing_resources:
-        description: 'Import existing ArgoCD resources into Terraform state'
+        description: "Import existing ArgoCD resources into Terraform state"
         required: false
         type: boolean
         default: false
-  # Auto-trigger on push to any branch
+  # Auto-trigger on push to main branch
   push:
+    branches:
+      - 'main'
     paths:
-      - 'argocd-agent/terraform/**'
-      - '.github/workflows/deploy-argocd-hub-gke.yaml'
+      - "argocd-agent/terraform/**"
+      - ".github/workflows/deploy-argocd-hub-gke.yaml"
 
 # Required permissions for workflow operations
 permissions:
-  contents: read          # Read repository content
-  id-token: write         # Google Cloud Workload Identity
+  contents: read # Read repository content
+  id-token: write # Google Cloud Workload Identity
 
 # Global environment variables used across all jobs
 env:
-  TERRAFORM_VERSION: '1.9.0'
-  KUBECTL_VERSION: '1.28.0'
-  WORKING_DIR: 'argocd-agent/terraform/environments/prod'
-  CLOUD_PROVIDER: 'gke'
+  TERRAFORM_VERSION: "1.9.0"
+  KUBECTL_VERSION: "1.28.0"
+  WORKING_DIR: "argocd-agent/terraform/environments/prod"
+  CLOUD_PROVIDER: "gke"
   # Configurable deployment settings (can be overridden via GitHub variables)
   ARGOCD_VERSION: ${{ vars.ARGOCD_VERSION || 'v0.5.3' }}
   HUB_NAMESPACE: ${{ vars.HUB_NAMESPACE || 'argocd' }}
@@ -56,7 +58,7 @@ jobs:
     name: Terraform Plan
     runs-on: ubuntu-latest
     outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}  # Pass plan result to dependent jobs
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }} # Pass plan result to dependent jobs
 
     steps:
       # Fetch repository code
@@ -93,10 +95,10 @@ jobs:
           echo "Listing all clusters in project..."
           gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
           echo ""
-          
+
           echo "Searching for cluster: ${{ secrets.HUB_CLUSTER_NAME }}"
           CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
-          
+
           if [ -z "$CLUSTER_INFO" ]; then
             echo ""
             echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found in project '${{ secrets.GCP_PROJECT_ID }}'!"
@@ -108,10 +110,10 @@ jobs:
             echo ""
             exit 1
           fi
-          
+
           ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
           echo "✓ Found cluster at location: $ACTUAL_LOCATION"
-          
+
           # Detect if it's a zone (has -a, -b, -c suffix) or region
           if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
             echo "✓ Detected ZONAL cluster"
@@ -120,7 +122,7 @@ jobs:
             echo "✓ Detected REGIONAL cluster"
             LOCATION_FLAG="--region"
           fi
-          
+
           echo "actual_location=$ACTUAL_LOCATION" >> $GITHUB_OUTPUT
           echo "location_flag=$LOCATION_FLAG" >> $GITHUB_OUTPUT
           echo ""
@@ -232,7 +234,6 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
-
       # Validate Terraform syntax and configuration
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
@@ -272,7 +273,6 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
-
   # Job 2: Apply Terraform plan and verify deployment
   # Only runs on: push to main OR manual workflow_dispatch with 'apply' action
   # Combines infrastructure deployment with verification for efficiency
@@ -284,7 +284,7 @@ jobs:
       (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
     environment:
-      name: production  # Requires approval if environment protection rules are configured
+      name: production # Requires approval if environment protection rules are configured
 
     steps:
       # Fetch repository code
@@ -293,7 +293,7 @@ jobs:
 
       # Install Terraform CLI
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3 
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
@@ -317,16 +317,16 @@ jobs:
         run: |
           echo "Detecting cluster location..."
           CLUSTER_INFO=$(gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="value(name,location)" | grep "^${{ secrets.HUB_CLUSTER_NAME }}" || true)
-          
+
           if [ -z "$CLUSTER_INFO" ]; then
             echo "ERROR: Cluster '${{ secrets.HUB_CLUSTER_NAME }}' not found!"
             gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }} --format="table(name,location)"
             exit 1
           fi
-          
+
           ACTUAL_LOCATION=$(echo "$CLUSTER_INFO" | awk '{print $2}')
           echo "✓ Found cluster at location: $ACTUAL_LOCATION"
-          
+
           if [[ "$ACTUAL_LOCATION" =~ -[a-z]$ ]]; then
             LOCATION_FLAG="--zone"
             echo "✓ Using zonal cluster configuration"
