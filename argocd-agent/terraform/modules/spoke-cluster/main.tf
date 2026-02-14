@@ -97,6 +97,15 @@ resource "null_resource" "spoke_argocd_installation" {
           --timeout=300s \
           -k "${local.agent_spoke_managed_install_url}" 2>&1 | tee -a "$$LOG_FILE"; then
           echo "✓ ArgoCD manifests applied successfully to ${each.key}" | tee -a "$$LOG_FILE"
+          
+          # Patch repo-server copyutil to prevent 'File exists' error on restart
+          echo "Patching repo-server copyutil initContainer..." | tee -a "$$LOG_FILE"
+          kubectl patch deployment ${var.argocd_repo_server_name} -n ${var.spoke_namespace} \
+            --context ${each.value} \
+            --insecure-skip-tls-verify=true \
+            --type='json' \
+            -p='[{"op": "replace", "path": "/spec/template/spec/initContainers/0/args/0", "value": "/bin/cp --update=none /usr/local/bin/argocd /var/run/argocd/argocd && /bin/ln -sf /var/run/argocd/argocd /var/run/argocd/argocd-cmp-server"}]' 2>&1 | tee -a "$$LOG_FILE"
+            
           break
         fi
 
