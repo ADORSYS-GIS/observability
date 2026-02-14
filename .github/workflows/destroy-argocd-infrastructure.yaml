@@ -16,7 +16,7 @@ on:
         description: 'Destroy hub cluster'
         required: false
         type: boolean
-        default: true
+        default: false
       destroy_spokes:
         description: 'Destroy spoke clusters'
         required: false
