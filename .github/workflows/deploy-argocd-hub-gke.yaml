@@ -301,7 +301,7 @@ jobs:
         run: |
           bash $GITHUB_WORKSPACE/argocd-agent/scripts/install_agentctl.sh
 
-      # Authenticate to GCP for cluster and state bucket access
+      # Authenticate to GCP
       - name: Setup GCP credentials
         uses: google-github-actions/auth@v3
         with:
