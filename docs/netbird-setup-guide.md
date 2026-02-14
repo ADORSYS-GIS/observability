@@ -357,14 +357,15 @@ Complete list of secrets needed for the workflows:
 | `HUB_PRINCIPAL_ADDRESS` | From hub deployment | Principal IP/hostname |
 | `HUB_PRINCIPAL_PORT` | `443` | Principal port |
 
-Per-cluster secrets (repeat for each spoke):
-
 | Secret | Example | Description |
 |--------|---------|-------------|
 | `SPOKE_1_NETBIRD_IP` | `100.64.1.10` | From section 5 |
 | `SPOKE_1_CA_CERT` | `LS0tLS...` | From section 5 |
 | `SPOKE_1_CLIENT_CERT` | `LS0tLS...` | From section 5 |
 | `SPOKE_1_CLIENT_KEY` | `LS0tLS...` | From section 5 |
+
+> [!NOTE]
+> **Environment Specific Mapping**: In some environments (like the verified `spoke-2` setup), you may map multiple spokes to the same physical cluster secrets for testing (e.g., `spoke-2` using `SPOKE_1` secrets). Ensure your workflow logic matches your secret configuration.
 
 ---
 
