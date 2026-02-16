@@ -91,16 +91,36 @@ Works with GitHub, GitLab, Bitbucket, Azure DevOps, and more.
 
 ```mermaid
 graph TD
-    Start[Renovate Starts] --> Scan[Scans your files]
-    Scan --> Check{New Update Found?}
-    
-    Check -- No --> Sleep[Do nothing]
-    Check -- Yes --> PR[Create Pull Request]
-    
-    PR --> Test[Run Automated Tests]
-    
-    Test -- Pass --> Merge[Ready to Merge! 🚀]
-    Test -- Fail --> Fix[Needs Human Review 🛠️]
+
+    A[Renovate Scheduler / Webhook Trigger] --> B[Load Renovate Config]
+    B --> C[Scan Repository Files: package.json, Dockerfile, etc.]
+
+    C --> D[Extract Dependencies]
+    D --> E[Query Registry - npm, Docker Hub, etc.]
+
+    E --> F{New Version Available?}
+
+    F -- No --> Z[End / Wait for Next Run]
+
+    F -- Yes --> G[Determine Update Type - major, minor, patch]
+    G --> H[Create Update Branch]
+
+    H --> I[Fetch Changelog from Source Repository]
+    I --> J[Generate Pull Request with Version + Changelog Info]
+
+    J --> K[CI Pipeline Runs: Tests / Build / Lint]
+
+    K --> L{CI Successful?}
+
+    L -- No --> M[Manual Review Required]
+    L -- Yes --> N{Automerge Enabled?}
+
+    N -- Yes --> O[Automatically Merge PR 🚀]
+    N -- No --> P[Ready for Human Approval]
+
+    O --> Z
+    P --> Z
+    M --> Z
 ```
 
 **Step 1: Discovery**
