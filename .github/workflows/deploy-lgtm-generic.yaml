@@ -90,7 +90,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload import report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: import-report
           path: ${{ env.WORKING_DIR }}/import-report.json
@@ -155,7 +155,7 @@ jobs:
           exit 0
 
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan
           path: |
@@ -210,7 +210,7 @@ jobs:
         run: terraform apply -auto-approve tfplan
 
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
@@ -237,7 +237,7 @@ jobs:
           MONITORING_DOMAIN: ${{ secrets.MONITORING_DOMAIN }}
 
       - name: Upload verification report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: verification-report

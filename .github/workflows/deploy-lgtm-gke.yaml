@@ -167,7 +167,7 @@ jobs:
 
       # Step: Share plan file with the Apply job
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan
           path: |
@@ -287,7 +287,7 @@ jobs:
         run: terraform output -json > terraform-outputs.json
 
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
@@ -305,7 +305,7 @@ jobs:
 
       # Step: Upload test results
       - name: Upload verification report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: verification-report
