@@ -63,13 +63,13 @@ jobs:
 
       # Authenticate to GCP (needed for state bucket access)
       - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Install gcloud CLI
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install kubectl and configure cluster access for Terraform kubernetes provider
       - name: Setup kubectl
@@ -199,7 +199,7 @@ jobs:
 
       # Save plan artifacts for apply job (tfplan binary + human-readable output)
       - name: Upload plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-cert-manager-gke
           path: |
@@ -234,13 +234,13 @@ jobs:
 
       # Authenticate to GCP for cluster and state bucket access
       - name: Setup GCP credentials
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Install gcloud CLI
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install kubectl and configure cluster access
       # Includes GKE auth plugin for kubectl 1.26+ authentication
@@ -316,7 +316,7 @@ jobs:
 
       # Download the plan artifact generated in terraform-plan job
       - name: Download plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: tfplan-cert-manager-gke
           path: ${{ env.WORKING_DIR }}
@@ -334,7 +334,7 @@ jobs:
 
       # Save outputs as artifact for potential downstream jobs or auditing
       - name: Upload outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terraform-outputs-cert-manager-gke
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json

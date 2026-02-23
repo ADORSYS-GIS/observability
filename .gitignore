@@ -99,6 +99,8 @@ yarn.lock
 *.backup
 .terraform/
 .terraform.lock.hcl
+backend-config.tf
+backend.tf
 terraform.tfplan
 
 # Auto-generated backend configuration files

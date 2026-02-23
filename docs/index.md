@@ -19,7 +19,7 @@ Correlated metrics, logs, and traces with Grafana Labs' open-source platform (Lo
 
 | Guide | Purpose |
 |-------|---------|
-| [Terraform Deployment](kubernetes-observability.md) | Automated LGTM deployment |
+| [Terraform Deployment](lgtm-stack-terraform-deployment.md) | Automated LGTM deployment |
 | [Manual Deployment](manual-lgtm-deployment.md) | Helm-based deployment |
 | [Alloy Configuration](alloy-config.md) | Telemetry pipeline setup |
 | [Testing & Verification](testing-monitoring-stack-deployment.md) | Validation procedures |
@@ -82,7 +82,7 @@ Automated dependency update tooling for keeping infrastructure and CI dependenci
 ## Quick Start by Use Case
 
 ### Building Full Observability Platform
-1. Deploy [LGTM Stack](kubernetes-observability.md) for metrics, logs, traces
+1. Deploy [LGTM Stack](lgtm-stack-terraform-deployment.md) for metrics, logs, traces
 2. Deploy [ArgoCD](argocd-terraform-deployment.md) for GitOps delivery
 3. Deploy [cert-manager](cert-manager-terraform-deployment.md) for TLS automation
 4. Deploy [Ingress Controller](ingress-controller-terraform-deployment.md) for external access
@@ -112,7 +112,7 @@ Automated dependency update tooling for keeping infrastructure and CI dependenci
 ### Deployment
 | Task | Documentation |
 |------|---------------|
-| Deploy observability stack | [LGTM Terraform Guide](kubernetes-observability.md) |
+| Deploy observability stack | [LGTM Terraform Guide](lgtm-stack-terraform-deployment.md) |
 | Deploy single-cluster GitOps | [ArgoCD Terraform Guide](argocd-terraform-deployment.md) |
 | Deploy multi-cluster GitOps | [ArgoCD Agent Guide](argocd-agent-terraform-deployment.md) |
 | Set up TLS certificates | [cert-manager Guide](cert-manager-terraform-deployment.md) |

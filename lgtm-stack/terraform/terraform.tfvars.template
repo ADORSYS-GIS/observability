@@ -1,48 +1,82 @@
 # ==============================================================================
-# LGTM Stack Terraform Configuration
+# LGTM Stack Terraform Configuration Template
 # ==============================================================================
-# See: docs/adopting-lgtm-stack.md | docs/troubleshooting-lgtm-stack.md
+# Instructions:
+# 1. Copy this file to terraform.tfvars
+# 2. Fill in the values for your environment
+# ==============================================================================
 
-# GCP and Cluster Configuration
+# ------------------------------------------------------------------------------
+# Cloud Provider Configuration
+# ------------------------------------------------------------------------------
+# Options: "gke", "eks", "generic"
+cloud_provider = "gke"
+
+# GCP Configuration (Required if cloud_provider = "gke")
 project_id       = "your-gcp-project-id"
 region           = "us-central1"
-cluster_name     = "your-cluster-name"
-cluster_location = "us-central1"
+cluster_location = "us-central1" # Zone or Region
 
-# Environment Configuration
+# AWS Configuration (Required if cloud_provider = "eks")
+# aws_region            = "us-east-1"
+# eks_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLED539D986779329639452945"
+
+# Cluster Configuration
+cluster_name = "your-cluster-name"
+
+# ------------------------------------------------------------------------------
+# Environment & Domain
+# ------------------------------------------------------------------------------
 environment       = "production"
 monitoring_domain = "monitoring.example.com"
 letsencrypt_email = "admin@example.com"
 
-# Kubernetes Configuration
+# ------------------------------------------------------------------------------
+# Identity & Permissions
+# ------------------------------------------------------------------------------
 namespace                = "lgtm"
 k8s_service_account_name = "observability-sa"
+
+# GCP Service Account for Workload Identity (GKE only)
 gcp_service_account_name = "gke-observability-sa"
 
-# Shared Infrastructure
+# ------------------------------------------------------------------------------
+# Application Configuration
+# ------------------------------------------------------------------------------
+grafana_admin_password = "change-this-secure-password" # Changed via secret in CI/CD
+loki_schema_from_date  = "2024-01-01"                  # Must be in the past
+
+# Storage Safety
+bucket_suffix = "v1"    # Appended to bucket names to ensure uniqueness
+force_destroy = false   # Set to true to allow destroying buckets containing data (DANGER)
+
+# ------------------------------------------------------------------------------
+# Shared Infrastructure (Ingress & Certs)
+# ------------------------------------------------------------------------------
+# If you manage Cert-Manager/Ingress separately, set these to false
 install_cert_manager  = false
 install_nginx_ingress = false
 
-# Cert-Manager Configuration
-cert_manager_version      = "v1.19.2"
-cert_manager_release_name = "cert-manager"
-cert_manager_namespace    = "cert-manager"
-cert_issuer_name          = "letsencrypt-prod"
-cert_issuer_kind          = "ClusterIssuer"
+ingress_class_name = "nginx"
 
-# NGINX Ingress Configuration
-nginx_ingress_version      = "4.14.1"
-nginx_ingress_release_name = "ingress-nginx"
-nginx_ingress_namespace    = "ingress-nginx"
-ingress_class_name         = "nginx"
+# Cert-Manager Integration
+cert_issuer_name = "letsencrypt-prod"
+cert_issuer_kind = "ClusterIssuer" # Options: ClusterIssuer, Issuer
 
-# Application Configuration
-grafana_admin_password = "change-this-secure-password"
-loki_schema_from_date  = "2024-01-01"
-
-# Component Versions
+# ------------------------------------------------------------------------------
+# Component Versions (Helm Charts)
+# ------------------------------------------------------------------------------
 loki_version       = "6.20.0"
 mimir_version      = "5.5.0"
 tempo_version      = "1.57.0"
 prometheus_version = "25.27.0"
 grafana_version    = "10.3.0"
+
+# Dependency Versions (if installed via this stack)
+cert_manager_version       = "v1.19.2"
+cert_manager_release_name  = "cert-manager"
+cert_manager_namespace     = "cert-manager"
+
+nginx_ingress_version      = "4.14.1"
+nginx_ingress_release_name = "nginx-monitoring"
+nginx_ingress_namespace    = "ingress-nginx"
