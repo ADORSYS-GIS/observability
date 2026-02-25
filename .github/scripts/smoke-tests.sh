@@ -102,6 +102,7 @@ TIMESTAMP=$(date +%s)000000000
 TRACE_ID=$(uuidgen | tr -d '-')
 
 LOKI_PUSH_RESPONSE=$(curl -s -X POST "$LOKI_ENDPOINT/loki/api/v1/push" \
+  -H "X-Scope-OrgID: default" \
   -H "Content-Type: application/json" \
   -d '{
     "streams": [
@@ -140,6 +141,7 @@ START_TIME_LOKI=$(($(date +%s) - 300))
 for i in {1..6}; do
   sleep 5
   LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
+    -H "X-Scope-OrgID: default" \
     --data-urlencode 'query={job="smoke-test"}' \
     --data-urlencode "start=$START_TIME_LOKI" \
     --data-urlencode 'limit=10' || echo "FAILED")
@@ -185,6 +187,7 @@ EOF
 )
 
 MIMIR_PUSH_RESPONSE=$(echo "$MIMIR_PUSH" | curl -s -X POST "$MIMIR_ENDPOINT/api/v1/push" \
+  -H "X-Scope-OrgID: default" \
   -H "Content-Type: application/x-protobuf" \
   -H "X-Prometheus-Remote-Write-Version: 0.1.0" \
   --data-binary @- || echo "FAILED")
@@ -207,6 +210,7 @@ for i in {1..12}; do
   # Instead of a manual push which is hard with curl, we verify that Prometheus is successfully
   # remote-writing its own metrics to Mimir. We look for any metric starting with 'prometheus_'
   MIMIR_QUERY_RESPONSE=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
+    -H "X-Scope-OrgID: default" \
     --data-urlencode 'query={__name__=~"prometheus_.*"}' || echo "FAILED")
 
   if [[ "$MIMIR_QUERY_RESPONSE" != "FAILED" ]] && echo "$MIMIR_QUERY_RESPONSE" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
@@ -306,6 +310,7 @@ EOF
 )
 
 TEMPO_PUSH_RESPONSE=$(echo "$TEMPO_TRACE" | curl -s -X POST "$TEMPO_INGEST_ENDPOINT/v1/traces" \
+  -H "X-Scope-OrgID: default" \
   -H "Content-Type: application/json" \
   -d @- || echo "FAILED")
 
@@ -324,7 +329,7 @@ TEMPO_QUERY_SUCCESS=false
 # Try for up to 60 seconds for Tempo as tracing can be slower to index
 for i in {1..12}; do
   sleep 5
-  TEMPO_QUERY=$(curl -s "$TEMPO_QUERY_ENDPOINT/api/traces/${TRACE_ID}" || echo "FAILED")
+  TEMPO_QUERY=$(curl -s -H "X-Scope-OrgID: default" "$TEMPO_QUERY_ENDPOINT/api/traces/${TRACE_ID}" || echo "FAILED")
 
   if [[ "$TEMPO_QUERY" != "FAILED" ]] && echo "$TEMPO_QUERY" | jq -e '.batches | length > 0' >/dev/null 2>&1; then
     record_test "tempo" "query_trace" "PASS" "Successfully retrieved trace"

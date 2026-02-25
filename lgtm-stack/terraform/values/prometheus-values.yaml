@@ -46,6 +46,8 @@ server:
   
   remoteWrite:
     - url: http://monitoring-mimir-nginx:80/api/v1/push
+      headers:
+        X-Scope-OrgID: default
       queue_config:
         capacity: 10000
         max_shards: 200
