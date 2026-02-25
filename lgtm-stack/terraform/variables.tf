@@ -269,3 +269,43 @@ variable "grafana_keycloak_password" {
   type        = string
   sensitive   = true
 }
+
+# ---- Grafana Provider Variables --------------------------------
+# Used by the grafana Terraform provider to manage Teams,
+# Datasource Permissions and Dashboard Folder Permissions via
+# the Grafana HTTP API after the Helm chart is deployed.
+#
+# IMPORTANT: The service account token must be created manually
+# the first time in Grafana UI (Admin → Service Accounts) and
+# then stored as the GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret.
+# All subsequent changes are managed by Terraform.
+
+variable "grafana_url" {
+  description = "External URL of the Grafana instance (e.g. https://grafana.<domain>). Used by the grafana Terraform provider."
+  type        = string
+}
+
+variable "grafana_service_account_token" {
+  description = "Grafana service account token with Admin permissions. Required by the grafana provider to manage teams and permissions. Set via GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret."
+  type        = string
+  sensitive   = true
+}
+
+# ---- Tenant Configuration --------------------------------
+# List of tenant names to manage. Each entry causes Terraform to:
+#   1. Create a Keycloak group  "<tenant>-team"
+#   2. Create a Grafana Team    "<tenant>-team" synced to that KC group
+#   3. Provision Grafana datasources (Loki, Mimir, Tempo, Prometheus)
+#      scoped to X-Scope-OrgID: <tenant>
+#   4. Restrict those datasources to the matching Grafana Team
+#   5. Create a Grafana Dashboard folder visible only to that team
+#
+# To add a new tenant: just append its name to this list and redeploy.
+# No manual steps in Keycloak or Grafana are needed.
+
+variable "tenants" {
+  description = "List of tenant names. Each tenant gets its own Keycloak group, Grafana Team, datasources, and dashboard folder."
+  type        = list(string)
+  default     = ["webank"]
+  # Example: ["webank", "azamra", "gik"]
+}

@@ -159,6 +159,9 @@ jobs:
           grafana_keycloak_user     = "${{ secrets.GRAFANA_KEYCLOAK_USER }}"
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
+          grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          grafana_service_account_token = "${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}"
+          tenants                       = ["webank"]
           EOF
 
       # Critical Step: Generate execution plan and capture exit code (0=no change, 1=error, 2=changes)
@@ -289,6 +292,9 @@ jobs:
           grafana_keycloak_user     = "${{ secrets.GRAFANA_KEYCLOAK_USER }}"
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
+          grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          grafana_service_account_token = "${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}"
+          tenants                       = ["webank"]
           EOF
 
       # Step: Download the execution plan artifact

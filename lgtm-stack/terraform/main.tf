@@ -17,6 +17,10 @@ terraform {
       source  = "mrparkers/keycloak"
       version = "~> 4.0"
     }
+    grafana = {
+      source  = "grafana/grafana"
+      version = "~> 3.0"
+    }
   }
 
   # Production Best Practice: Store state remotely
@@ -29,6 +33,18 @@ terraform {
 provider "google" {
   project = var.project_id != "" ? var.project_id : null
   region  = var.region
+}
+
+# Grafana Provider
+# ---------------------------------------------------------------
+# Manages Grafana Teams, Datasource Permissions and Folder Permissions
+# via the Grafana HTTP API. Requires a service account token with
+# Admin-level access created in Grafana after first deploy.
+# The URL and token are supplied via GitHub Secrets → terraform.tfvars.
+# ---------------------------------------------------------------
+provider "grafana" {
+  url  = var.grafana_url
+  auth = var.grafana_service_account_token
 }
 
 # AWS provider - required by EKS module even when not used (count=0)

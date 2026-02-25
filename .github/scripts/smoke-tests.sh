@@ -400,6 +400,87 @@ done
 
 
 
+
+#=============================================================================
+# MULTI-TENANCY ISOLATION TESTS
+# Validates that tenant data is fully isolated — webank cannot see default
+# data, and default cannot see webank data.
+# Acceptance Criteria: "Team A cannot view Team B's logs in Loki/Mimir/Tempo"
+#=============================================================================
+echo ""
+echo "🔒 Testing Multi-Tenancy Isolation..."
+
+ISOLATION_OK=true
+
+# --- Loki Isolation ---
+echo "  📝 [Loki] Pushing a secret log to 'webank' tenant..."
+ISOLATION_TIMESTAMP=$(date +%s)000000000
+WEBANK_SECRET="WEBANK-ONLY-SECRET-$(uuidgen)"
+
+curl -s -X POST "$LOKI_ENDPOINT/loki/api/v1/push" \
+  -H "X-Scope-OrgID: webank" \
+  -H "Content-Type: application/json" \
+  -d "{\"streams\":[{\"stream\":{\"job\":\"isolation-test\"},\"values\":[[\"$ISOLATION_TIMESTAMP\",\"$WEBANK_SECRET\"]]}" \
+  > /dev/null
+
+sleep 6
+
+# Query as 'default' — must NOT see the webank secret
+ISOLATION_AS_DEFAULT=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
+  -H "X-Scope-OrgID: default" \
+  --data-urlencode 'query={job="isolation-test"}' \
+  --data-urlencode "start=$(($(date +%s) - 60))" \
+  --data-urlencode 'limit=10' || echo "FAILED")
+
+if echo "$ISOLATION_AS_DEFAULT" | grep -q "$WEBANK_SECRET"; then
+  record_test "isolation" "loki_cross_tenant_leak" "FAIL" "CRITICAL: default tenant CAN see webank data — isolation is BROKEN"
+  echo "    ❌ CRITICAL: Loki isolation FAILED — default tenant sees webank data!"
+  ISOLATION_OK=false
+else
+  record_test "isolation" "loki_cross_tenant_leak" "PASS" "default tenant cannot see webank data"
+  echo "    ✅ Loki: default tenant cannot see webank data"
+fi
+
+# Query as 'webank' — MUST see its own secret
+ISOLATION_AS_WEBANK=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
+  -H "X-Scope-OrgID: webank" \
+  --data-urlencode 'query={job="isolation-test"}' \
+  --data-urlencode "start=$(($(date +%s) - 60))" \
+  --data-urlencode 'limit=10' || echo "FAILED")
+
+if echo "$ISOLATION_AS_WEBANK" | grep -q "$WEBANK_SECRET"; then
+  record_test "isolation" "loki_tenant_reads_own" "PASS" "webank tenant can read its own logs"
+  echo "    ✅ Loki: webank tenant can read its own logs"
+else
+  record_test "isolation" "loki_tenant_reads_own" "FAIL" "webank tenant cannot read its own logs"
+  echo "    ❌ Loki: webank tenant cannot read its own logs"
+  ISOLATION_OK=false
+fi
+
+# --- Mimir Isolation ---
+echo "  📊 [Mimir] Checking metric namespace isolation..."
+
+# Query a metric as 'webank' — it must not see 'prometheus_*' metrics
+# (those are shipped by Prometheus under the 'default' tenant)
+WEBANK_SEES_DEFAULT=$(curl -s -G "$MIMIR_ENDPOINT/prometheus/api/v1/query" \
+  -H "X-Scope-OrgID: webank" \
+  --data-urlencode 'query={__name__=~"prometheus_.*"}' || echo "FAILED")
+
+if [[ "$WEBANK_SEES_DEFAULT" != "FAILED" ]] && echo "$WEBANK_SEES_DEFAULT" | jq -e '.data.result | length > 0' > /dev/null 2>&1; then
+  record_test "isolation" "mimir_cross_tenant_leak" "FAIL" "CRITICAL: webank tenant sees prometheus_* metrics from 'default' tenant"
+  echo "    ❌ CRITICAL: Mimir isolation FAILED — webank sees default tenant metrics!"
+  ISOLATION_OK=false
+else
+  record_test "isolation" "mimir_cross_tenant_leak" "PASS" "webank tenant cannot see default tenant metrics"
+  echo "    ✅ Mimir: webank tenant cannot see default tenant metrics"
+fi
+
+if [ "$ISOLATION_OK" = true ]; then
+  echo "  🎉 All isolation tests PASSED — multi-tenancy is working correctly"
+else
+  echo "  ❌ Isolation tests FAILED — multi-tenancy is NOT properly enforced"
+fi
+
 #=============================================================================
 # INTEGRATION TEST
 #=============================================================================

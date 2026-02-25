@@ -80,3 +80,41 @@ cert_manager_namespace     = "cert-manager"
 nginx_ingress_version      = "4.14.1"
 nginx_ingress_release_name = "nginx-monitoring"
 nginx_ingress_namespace    = "ingress-nginx"
+
+# ------------------------------------------------------------------------------
+# Keycloak SSO (Required for Grafana authentication)
+# All values are injected at runtime via GitHub Secrets → CI/CD.
+# ------------------------------------------------------------------------------
+keycloak_url            = "https://<keycloak-domain>"
+keycloak_realm          = "<realm>"
+keycloak_admin_user     = "<realm-admin-username>"
+keycloak_admin_password = "SET_VIA_GITHUB_SECRET"
+
+grafana_keycloak_user     = "<grafana-admin-username>"
+grafana_keycloak_email    = "<grafana-admin-email>"
+grafana_keycloak_password = "SET_VIA_GITHUB_SECRET"
+
+# ------------------------------------------------------------------------------
+# Grafana Provider (Required for multi-tenancy: Teams, Permissions, Folders)
+# ------------------------------------------------------------------------------
+# The URL must be publicly reachable so Terraform can call the Grafana HTTP API.
+grafana_url = "https://grafana.<monitoring-domain>"
+
+# A Grafana service account token with Admin permissions.
+# Create it once in Grafana UI: Admin → Service Accounts → Add token
+# Then store it as the GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret.
+grafana_service_account_token = "SET_VIA_GITHUB_SECRET"
+
+# ------------------------------------------------------------------------------
+# Tenant Configuration (Multi-Tenancy)
+# ------------------------------------------------------------------------------
+# Add a tenant name here to automatically:
+#   - Create a Keycloak group "<tenant>-team"
+#   - Create a Grafana Team  "<tenant>-team" (synced from Keycloak)
+#   - Add scoped datasources (Loki/Mimir/Tempo/Prometheus) for the tenant
+#   - Restrict those datasources to only the tenant's Grafana Team
+#   - Create a Dashboard Folder visible only to that team
+#
+# To add a new tenant: just append to the list and redeploy.
+# Example: tenants = ["webank", "azamra", "gik"]
+tenants = ["webank"]

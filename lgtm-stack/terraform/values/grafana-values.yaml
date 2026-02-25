@@ -34,7 +34,11 @@ ingress:
     external-dns.alpha.kubernetes.io/hostname: grafana.${monitoring_domain} # Replace with your Grafana domain name (e.g., grafana.yourdomain.com)
 
 env:
-  GF_FEATURE_TOGGLES_ENABLE: publicDashboards
+  # Feature flags:
+  #   publicDashboards - allows sharing dashboards publicly
+  #   accesscontrol    - enables datasource-level and folder-level permissions
+  #                      per Grafana Team (required for multi-tenancy isolation)
+  GF_FEATURE_TOGGLES_ENABLE: publicDashboards accesscontrol
   GF_LOG_LEVEL: info
   # OAuth client secret passed via env var instead of grafana.ini to satisfy
   # the Grafana Helm chart's assertNoLeakedSecrets validation (v7+).
@@ -103,14 +107,35 @@ grafana.ini:
     role_attribute_strict: true
 
     # ---- Group-Based Access Control (via groups[] claim) ----
-    # Only users in one of these groups can log in. Everyone else
-    # in the netbird realm is completely blocked from Grafana.
+    # IMPORTANT: allowed_groups is the LOGIN GATE — only users in one of
+    # these groups can access Grafana at all. Users NOT in any of these
+    # groups are COMPLETELY BLOCKED, even if they are in a tenant team.
+    #
+    # This means every user MUST be in:
+    #   1. ONE role group (grafana-admins / grafana-editors / grafana-viewers)
+    #      → This controls WHAT they can do (login gate + Grafana role)
+    #   2. OPTIONALLY a tenant group (webank-team, azamra-team, etc.)
+    #      → This controls WHAT DATA they can see (datasource isolation)
+    #
+    # Example: a webank employee should be in:
+    #   - grafana-viewers  (gives them Viewer role, allows login)
+    #   - webank-team      (gives them access to Webank-* datasources only)
     groups_attribute_path: groups
     allowed_groups: grafana-admins grafana-editors grafana-viewers
 
-    # Enable refresh token usage so sessions persist.
-    # Requires 'offline_access' in scopes (already set above).
-    use_refresh_token: true
+    # ---- Team Sync (Multi-Tenancy) ----
+    # When a user has a tenant group in their JWT (e.g. "webank-team"),
+    # Grafana automatically adds them to the matching Grafana Team.
+    # This is how tenant isolation is enforced without hardcoding users.
+    #
+    # Example JWT groups claim:
+    #   "groups": ["grafana-editors", "webank-team"]
+    #              ^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+    #              Grafana role        Tenant team
+    #
+    # Result: user can only query Webank-Loki, Webank-Mimir, etc.
+    # The role (editor) and team (webank) are fully independent.
+    skip_org_role_sync: false
 
     # Single Logout: after signing out of Grafana, the user is
     # also logged out of Keycloak and redirected back to login.

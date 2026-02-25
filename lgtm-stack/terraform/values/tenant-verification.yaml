@@ -58,3 +58,53 @@ data:
       targets    = discovery.kubernetes.pods.targets
       forward_to = [loki.write.webank.receiver]
     }
+---
+# ============================================================
+# Alloy Agent Deployment
+# ============================================================
+# Runs the Grafana Alloy agent using the config above.
+# Alloy reads logs from pods labelled "app=webank-gen" and ships
+# them to Loki with X-Scope-OrgID: webank.
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webank-alloy-agent
+  namespace: test-apps
+  labels:
+    app: webank-alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webank-alloy
+  template:
+    metadata:
+      labels:
+        app: webank-alloy
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.8.0
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --stability.level=experimental
+          ports:
+            - containerPort: 12345
+              name: http-metrics
+          volumeMounts:
+            - name: alloy-config
+              mountPath: /etc/alloy
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: alloy-config
+          configMap:
+            name: webank-alloy-config

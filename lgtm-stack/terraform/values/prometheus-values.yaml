@@ -46,6 +46,10 @@ server:
   
   remoteWrite:
     - url: http://monitoring-mimir-nginx:80/api/v1/push
+      # X-Scope-OrgID tells Mimir which tenant namespace to store these metrics in.
+      # Prometheus is a cluster-wide scraper (all pods, all namespaces), so it
+      # writes to the "default" tenant. Application-specific metrics should be
+      # shipped via Alloy with the correct tenant header set per application.
       headers:
         X-Scope-OrgID: default
       queue_config:
