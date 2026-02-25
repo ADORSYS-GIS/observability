@@ -38,13 +38,11 @@ provider "google" {
 # Grafana Provider
 # ---------------------------------------------------------------
 # Manages Grafana Teams, Datasource Permissions and Folder Permissions
-# via the Grafana HTTP API. Requires a service account token with
-# Admin-level access created in Grafana after first deploy.
-# The URL and token are supplied via GitHub Secrets → terraform.tfvars.
+# via the Grafana HTTP API. Uses basic auth so no manual token is needed.
 # ---------------------------------------------------------------
 provider "grafana" {
   url  = var.grafana_url
-  auth = var.grafana_service_account_token
+  auth = "admin:${var.grafana_admin_password}"
 }
 
 # AWS provider - required by EKS module even when not used (count=0)

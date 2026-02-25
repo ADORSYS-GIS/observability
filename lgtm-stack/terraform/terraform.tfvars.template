@@ -100,11 +100,6 @@ grafana_keycloak_password = "SET_VIA_GITHUB_SECRET"
 # The URL must be publicly reachable so Terraform can call the Grafana HTTP API.
 grafana_url = "https://grafana.<monitoring-domain>"
 
-# A Grafana service account token with Admin permissions.
-# Create it once in Grafana UI: Admin → Service Accounts → Add token
-# Then store it as the GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret.
-grafana_service_account_token = "SET_VIA_GITHUB_SECRET"
-
 # ------------------------------------------------------------------------------
 # Tenant Configuration (Multi-Tenancy)
 # ------------------------------------------------------------------------------

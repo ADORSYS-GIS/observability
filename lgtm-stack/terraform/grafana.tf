@@ -50,6 +50,8 @@ resource "grafana_team" "tenants" {
   team_sync {
     groups = ["${each.key}-team"]
   }
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Tenant Datasources (Loki) --------------------------------
@@ -70,6 +72,8 @@ resource "grafana_data_source" "loki" {
   json_data_encoded = jsonencode({
     maxLines = 1000
   })
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Tenant Datasources (Mimir) --------------------------------
@@ -89,6 +93,8 @@ resource "grafana_data_source" "mimir" {
     httpMethod   = "POST"
     timeInterval = "15s"
   })
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Tenant Datasources (Prometheus) --------------------------
@@ -111,6 +117,8 @@ resource "grafana_data_source" "prometheus" {
     httpMethod   = "POST"
     timeInterval = "15s"
   })
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Tenant Datasources (Tempo) --------------------------------
@@ -135,6 +143,8 @@ resource "grafana_data_source" "tempo" {
     filterByTraceID    = true
     filterBySpanID     = false
   })
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Datasource Permissions ------------------------------------
@@ -153,6 +163,8 @@ resource "grafana_data_source_permission" "loki" {
     team_id    = grafana_team.tenants[each.key].id
     permission = "Query"
   }
+
+  depends_on = [helm_release.grafana]
 }
 
 resource "grafana_data_source_permission" "mimir" {
@@ -163,6 +175,8 @@ resource "grafana_data_source_permission" "mimir" {
     team_id    = grafana_team.tenants[each.key].id
     permission = "Query"
   }
+
+  depends_on = [helm_release.grafana]
 }
 
 resource "grafana_data_source_permission" "prometheus" {
@@ -173,6 +187,8 @@ resource "grafana_data_source_permission" "prometheus" {
     team_id    = grafana_team.tenants[each.key].id
     permission = "Query"
   }
+
+  depends_on = [helm_release.grafana]
 }
 
 resource "grafana_data_source_permission" "tempo" {
@@ -183,6 +199,8 @@ resource "grafana_data_source_permission" "tempo" {
     team_id    = grafana_team.tenants[each.key].id
     permission = "Query"
   }
+
+  depends_on = [helm_release.grafana]
 }
 
 # ---- Dashboard Folders -----------------------------------------
@@ -194,6 +212,8 @@ resource "grafana_folder" "tenants" {
   for_each = toset(var.tenants)
 
   title = "${title(each.key)} Dashboards"
+
+  depends_on = [helm_release.grafana]
 }
 
 resource "grafana_folder_permission" "tenants" {
@@ -205,4 +225,6 @@ resource "grafana_folder_permission" "tenants" {
     team_id    = grafana_team.tenants[each.key].id
     permission = "Editor" # Team members can create and edit dashboards in their folder
   }
+
+  depends_on = [helm_release.grafana]
 }

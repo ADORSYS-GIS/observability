@@ -160,7 +160,6 @@ jobs:
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
           grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          grafana_service_account_token = "${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}"
           tenants                       = ["webank"]
           EOF
 
@@ -293,7 +292,6 @@ jobs:
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
           grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          grafana_service_account_token = "${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}"
           tenants                       = ["webank"]
           EOF
 

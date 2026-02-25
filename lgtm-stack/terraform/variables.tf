@@ -285,12 +285,6 @@ variable "grafana_url" {
   type        = string
 }
 
-variable "grafana_service_account_token" {
-  description = "Grafana service account token with Admin permissions. Required by the grafana provider to manage teams and permissions. Set via GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret."
-  type        = string
-  sensitive   = true
-}
-
 # ---- Tenant Configuration --------------------------------
 # List of tenant names to manage. Each entry causes Terraform to:
 #   1. Create a Keycloak group  "<tenant>-team"
