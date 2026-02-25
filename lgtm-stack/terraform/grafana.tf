@@ -44,13 +44,6 @@ resource "grafana_team" "tenants" {
 
   name = "${each.key}-team"
 
-  # team_sync links this Grafana Team to the Keycloak group of the
-  # same name. The group name MUST match what keycloak.tf creates
-  # (which is "${each.key}-team" — set by Terraform, not manually).
-  team_sync {
-    groups = ["${each.key}-team"]
-  }
-
   depends_on = [helm_release.grafana]
 }
 
