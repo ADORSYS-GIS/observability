@@ -109,6 +109,9 @@ provider "keycloak" {
   url       = var.keycloak_url # https://<keycloak-domain>
   realm     = var.keycloak_realm
 
+  # Prevent "context deadline exceeded" errors in CI/CD networking environments
+  client_timeout = 60
+
   # base_path is NOT set — correct for Keycloak 17+ (Quarkus distribution)
   # If you see 404 errors on init, the instance may be legacy Wildfly;
   # in that case set: base_path = "/auth"

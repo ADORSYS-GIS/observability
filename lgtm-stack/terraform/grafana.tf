@@ -233,22 +233,22 @@ data "local_file" "grafana_sync_script" {
   filename = "${path.module}/scripts/grafana-team-sync.py"
 }
 
-# Template the Kubernetes CronJob YAML
-data "template_file" "grafana_sync_job" {
-  template = file("${path.module}/values/grafana-team-sync-job.yaml")
-  vars = {
+# Template the Kubernetes CronJob YAML using the modern templatefile() function
+# This natively handles string interpolation much better than the deprecated template_file provider.
+locals {
+  grafana_sync_job_yaml = templatefile("${path.module}/values/grafana-team-sync-job.yaml", {
     keycloak_realm          = var.keycloak_realm
     keycloak_admin_user     = var.keycloak_admin_user
     keycloak_admin_password = var.keycloak_admin_password
     grafana_admin_password  = var.grafana_admin_password
     tenants                 = join(",", var.tenants)
     script_content          = indent(4, data.local_file.grafana_sync_script.content)
-  }
+  })
 }
 
 # Split the templated YAML into multiple documents (ConfigMap + CronJob)
 data "kubectl_file_documents" "grafana_sync_manifests" {
-  content = data.template_file.grafana_sync_job.rendered
+  content = local.grafana_sync_job_yaml
 }
 
 # Deploy the ConfigMap and CronJob to the cluster
