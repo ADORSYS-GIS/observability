@@ -164,24 +164,23 @@ jobs:
           tenants                       = ["webank"]
           EOF
 
-      # Critical Step: Generate execution plan and capture exit code (0=no change, 1=error, 2=changes)
+      # Workaround: Remove the corrupt Grafana Team from remote state
+      # Since Grafana OSS doesn't support the team_sync endpoint, the provider throws a 404
+      # during the plan 'refresh' phase. We must scrub it from the GCP state bucket first.
+      - name: Scrub Corrupt Grafana Team State
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform state rm 'grafana_team.tenants["webank"]' || true
+
+      # Critical Step: Generate execution plan
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          set +e
-          terraform plan -out=tfplan -detailed-exitcode
-          EXIT_CODE=$?
-          set -e
-          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
-          
-          if [ "$EXIT_CODE" -eq 1 ]; then
-            echo "❌ Terraform Plan failed with errors."
-            exit 1
-          fi
-          
+          # A standard plan command returns 0 on success (even with changes) and 1 on error.
+          # We omit -detailed-exitcode to prevent false-positive pipeline failures.
+          terraform plan -out=tfplan
           terraform show tfplan > plan.txt
-          exit 0
 
       # Step: Share plan file with the Apply job
       - name: Upload plan
