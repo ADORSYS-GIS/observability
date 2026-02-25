@@ -175,64 +175,66 @@ if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
   fi
 fi
 
-# ── Grafana Pre-Clean ───────────────────────────────────────────────
-# The Grafana provider throws 409 Conflict if it tries to CREATE a team or
-# datasource that already exists in Grafana but is not in Terraform state.
-# Strategy: delete the conflicting resources via Grafana HTTP API first so
-# Terraform can create them cleanly.
+# ── Grafana Imports ─────────────────────────────────────────────────
+# IMPORTANT: This section MUST run after terraform.tfvars is created in the
+# workflow so the Grafana provider has credentials to authenticate during import.
 #
-# GRAFANA_URL and GRAFANA_ADMIN_PASSWORD must be set in the environment.
+# If a grafana_team or grafana_data_source already exists in Grafana but NOT
+# in the Terraform state, `terraform apply` would try to CREATE it → 409 Conflict.
+# We prevent this by importing the existing resource IDs into state first.
 # ─────────────────────────────────────────────────────────────────────
 
 if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   GRAFANA_AUTH="admin:${GRAFANA_ADMIN_PASSWORD}"
   TENANTS="${TENANTS:-webank}"
 
-  echo "🧹 Pre-cleaning existing Grafana resources to prevent 409 conflicts..."
+  echo "📈 Scanning for existing Grafana resources to import into state..."
 
   for TENANT in $(echo "$TENANTS" | tr ',' ' '); do
 
-    # ── Delete team if it exists ──────────────────────────────────────
+    # ── Import team if it exists ──────────────────────────────────────
     TEAM_NAME="${TENANT}-team"
-    echo "  🔍 Checking for existing team: $TEAM_NAME"
+    echo "  🔍 Looking up Grafana team: $TEAM_NAME"
 
     TEAM_ID=$(curl -sf --user "$GRAFANA_AUTH" \
       "${GRAFANA_URL}/api/teams/search?name=${TEAM_NAME}" \
       | jq -r ".teams[]? | select(.name == \"${TEAM_NAME}\") | .id" 2>/dev/null || true)
 
     if [ -n "$TEAM_ID" ] && [ "$TEAM_ID" != "null" ]; then
-      echo "    🗑️  Deleting team '$TEAM_NAME' (id=$TEAM_ID) so Terraform can recreate it..."
-      curl -sf -X DELETE --user "$GRAFANA_AUTH" \
-        "${GRAFANA_URL}/api/teams/${TEAM_ID}" > /dev/null
-      echo "    ✅ Deleted"
+      echo "    Found team '$TEAM_NAME' (id=$TEAM_ID) — importing into state..."
+      import_resource \
+        "grafana_team.tenants[\"${TENANT}\"]" \
+        "$TEAM_ID" \
+        "Grafana Team: $TEAM_NAME" || true
     else
-      echo "    ℹ️  Team '$TEAM_NAME' does not exist yet"
+      echo "    ℹ️  Team '$TEAM_NAME' does not exist yet (will be created)"
     fi
 
-    # ── Delete datasources if they exist ─────────────────────────────
+    # ── Import datasources if they exist ─────────────────────────────
     TENANT_TITLE=$(echo "$TENANT" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
     for DS_KEY in loki mimir prometheus tempo; do
       DS_TYPE_UPPER=$(echo "$DS_KEY" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
       DS_NAME="${TENANT_TITLE}-${DS_TYPE_UPPER}"
 
-      echo "  🔍 Checking for existing datasource: $DS_NAME"
-      DS_ID=$(curl -sf --user "$GRAFANA_AUTH" \
+      echo "  🔍 Looking up datasource: $DS_NAME"
+      DS_UID=$(curl -sf --user "$GRAFANA_AUTH" \
         "${GRAFANA_URL}/api/datasources/name/${DS_NAME}" \
-        | jq -r '.id // empty' 2>/dev/null || true)
+        | jq -r '.uid // empty' 2>/dev/null || true)
 
-      if [ -n "$DS_ID" ] && [ "$DS_ID" != "null" ]; then
-        echo "    🗑️  Deleting datasource '$DS_NAME' (id=$DS_ID) so Terraform can recreate it..."
-        curl -sf -X DELETE --user "$GRAFANA_AUTH" \
-          "${GRAFANA_URL}/api/datasources/${DS_ID}" > /dev/null
-        echo "    ✅ Deleted"
+      if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ]; then
+        echo "    Found datasource '$DS_NAME' (uid=$DS_UID) — importing into state..."
+        import_resource \
+          "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" \
+          "$DS_UID" \
+          "Grafana Datasource: $DS_NAME" || true
       else
-        echo "    ℹ️  Datasource '$DS_NAME' does not exist yet"
+        echo "    ℹ️  Datasource '$DS_NAME' does not exist yet (will be created)"
       fi
     done
 
   done
 else
-  echo "⏭️  Skipping Grafana pre-clean: GRAFANA_URL or GRAFANA_ADMIN_PASSWORD not set"
+  echo "⏭️  Skipping Grafana imports: GRAFANA_URL or GRAFANA_ADMIN_PASSWORD not set"
 fi
 
 # Summary

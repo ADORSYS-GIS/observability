@@ -125,20 +125,9 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
-      # Optimization: Run resource import logic in the same job to reuse the initialized environment
-      - name: Import existing resources
-        working-directory: ${{ env.WORKING_DIR }}
-        run: bash ../../.github/scripts/import-existing-resources.sh
-        env:
-          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          NAMESPACE: "observability"
-          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          TENANTS: "webank"
-        continue-on-error: true
-
       # Step: Generate the variable file for the current environment
+      # IMPORTANT: This must run BEFORE the import step so that the Terraform
+      # providers (Grafana, Keycloak, etc.) have credentials to authenticate.
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -165,6 +154,20 @@ jobs:
           grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           tenants                       = ["webank"]
           EOF
+
+      # Import existing resources AFTER tfvars exist, so Terraform providers
+      # have credentials (Grafana URL + password) to authenticate during import.
+      - name: Import existing resources
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bash ../../.github/scripts/import-existing-resources.sh
+        env:
+          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          NAMESPACE: "observability"
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
+        continue-on-error: true
 
       # Critical Step: Generate execution plan
       - name: Terraform Plan
