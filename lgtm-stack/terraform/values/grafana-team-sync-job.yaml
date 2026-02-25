@@ -1,0 +1,55 @@
+---
+# ConfigMap to hold the Python synchronization script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-team-sync-script
+  namespace: observability
+data:
+  grafana-team-sync.py: |
+${script_content}
+---
+# CronJob to execute the script every 5 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grafana-team-sync
+  namespace: observability
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: sync-job
+              image: python:3.11-alpine
+              command: ["/bin/sh", "-c"]
+              args: 
+                - |
+                  pip install requests && python /scripts/grafana-team-sync.py
+              env:
+                - name: KEYCLOAK_URL
+                  value: "http://keycloak-http.keycloak.svc.cluster.local"
+                - name: KEYCLOAK_REALM
+                  value: "${keycloak_realm}"
+                - name: KEYCLOAK_USERNAME
+                  value: "${keycloak_admin_user}"
+                - name: KEYCLOAK_PASSWORD
+                  value: "${keycloak_admin_password}"
+                - name: GRAFANA_URL
+                  value: "http://monitoring-grafana.observability.svc.cluster.local:80"
+                - name: GRAFANA_ADMIN_PASSWORD
+                  value: "${grafana_admin_password}"
+                - name: TENANTS
+                  # Pass the list of tenants from Terraform safely 
+                  value: "${tenants}"
+              volumeMounts:
+                - name: script-volume
+                  mountPath: /scripts
+          volumes:
+            - name: script-volume
+              configMap:
+                name: grafana-team-sync-script

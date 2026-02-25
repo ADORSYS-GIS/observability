@@ -21,6 +21,18 @@ terraform {
       source  = "grafana/grafana"
       version = "~> 3.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.14.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.4"
+    }
+    template = {
+      source  = "hashicorp/template"
+      version = "~> 2.2"
+    }
   }
 
   # Production Best Practice: Store state remotely
@@ -63,6 +75,13 @@ provider "kubernetes" {
   host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
   token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
   cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+}
+
+provider "kubectl" {
+  host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
+  token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+  cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+  load_config_file       = false
 }
 
 provider "helm" {
