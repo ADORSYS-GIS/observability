@@ -293,17 +293,28 @@ jobs:
           tenants                       = ["webank"]
           EOF
 
-      # Step: Download the execution plan artifact
-      - name: Download plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan
-          path: ${{ env.WORKING_DIR }}
+      # Import existing Grafana resources into state before applying.
+      # This MUST happen here (not just in plan job) because the plan artifact
+      # is baked before imports mutate state — so the artifact is stale.
+      # Running imports here means `terraform apply` sees current state
+      # and does not try to CREATE resources that already exist in Grafana.
+      - name: Import existing Grafana resources
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bash ../../.github/scripts/import-existing-resources.sh
+        env:
+          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          NAMESPACE: "observability"
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
+        continue-on-error: true
 
-      # Critical Step: Apply the plan
+      # Critical Step: Apply using current state (after imports) — no stale plan file.
+      # The plan is regenerated on-the-fly from the post-import state.
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
 
       # Step: Capture deployment outputs for verification
       - name: Output deployment info
