@@ -63,13 +63,12 @@ resource "grafana_data_source" "loki" {
   type = "loki"
   url  = "http://monitoring-loki-gateway:80"
 
-  json_data_encoded = jsonencode({
-    httpHeaderName1 = "X-Scope-OrgID"
-    maxLines        = 1000
-  })
+  http_headers = {
+    "X-Scope-OrgID" = each.key
+  }
 
-  secure_json_data_encoded = jsonencode({
-    httpHeaderValue1 = each.key
+  json_data_encoded = jsonencode({
+    maxLines = 1000
   })
 }
 
@@ -82,14 +81,13 @@ resource "grafana_data_source" "mimir" {
   type = "prometheus"
   url  = "http://monitoring-mimir-nginx:80/prometheus"
 
-  json_data_encoded = jsonencode({
-    httpMethod      = "POST"
-    timeInterval    = "15s"
-    httpHeaderName1 = "X-Scope-OrgID"
-  })
+  http_headers = {
+    "X-Scope-OrgID" = each.key
+  }
 
-  secure_json_data_encoded = jsonencode({
-    httpHeaderValue1 = each.key
+  json_data_encoded = jsonencode({
+    httpMethod   = "POST"
+    timeInterval = "15s"
   })
 }
 
@@ -105,14 +103,13 @@ resource "grafana_data_source" "prometheus" {
   type = "prometheus"
   url  = "http://monitoring-prometheus-server:80"
 
-  json_data_encoded = jsonencode({
-    httpMethod      = "POST"
-    timeInterval    = "15s"
-    httpHeaderName1 = "X-Scope-OrgID"
-  })
+  http_headers = {
+    "X-Scope-OrgID" = each.key
+  }
 
-  secure_json_data_encoded = jsonencode({
-    httpHeaderValue1 = each.key
+  json_data_encoded = jsonencode({
+    httpMethod   = "POST"
+    timeInterval = "15s"
   })
 }
 
@@ -125,19 +122,18 @@ resource "grafana_data_source" "tempo" {
   type = "tempo"
   url  = "http://monitoring-tempo-query-frontend:3200"
 
+  http_headers = {
+    "X-Scope-OrgID" = each.key
+  }
+
   json_data_encoded = jsonencode({
     httpMethod         = "GET"
-    httpHeaderName1    = "X-Scope-OrgID"
     tracesToLogsV2     = {}
     datasourceUid      = grafana_data_source.loki[each.key].uid
     spanStartTimeShift = "-1h"
     spanEndTimeShift   = "1h"
     filterByTraceID    = true
     filterBySpanID     = false
-  })
-
-  secure_json_data_encoded = jsonencode({
-    httpHeaderValue1 = each.key
   })
 }
 
