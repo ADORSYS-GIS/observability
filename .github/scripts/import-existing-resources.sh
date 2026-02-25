@@ -175,6 +175,69 @@ if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
   fi
 fi
 
+# ── Grafana Imports ─────────────────────────────────────────────────
+# The Grafana provider throws 409 Conflict if it tries to CREATE a team or
+# datasource that already exists in Grafana. We use the Grafana HTTP API to
+# look up the existing IDs and import them into state, so Terraform knows
+# they are already managed and skips the CREATE call entirely.
+#
+# GRAFANA_URL and GRAFANA_ADMIN_PASSWORD must be set in the environment.
+# ─────────────────────────────────────────────────────────────────────
+
+if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+  GRAFANA_AUTH="admin:${GRAFANA_ADMIN_PASSWORD}"
+  TENANTS="${TENANTS:-webank}"
+
+  echo "📈 Scanning for existing Grafana resources to import..."
+
+  for TENANT in $(echo "$TENANTS" | tr ',' ' '); do
+    TEAM_NAME="${TENANT}-team"
+    echo "  🔍 Looking up Grafana team: $TEAM_NAME"
+
+    # Query Grafana teams API – returns first matching team id
+    TEAM_ID=$(curl -sf --user "$GRAFANA_AUTH" \
+      "${GRAFANA_URL}/api/teams/search?name=${TEAM_NAME}" \
+      | jq -r ".teams[]? | select(.name == \"${TEAM_NAME}\") | .id" 2>/dev/null || true)
+
+    if [ -n "$TEAM_ID" ] && [ "$TEAM_ID" != "null" ]; then
+      echo "    Found team '$TEAM_NAME' with id=$TEAM_ID"
+      import_resource \
+        "grafana_team.tenants[\"${TENANT}\"]" \
+        "$TEAM_ID" \
+        "Grafana Team: $TEAM_NAME" || true
+    else
+      echo "    ℹ️  Team '$TEAM_NAME' not found in Grafana (will be created)"
+    fi
+
+    # Import each datasource by its UID (Grafana uses UID as import ID)
+    TENANT_TITLE=$(echo "$TENANT" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+    for DS_KEY in loki mimir prometheus tempo; do
+      DS_NAME="${TENANT_TITLE}-${DS_KEY^}"
+      # DS_NAME capitalisation: "Webank-Loki", "Webank-Mimir", etc.
+      # Fix: bash ${var^} may not work in all sh; use awk instead
+      DS_TYPE_UPPER=$(echo "$DS_KEY" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+      DS_NAME="${TENANT_TITLE}-${DS_TYPE_UPPER}"
+
+      echo "  🔍 Looking up datasource: $DS_NAME"
+      DS_UID=$(curl -sf --user "$GRAFANA_AUTH" \
+        "${GRAFANA_URL}/api/datasources/name/${DS_NAME}" \
+        | jq -r '.uid // empty' 2>/dev/null || true)
+
+      if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ]; then
+        echo "    Found datasource '$DS_NAME' with uid=$DS_UID"
+        import_resource \
+          "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" \
+          "$DS_UID" \
+          "Grafana Datasource: $DS_NAME" || true
+      else
+        echo "    ℹ️  Datasource '$DS_NAME' not found (will be created)"
+      fi
+    done
+  done
+else
+  echo "⏭️  Skipping Grafana imports: GRAFANA_URL or GRAFANA_ADMIN_PASSWORD not set"
+fi
+
 # Summary
 echo ""
 echo "📊 Import Summary:"

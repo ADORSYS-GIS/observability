@@ -134,6 +134,9 @@ jobs:
           CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           NAMESPACE: "observability"
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
         continue-on-error: true
 
       # Step: Generate the variable file for the current environment
@@ -163,14 +166,6 @@ jobs:
           grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           tenants                       = ["webank"]
           EOF
-
-      # Workaround: Remove the corrupt Grafana Team from remote state
-      # Since Grafana OSS doesn't support the team_sync endpoint, the provider throws a 404
-      # during the plan 'refresh' phase. We must scrub it from the GCP state bucket first.
-      - name: Scrub Corrupt Grafana Team State
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          terraform state rm 'grafana_team.tenants["webank"]' || true
 
       # Critical Step: Generate execution plan
       - name: Terraform Plan
