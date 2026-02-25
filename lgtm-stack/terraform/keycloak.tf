@@ -193,6 +193,12 @@ resource "keycloak_user" "grafana_admin" {
     value     = var.grafana_keycloak_password
     temporary = false
   }
+
+  lifecycle {
+    ignore_changes = [
+      username
+    ]
+  }
 }
 
 # Add the dedicated user to the grafana-editors and webank-team groups

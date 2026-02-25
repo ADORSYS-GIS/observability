@@ -39,10 +39,22 @@
 # Grafana will add any user whose JWT "groups" claim contains the
 # group name to this team automatically on every login.
 
+resource "null_resource" "force_grafana_team_recreation" {
+  triggers = {
+    always_run = timestamp()
+  }
+}
+
 resource "grafana_team" "tenants" {
   for_each = toset(var.tenants)
 
   name = "${each.key}-team"
+
+  lifecycle {
+    replace_triggered_by = [
+      null_resource.force_grafana_team_recreation
+    ]
+  }
 
   depends_on = [helm_release.grafana]
 }
