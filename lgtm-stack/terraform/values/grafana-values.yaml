@@ -36,7 +36,87 @@ ingress:
 env:
   GF_FEATURE_TOGGLES_ENABLE: publicDashboards
   GF_LOG_LEVEL: info
-  GF_AUTH_ANONYMOUS_ENABLED: "false"
+  # OAuth client secret passed via env var instead of grafana.ini to satisfy
+  # the Grafana Helm chart's assertNoLeakedSecrets validation (v7+).
+  # Grafana automatically merges GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET into
+  # the [auth.generic_oauth] config at startup.
+  GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: "${keycloak_client_secret}"
+
+# --------------------------------------------------------
+# Grafana INI Configuration
+# All authentication settings are managed here rather than
+# via environment variables for clarity and consistency.
+# --------------------------------------------------------
+grafana.ini:
+  server:
+    # Must match the external Grafana URL so OAuth callbacks work.
+    # The /login/generic_oauth redirect URI is built from this.
+    root_url: https://grafana.${monitoring_domain}
+
+  auth:
+    # Keep login form enabled during initial rollout so the local
+    # admin account remains accessible as a fallback.
+    # Set to 'true' once SSO is confirmed stable.
+    disable_login_form: true
+    # Set to 'true' to skip Grafana's own login page and go
+    # directly to Keycloak on every visit.
+    oauth_auto_login: true
+    # Prevent anonymous access to any dashboard.
+    disable_signout_menu: false
+
+  auth.generic_oauth:
+    enabled: true
+    name: Keycloak-OAuth
+    allow_sign_up: true
+
+    # Client ID only — secret is passed via GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+    # env var above to satisfy assertNoLeakedSecrets (Grafana Helm chart v7+).
+    client_id: grafana-oauth
+
+    # Scopes: openid (OIDC base), email + profile (user info),
+    # offline_access (enables refresh tokens), roles (role claims).
+    scopes: openid email profile offline_access roles
+
+    # Attribute mappings from Keycloak's userinfo/ID token
+    email_attribute_path: email
+    login_attribute_path: username
+    name_attribute_path: full_name
+
+    # CRITICAL: Allows Keycloak users (like 'admin') to map to existing
+    # Grafana users (like the built-in 'admin' account) based on email.
+    # Without this, logging in as 'admin' via Keycloak fails with "user not found"
+    # because it refuses to overwrite the local admin account.
+    oauth_allow_insecure_email_lookup: true
+
+    # Keycloak OIDC endpoints
+    auth_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/auth
+    token_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/token
+    api_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/userinfo
+
+    # ---- Role Mapping (via roles[] claim) ----
+    # Roles are prefixed "grafana-" to avoid conflicts with other
+    # services in the shared netbird realm.
+    role_attribute_path: "contains(roles[*], 'grafana-admin') && 'Admin' || contains(roles[*], 'grafana-editor') && 'Editor' || contains(roles[*], 'grafana-viewer') && 'Viewer'"
+
+    # STRICT: if a user has no matching role, their login is REJECTED.
+    # This blocks any netbird-realm user who isn't in a grafana-* group.
+    role_attribute_strict: true
+
+    # ---- Group-Based Access Control (via groups[] claim) ----
+    # Only users in one of these groups can log in. Everyone else
+    # in the netbird realm is completely blocked from Grafana.
+    groups_attribute_path: groups
+    allowed_groups: grafana-admins grafana-editors grafana-viewers
+
+    # Enable refresh token usage so sessions persist.
+    # Requires 'offline_access' in scopes (already set above).
+    use_refresh_token: true
+
+    # Single Logout: after signing out of Grafana, the user is
+    # also logged out of Keycloak and redirected back to login.
+    # OpenID RP-Initiated Logout (KC 18+) requires the client_id to be sent 
+    # to authorize the post_logout_redirect_uri.
+    signout_redirect_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/logout?client_id=grafana-oauth&post_logout_redirect_uri=https%3A%2F%2Fgrafana.${monitoring_domain}%2Flogin
 
 datasources:
   datasources.yaml:

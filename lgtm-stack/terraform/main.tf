@@ -13,6 +13,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    keycloak = {
+      source  = "mrparkers/keycloak"
+      version = "~> 4.0"
+    }
   }
 
   # Production Best Practice: Store state remotely
@@ -53,6 +57,28 @@ provider "helm" {
     token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
     cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
   }
+}
+
+# Keycloak Provider
+# ---------------------------------------------------------------
+# Authentication model: Password Grant via admin-cli
+#   - The provider hits: <url>/realms/<realm>/protocol/openid-connect/token
+#   - The admin user must have 'realm-admin' from 'realm-management'
+#     client in the target realm. No master-realm/server-admin needed.
+#
+# KC 17+ Quarkus (this instance): NO base_path needed — the /auth
+#   prefix was removed. Older Wildfly builds need base_path = "/auth".
+# ---------------------------------------------------------------
+provider "keycloak" {
+  client_id = "admin-cli"
+  username  = var.keycloak_admin_user
+  password  = var.keycloak_admin_password
+  url       = var.keycloak_url # https://<keycloak-domain>
+  realm     = var.keycloak_realm
+
+  # base_path is NOT set — correct for Keycloak 17+ (Quarkus distribution)
+  # If you see 404 errors on init, the instance may be legacy Wildfly;
+  # in that case set: base_path = "/auth"
 }
 
 data "google_client_config" "default" {
@@ -321,6 +347,12 @@ resource "helm_release" "grafana" {
       grafana_admin_password    = var.grafana_admin_password
       ingress_class_name        = var.ingress_class_name
       cert_issuer_name          = var.cert_issuer_name
+      # Keycloak OAuth2 — URL and realm for grafana.ini endpoint construction
+      keycloak_url   = var.keycloak_url
+      keycloak_realm = var.keycloak_realm
+      # Client secret is read directly from the Keycloak Terraform resource
+      # (no manual copy-paste or separate secret management needed)
+      keycloak_client_secret = keycloak_openid_client.grafana.client_secret
     })
   ]
 
@@ -328,7 +360,10 @@ resource "helm_release" "grafana" {
     helm_release.prometheus,
     helm_release.loki,
     helm_release.mimir,
-    helm_release.tempo
+    helm_release.tempo,
+    # Keycloak client + roles + mapper must exist before Grafana starts
+    keycloak_openid_client.grafana,
+    keycloak_openid_user_realm_role_protocol_mapper.grafana_roles,
   ]
 
   timeout = 600

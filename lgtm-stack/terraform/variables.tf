@@ -214,3 +214,58 @@ variable "force_destroy" {
   type        = bool
   default     = false
 }
+
+# ---- Keycloak OAuth2 Variables --------------------------------
+# Used by both the mrparkers/keycloak provider (to automate realm
+# resource creation) and the Grafana Helm chart (grafana.ini config).
+#
+# IMPORTANT — mrparkers/keycloak v4 + realm-admin access:
+#   The provider authenticates against the TARGET REALM's token endpoint
+#   using 'admin-cli'. The admin user must have the 'realm-admin' client
+#   role from the built-in 'realm-management' client. No master-realm
+#   (server admin) access is required for these operations.
+#   See: https://registry.terraform.io/providers/mrparkers/keycloak/latest/docs
+#
+# All values are injected at runtime via GitHub Secrets → terraform.tfvars.
+# No defaults are set here to enforce that secrets are always explicitly provided.
+
+variable "keycloak_url" {
+  description = "Base URL of the Keycloak server, no trailing slash, no /auth suffix (KC 17+ Quarkus). e.g. https://<keycloak-domain>"
+  type        = string
+}
+
+variable "keycloak_realm" {
+  description = "Keycloak realm where the Grafana OIDC client and roles will be created. Must already exist. e.g. <realm>"
+  type        = string
+}
+
+variable "keycloak_admin_user" {
+  description = "Realm admin username. Must have 'realm-admin' role from realm-management client inside the target realm."
+  type        = string
+}
+
+variable "keycloak_admin_password" {
+  description = "Password for the Keycloak realm admin user. Set via KEYCLOAK_PASSWORD GitHub Secret."
+  type        = string
+  sensitive   = true
+}
+
+# ---- Dedicated Grafana Keycloak User Variables ----------------
+# A new user created specifically for Grafana, separate from the
+# NetBird admin account to avoid credential/access confusion.
+
+variable "grafana_keycloak_user" {
+  description = "Username for the dedicated Grafana admin account in Keycloak."
+  type        = string
+}
+
+variable "grafana_keycloak_email" {
+  description = "Email for the dedicated Grafana admin account in Keycloak."
+  type        = string
+}
+
+variable "grafana_keycloak_password" {
+  description = "Password for the dedicated Grafana admin account in Keycloak. Set via GRAFANA_KEYCLOAK_PASSWORD GitHub Secret."
+  type        = string
+  sensitive   = true
+}
