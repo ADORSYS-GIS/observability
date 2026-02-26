@@ -27,7 +27,7 @@ service:
   annotations: {} # Removing service annotations as they are moved to ingress
 
 ingress:
-  enabled: false
+  enabled: true
   ingressClassName: ${ingress_class_name}
   annotations:
     cert-manager.io/issuer: ${cert_issuer_name}
