@@ -153,14 +153,13 @@ jobs:
       - name: Terraform Destroy
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          # Destroy without initializing Grafana/Keycloak providers
-          # by providing dummy values and using -refresh=false
+          # Destroy with actual Keycloak/Grafana credentials from secrets
           terraform destroy -auto-approve -refresh=false \
             -var="cloud_provider=${{ inputs.cloud_provider }}" \
             -var="environment=${{ secrets.ENVIRONMENT }}" \
             -var="monitoring_domain=${{ secrets.MONITORING_DOMAIN }}" \
             -var="letsencrypt_email=${{ secrets.LETSENCRYPT_EMAIL }}" \
-            -var="grafana_admin_password=dummy-password" \
+            -var="grafana_admin_password=${{ secrets.GRAFANA_ADMIN_PASSWORD }}" \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="cluster_name=${{ secrets.CLUSTER_NAME }}" \
             -var="cluster_location=${{ secrets.CLUSTER_LOCATION }}" \
@@ -168,14 +167,14 @@ jobs:
             -var="force_destroy=${{ inputs.destroy_storage }}" \
             -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
             -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}" \
-            -var="keycloak_url=https://dummy-keycloak.example.com" \
-            -var="keycloak_realm=dummy-realm" \
-            -var="keycloak_admin_user=dummy-user" \
-            -var="keycloak_admin_password=dummy-password" \
-            -var="grafana_keycloak_user=dummy-user" \
-            -var="grafana_keycloak_email=dummy@example.com" \
-            -var="grafana_keycloak_password=dummy-password" \
-            -var="grafana_url=https://dummy-grafana.example.com"
+            -var="keycloak_url=${{ secrets.KEYCLOAK_URL }}" \
+            -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM }}" \
+            -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER }}" \
+            -var="keycloak_admin_password=${{ secrets.KEYCLOAK_PASSWORD }}" \
+            -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER }}" \
+            -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}" \
+            -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}" \
+            -var="grafana_url=${{ secrets.GRAFANA_URL }}"
 
 
       - name: Clean up storage buckets - GKE
