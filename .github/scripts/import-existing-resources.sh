@@ -202,6 +202,9 @@ echo "📈 Scanning for existing Grafana resources to import into state..."
 if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   GRAFANA_AUTH="admin:${GRAFANA_ADMIN_PASSWORD}"
   TENANTS="${TENANTS:-webank}"
+  
+  echo "  ℹ️  Grafana URL: ${GRAFANA_URL}"
+  echo "  ℹ️  Tenants: ${TENANTS}"
 
   for TENANT in $(echo "$TENANTS" | tr ',' ' '); do
 
@@ -209,12 +212,20 @@ if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
     TEAM_NAME="${TENANT}-team"
     echo "  🔍 Looking up Grafana team: $TEAM_NAME"
 
+    # Test Grafana connectivity first
+    if ! curl -sf --user "$GRAFANA_AUTH" "${GRAFANA_URL}/api/health" >/dev/null 2>&1; then
+      echo "    ⚠️  Cannot reach Grafana API at ${GRAFANA_URL} - skipping Grafana imports"
+      FAILURE_COUNT=$((FAILURE_COUNT+1))
+      FAILED_OPERATIONS+=("grafana: API unreachable at ${GRAFANA_URL}")
+      break
+    fi
+
     TEAM_ID=$(curl -sf --user "$GRAFANA_AUTH" \
       "${GRAFANA_URL}/api/teams/search?name=${TEAM_NAME}" \
       2>/dev/null | jq -r ".teams[]? | select(.name == \"${TEAM_NAME}\") | .id" 2>/dev/null || true)
 
-    if [ -n "$TEAM_ID" ] && [ "$TEAM_ID" != "null" ]; then
-      echo "    Found team '$TEAM_NAME' (id=$TEAM_ID) — importing into state..."
+    if [ -n "$TEAM_ID" ] && [ "$TEAM_ID" != "null" ] && [ "$TEAM_ID" != "" ]; then
+      echo "    ✓ Found team '$TEAM_NAME' (id=$TEAM_ID) — importing into state..."
       if ! import_resource \
         "grafana_team.tenants[\"${TENANT}\"]" \
         "$TEAM_ID" \
@@ -234,12 +245,15 @@ if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
       DS_NAME="${TENANT_TITLE}-${DS_TYPE_UPPER}"
 
       echo "  🔍 Looking up datasource: $DS_NAME"
+      
+      # URL encode the datasource name for the API call
+      DS_NAME_ENCODED=$(echo "$DS_NAME" | sed 's/ /%20/g')
       DS_UID=$(curl -sf --user "$GRAFANA_AUTH" \
-        "${GRAFANA_URL}/api/datasources/name/${DS_NAME}" \
+        "${GRAFANA_URL}/api/datasources/name/${DS_NAME_ENCODED}" \
         2>/dev/null | jq -r '.uid // empty' 2>/dev/null || true)
 
-      if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ]; then
-        echo "    Found datasource '$DS_NAME' (uid=$DS_UID) — importing into state..."
+      if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ] && [ "$DS_UID" != "" ]; then
+        echo "    ✓ Found datasource '$DS_NAME' (uid=$DS_UID) — importing into state..."
         if ! import_resource \
           "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" \
           "$DS_UID" \
