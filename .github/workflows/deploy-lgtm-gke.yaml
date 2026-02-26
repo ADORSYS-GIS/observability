@@ -1,5 +1,6 @@
 name: Deploy LGTM Stack (GKE)
 
+# Trigger workflow - updated datasource handling strategy
 # Workflow Description:
 # This workflow automates the deployment of the LGTM (Loki, Grafana, Tempo, Mimir) monitoring stack on GKE.
 # It optimizes execution time by consolidating environment setup, resource importing, and planning into a single job.
