@@ -216,7 +216,7 @@ resource "grafana_folder_permission" "tenants" {
 
   permissions {
     team_id    = grafana_team.tenants[each.key].id
-    permission = "Editor" # Team members can create and edit dashboards in their folder
+    permission = "Edit" # Team members can create and edit dashboards in their folder
   }
 
   depends_on = [helm_release.grafana]
