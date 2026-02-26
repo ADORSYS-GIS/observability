@@ -136,7 +136,7 @@ jobs:
             -var="environment=${{ secrets.ENVIRONMENT }}" \
             -var="monitoring_domain=${{ secrets.MONITORING_DOMAIN }}" \
             -var="letsencrypt_email=${{ secrets.LETSENCRYPT_EMAIL }}" \
-            -var="grafana_admin_password=${{ secrets.GRAFANA_ADMIN_PASSWORD }}" \
+            -var="grafana_admin_password=${{ secrets.GRAFANA_ADMIN_PASSWORD || 'dummy-password' }}" \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="cluster_name=${{ secrets.CLUSTER_NAME }}" \
             -var="cluster_location=${{ secrets.CLUSTER_LOCATION }}" \
@@ -144,14 +144,14 @@ jobs:
             -var="force_destroy=${{ inputs.destroy_storage }}" \
             -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
             -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}" \
-            -var="keycloak_url=${{ secrets.KEYCLOAK_URL }}" \
-            -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM }}" \
-            -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER }}" \
-            -var="keycloak_admin_password=${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}" \
-            -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER }}" \
-            -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}" \
-            -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}" \
-            -var="grafana_url=${{ secrets.GRAFANA_URL }}"
+            -var="keycloak_url=${{ secrets.KEYCLOAK_URL || 'https://dummy-keycloak.example.com' }}" \
+            -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM || 'dummy-realm' }}" \
+            -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER || 'dummy-user' }}" \
+            -var="keycloak_admin_password=${{ secrets.KEYCLOAK_ADMIN_PASSWORD || 'dummy-password' }}" \
+            -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER || 'dummy-user' }}" \
+            -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL || 'dummy@example.com' }}" \
+            -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD || 'dummy-password' }}" \
+            -var="grafana_url=${{ secrets.GRAFANA_URL || 'https://dummy-grafana.example.com' }}"
 
 
       - name: Clean up storage buckets - GKE
