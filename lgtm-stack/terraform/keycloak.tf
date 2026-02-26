@@ -201,16 +201,18 @@ resource "keycloak_user" "grafana_admin" {
   }
 }
 
-# Add the dedicated user to the grafana-editors and webank-team groups
-# This ensures the user has dashboard editing rights, but is STRICTLY
-# restricted to seeing only the webank tenant data. (If they were an admin,
-# they would bypass all team restrictions and see everything).
+# Add the dedicated user to the grafana-admins and webank-team groups
+# This gives the user full Grafana Admin rights (can manage users, settings, etc.)
+# while still being a member of webank-team for organizational purposes.
+# Note: Grafana Admins bypass datasource and folder permissions, so they can see
+# all tenants' data. If you want to restrict them to only webank data, use
+# grafana-editors instead.
 resource "keycloak_user_groups" "grafana_admin_membership" {
   realm_id = var.keycloak_realm
   user_id  = keycloak_user.grafana_admin.id
 
   group_ids = [
-    keycloak_group.grafana_editors.id,
+    keycloak_group.grafana_admins.id,
     keycloak_group.tenant_teams["webank"].id
   ]
 }
