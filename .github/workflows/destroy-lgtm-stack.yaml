@@ -143,7 +143,15 @@ jobs:
             -var="region=${{ secrets.REGION }}" \
             -var="force_destroy=${{ inputs.destroy_storage }}" \
             -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
-            -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}"
+            -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}" \
+            -var="keycloak_url=${{ secrets.KEYCLOAK_URL }}" \
+            -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM }}" \
+            -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER }}" \
+            -var="keycloak_admin_password=${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}" \
+            -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER }}" \
+            -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}" \
+            -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}" \
+            -var="grafana_url=${{ secrets.GRAFANA_URL }}"
 
 
       - name: Clean up storage buckets - GKE
