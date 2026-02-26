@@ -10,6 +10,8 @@ GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-}"
 
 echo "🧹 Removing Grafana resources from Terraform state..."
 echo "  Tenants: ${TENANTS}"
+echo "  Grafana URL: ${GRAFANA_URL:-NOT SET}"
+echo "  Grafana Password: ${GRAFANA_ADMIN_PASSWORD:+SET}"
 
 for TENANT in $(echo "$TENANTS" | tr ',' ' '); do
   echo ""
