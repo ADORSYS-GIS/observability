@@ -168,8 +168,6 @@ jobs:
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TENANTS: "webank"
-          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         continue-on-error: true
 
       # Critical Step: Generate execution plan
