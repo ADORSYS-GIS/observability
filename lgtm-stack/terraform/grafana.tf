@@ -82,6 +82,7 @@ resource "grafana_data_source" "loki" {
 
 resource "grafana_data_source" "mimir" {
   for_each = toset(var.tenants)
+  uid  = "${lower(each.key)}-mimir"
 
   uid  = "${lower(each.key)}-mimir"
   name = "${title(each.key)}-Mimir"
@@ -114,6 +115,7 @@ resource "grafana_data_source" "mimir" {
 
 resource "grafana_data_source" "prometheus" {
   for_each = toset(var.tenants)
+  uid  = "${lower(each.key)}-prometheus"
 
   uid  = "${lower(each.key)}-prometheus"
   name = "${title(each.key)}-Prometheus"
@@ -143,6 +145,7 @@ resource "grafana_data_source" "prometheus" {
 
 resource "grafana_data_source" "tempo" {
   for_each = toset(var.tenants)
+  uid  = "${lower(each.key)}-tempo"
 
   uid  = "${lower(each.key)}-tempo"
   name = "${title(each.key)}-Tempo"

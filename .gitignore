@@ -147,3 +147,6 @@ pki-ca-backup*.yaml.gpg
 # AI Protocols
 AI_SESSION_PROMPT.md
 AI_TASK_EXECUTION_PROTOCOL.md
+.kiro/
+import-report.json
+.github/scripts/tests/
