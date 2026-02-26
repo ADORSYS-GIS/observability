@@ -294,29 +294,26 @@ jobs:
           tenants                       = ["webank"]
           EOF
 
-      # Clean up existing Grafana resources to avoid 409 conflicts.
-      # This removes teams and datasources from Grafana so Terraform can recreate them.
-      # This is safer than trying to import them because import often fails due to
-      # timing issues (Grafana not fully ready) or state mismatches.
-      - name: Cleanup existing Grafana resources
+      # Remove Grafana resources from Terraform state to fix state drift.
+      # This allows Terraform to properly import existing resources or create new ones.
+      # This is safer than trying to delete from Grafana (which fails due to dependencies).
+      - name: Remove Grafana resources from state
         working-directory: ${{ env.WORKING_DIR }}
-        run: bash ../../.github/scripts/cleanup-grafana-resources.sh
+        run: bash ../../.github/scripts/remove-grafana-from-state.sh
         env:
-          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TENANTS: "webank"
         continue-on-error: true
 
-      # Import existing infrastructure resources (not Grafana - those were cleaned up above)
-      - name: Import existing infrastructure resources
+      # Now import existing Grafana resources into the clean state
+      - name: Import existing Grafana resources
         working-directory: ${{ env.WORKING_DIR }}
         run: bash ../../.github/scripts/import-existing-resources.sh
         env:
           CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           NAMESPACE: "observability"
-          GRAFANA_URL: ""
-          GRAFANA_ADMIN_PASSWORD: ""
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TENANTS: "webank"
         continue-on-error: true
 
