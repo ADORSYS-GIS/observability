@@ -103,6 +103,22 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      - name: Pre-destroy cleanup - Remove stuck resources
+        run: |
+          echo "🧹 Cleaning up stuck resources before Terraform destroy..."
+          
+          # Delete stuck Grafana pods
+          kubectl delete pod -n observability -l app.kubernetes.io/name=grafana --force --grace-period=0 || true
+          
+          # Delete grafana-team-sync CronJob and Jobs
+          kubectl delete cronjob -n observability grafana-team-sync || true
+          kubectl delete jobs -n observability -l app=grafana-team-sync || true
+          
+          # Remove finalizers from stuck resources
+          kubectl patch helmrelease -n observability monitoring-grafana -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+          
+          echo "✅ Pre-cleanup complete"
+
       - name: Get GKE Cluster Info
         if: inputs.cloud_provider == 'gke'
         id: cluster_info
@@ -135,17 +151,32 @@ jobs:
         run: |
           PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
           for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
-            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            BUCKET_NAME="${PROJECT_ID}-${bucket}-v1"
             echo "🗑️ Deleting bucket: $BUCKET_NAME"
             gsutil -m rm -r "gs://${BUCKET_NAME}" || true
           done
+
+      - name: Post-destroy cleanup - Remove namespace and PVCs
+        run: |
+          echo "🧹 Final cleanup..."
+          
+          # Delete all PVCs in observability namespace
+          kubectl delete pvc -n observability --all --force --grace-period=0 || true
+          
+          # Delete the namespace (will cascade delete everything)
+          kubectl delete namespace observability --force --grace-period=0 || true
+          
+          # Wait for namespace deletion
+          kubectl wait --for=delete namespace/observability --timeout=120s || true
+          
+          echo "✅ Namespace and PVCs cleaned up"
 
       - name: Clean up storage buckets - EKS
         if: inputs.cloud_provider == 'eks' && inputs.destroy_storage == true
         run: |
           PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
           for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
-            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            BUCKET_NAME="${PROJECT_ID}-${bucket}-v1"
             echo "🗑️ Deleting S3 bucket: $BUCKET_NAME"
             aws s3 rb "s3://${BUCKET_NAME}" --force || true
           done
