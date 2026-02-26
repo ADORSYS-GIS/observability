@@ -294,20 +294,29 @@ jobs:
           tenants                       = ["webank"]
           EOF
 
-      # Import existing Grafana resources into state before applying.
-      # This MUST happen here (not just in plan job) because the plan artifact
-      # is baked before imports mutate state — so the artifact is stale.
-      # Running imports here means `terraform apply` sees current state
-      # and does not try to CREATE resources that already exist in Grafana.
-      - name: Import existing Grafana resources
+      # Clean up existing Grafana resources to avoid 409 conflicts.
+      # This removes teams and datasources from Grafana so Terraform can recreate them.
+      # This is safer than trying to import them because import often fails due to
+      # timing issues (Grafana not fully ready) or state mismatches.
+      - name: Cleanup existing Grafana resources
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bash ../../.github/scripts/cleanup-grafana-resources.sh
+        env:
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
+        continue-on-error: true
+
+      # Import existing infrastructure resources (not Grafana - those were cleaned up above)
+      - name: Import existing infrastructure resources
         working-directory: ${{ env.WORKING_DIR }}
         run: bash ../../.github/scripts/import-existing-resources.sh
         env:
           CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           NAMESPACE: "observability"
-          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_URL: ""
+          GRAFANA_ADMIN_PASSWORD: ""
           TENANTS: "webank"
         continue-on-error: true
 
