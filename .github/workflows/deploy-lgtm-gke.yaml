@@ -167,6 +167,8 @@ jobs:
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TENANTS: "webank"
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         continue-on-error: true
 
       # Critical Step: Generate execution plan
@@ -301,20 +303,10 @@ jobs:
         run: bash ../../.github/scripts/remove-grafana-from-state.sh
         env:
           TENANTS: "webank"
-        continue-on-error: true
-
-      # Now import existing Grafana resources into the clean state
-      - name: Import existing Grafana resources
-        working-directory: ${{ env.WORKING_DIR }}
-        run: bash ../../.github/scripts/import-existing-resources.sh
-        env:
-          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          NAMESPACE: "observability"
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          TENANTS: "webank"
         continue-on-error: true
+
 
       # Critical Step: Apply using current state (after imports) — no stale plan file.
       # The plan is regenerated on-the-fly from the post-import state.
