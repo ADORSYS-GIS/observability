@@ -130,6 +130,8 @@ jobs:
 
       - name: Terraform Destroy
         working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_CLI_ARGS: "-refresh=false"
         run: |
           terraform destroy -auto-approve \
             -var="cloud_provider=${{ inputs.cloud_provider }}" \
