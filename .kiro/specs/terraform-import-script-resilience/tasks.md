@@ -1,0 +1,125 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Script Exits on Cleanup Command Failures
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases - kubectl delete failures, permission errors, timeouts
+  - Test that when any kubectl command in cleanup section fails (e.g., deleting non-existent clusterrole), script exits immediately with code 1
+  - Test that scriptExecution.grafanaImportsSectionReached = false when cleanup fails
+  - Test that import report is incomplete or not generated when script exits early
+  - The test assertions should verify: exitCode = 0, grafanaImportsSectionReached = true, importReportGenerated = true, errorLogged = true
+  - Run test on UNFIXED code (with `set -euo pipefail`)
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found: specific kubectl commands that cause exit, exit codes, incomplete reports
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Successful Operations Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for successful operations (all kubectl commands succeed, all imports succeed)
+  - Observe: Import report structure, format, and content for success cases
+  - Observe: GCP-specific imports (service accounts, buckets) behavior
+  - Observe: Kubernetes namespace and service account import behavior
+  - Write property-based test: for all script executions where all commands succeed, fixed script produces exactly the same output as original script
+  - Test that JSON report structure remains unchanged (timestamps, imports array, skipped array, errors array)
+  - Test that successful import operations are reported with correct counts
+  - Test that resources that don't exist are skipped with appropriate logging
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+- [x] 3. Fix for Terraform import script resilience
+
+  - [x] 3.1 Remove strict mode and add failure tracking
+    - Replace `set -euo pipefail` with `set -uo pipefail` (remove `-e` flag)
+    - Keep `-u` (error on undefined variables) and `-o pipefail` (pipeline failure detection)
+    - Add `FAILURE_COUNT=0` variable at script start
+    - Add `FAILED_OPERATIONS=()` array to track which operations failed
+    - _Bug_Condition: isBugCondition(scriptExecution) where scriptExecution.hasStrictModeEnabled = true AND scriptExecution.commandFailed IN ['kubectl delete', 'kubectl get', 'cleanup operations']_
+    - _Expected_Behavior: Script continues executing all operations, logs errors, exits with code 0_
+    - _Preservation: All successful operations produce identical output to original script_
+    - _Requirements: 2.1, 2.2, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+  - [x] 3.2 Add error handling to cleanup_conflicting_resources function
+    - Wrap kubectl delete commands with error handlers: `|| { echo "Error: ..."; FAILURE_COUNT=$((FAILURE_COUNT+1)); FAILED_OPERATIONS+=("..."); }`
+    - Add `|| true` to kubectl commands that may legitimately fail
+    - Ensure function never causes script exit
+    - Add error context to log messages (command, resource, error message)
+    - Add timestamps to error messages
+    - _Bug_Condition: scriptExecution.currentSection = 'cleanup_conflicting_resources' AND command fails_
+    - _Expected_Behavior: Function logs error, increments failure counter, continues to next operation_
+    - _Preservation: Successful cleanup operations unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 2.6_
+
+  - [x] 3.3 Ensure Grafana imports always execute
+    - Add explicit check that Grafana import section runs regardless of prior failures
+    - Wrap individual Grafana API calls with error handling
+    - Log Grafana import failures but continue to next resource
+    - Wrap import_resource calls with additional logging
+    - _Bug_Condition: scriptExecution.grafanaImportsSectionReached = false due to prior failures_
+    - _Expected_Behavior: Grafana imports always execute, individual failures logged but don't block subsequent imports_
+    - _Preservation: Successful Grafana imports produce identical results_
+    - _Requirements: 2.2, 2.4, 2.6_
+
+  - [x] 3.4 Enhance logging and error reporting
+    - Add failure summary at script end if FAILURE_COUNT > 0
+    - Include failed operations list in the summary
+    - Log the specific command that failed
+    - Log the error output from failed commands
+    - Distinguish between expected failures (resource not found) and unexpected failures
+    - Ensure import report is always generated even with failures
+    - _Bug_Condition: Failures occur but no context provided for debugging_
+    - _Expected_Behavior: Comprehensive error logging with context, failure summary, always-generated report_
+    - _Preservation: Report structure and format unchanged for success cases_
+    - _Requirements: 2.5, 2.6, 3.6_
+
+  - [x] 3.5 Update exit strategy
+    - Verify script exits with code 0 at the end (already present, but confirm)
+    - Add failure summary logging before exit if FAILURE_COUNT > 0
+    - Ensure exit 0 occurs even when failures are tracked
+    - _Bug_Condition: Script exits with code 1 on failures_
+    - _Expected_Behavior: Script always exits with code 0, logs failure summary if failures occurred_
+    - _Preservation: Exit code 0 for success cases unchanged_
+    - _Requirements: 2.1, 2.6_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Script Continues on Command Failures
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - Verify: exitCode = 0, grafanaImportsSectionReached = true, importReportGenerated = true, errorLogged = true, failureSummaryPresent = true
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2, 2.6_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - Successful Operations Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - Verify all successful operations produce identical output to original script
+    - Verify JSON report structure and content unchanged for success cases
+    - Verify GCP imports, Kubernetes imports unchanged
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix (no regressions)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run all property-based tests (fault condition and preservation)
+  - Run integration tests with actual GKE cluster if available
+  - Verify manual testing checklist items:
+    - Script continues when kubectl delete fails for non-existent resource
+    - Script continues when kubectl times out
+    - Script continues when Grafana API returns errors
+    - Grafana imports always execute regardless of cleanup failures
+    - Import report is always generated with correct structure
+    - Failure summary is logged when failures occur
+    - Exit code is always 0
+    - Terraform apply succeeds after script runs
+    - No 409 conflicts occur for existing Grafana resources
+  - Ask the user if questions arise or if workflow continue-on-error flag should be removed

@@ -143,61 +143,9 @@ grafana.ini:
     # to authorize the post_logout_redirect_uri.
     signout_redirect_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/logout?client_id=grafana-oauth&post_logout_redirect_uri=https%3A%2F%2Fgrafana.${monitoring_domain}%2Flogin
 
-datasources:
-  datasources.yaml:
-    apiVersion: 1
-    datasources:
-      # Default Tenant Data Sources
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://monitoring-prometheus-server:80
-        isDefault: true
-        jsonData:
-          httpMethod: POST
-          timeInterval: 15s
-          httpHeaderName1: 'X-Scope-OrgID'
-        secureJsonData:
-          httpHeaderValue1: 'default'
-
-      - name: Loki
-        type: loki
-        access: proxy
-        url: http://monitoring-loki-gateway:80
-        jsonData:
-          maxLines: 1000
-          httpHeaderName1: 'X-Scope-OrgID'
-        secureJsonData:
-          httpHeaderValue1: 'default'
-
-      - name: Mimir
-        type: prometheus
-        access: proxy
-        url: http://monitoring-mimir-nginx:80/prometheus
-        jsonData:
-          httpMethod: POST
-          timeInterval: 15s
-          httpHeaderName1: 'X-Scope-OrgID'
-        secureJsonData:
-          httpHeaderValue1: 'default'
-
-      - name: Tempo
-        type: tempo
-        access: proxy
-        url: http://monitoring-tempo-query-frontend:3200
-        jsonData:
-          httpMethod: GET
-          tracesToLogsV2: {}
-          datasourceUid: Loki
-          spanStartTimeShift: '-1h'
-          spanEndTimeShift: '1h'
-          filterByTraceID: true
-          filterBySpanID: false
-          httpHeaderName1: 'X-Scope-OrgID'
-        secureJsonData:
-          httpHeaderValue1: 'default'
-        tracesToMetrics:
-          datasourceUid: Prometheus
+# Datasources are managed by Terraform (see grafana.tf)
+# Do not provision datasources via Helm chart to avoid conflicts
+datasources: {}
         serviceMap:
           datasourceUid: Prometheus
         nodeGraph:
