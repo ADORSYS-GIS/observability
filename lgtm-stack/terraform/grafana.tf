@@ -34,6 +34,34 @@
 #   - User is auto-assigned to the Grafana Team. Done.
 # ============================================================
 
+# ---- Wait for Grafana to be accessible -----------------------
+# The Grafana provider needs the API to be reachable via HTTPS.
+# This resource waits for the ingress, certificate, and DNS to be ready
+# before Terraform tries to create teams, datasources, and folders.
+
+resource "null_resource" "wait_for_grafana" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for Grafana to be accessible at ${var.grafana_url}..."
+      for i in {1..60}; do
+        if curl -k -s -o /dev/null -w "%%{http_code}" ${var.grafana_url}/api/health | grep -q "200"; then
+          echo "✅ Grafana is ready!"
+          exit 0
+        fi
+        echo "Attempt $i/60: Grafana not ready yet, waiting 10s..."
+        sleep 10
+      done
+      echo "❌ ERROR: Grafana did not become accessible after 10 minutes"
+      exit 1
+    EOT
+  }
+
+  depends_on = [
+    helm_release.grafana,
+    kubernetes_ingress_v1.monitoring_stack
+  ]
+}
+
 # ---- Grafana Teams (one per tenant) --------------------------
 # Each team is linked to the matching Keycloak group via team_sync.
 # Grafana will add any user whose JWT "groups" claim contains the
@@ -44,7 +72,10 @@ resource "grafana_team" "tenants" {
 
   name = "${each.key}-team"
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Tenant Datasources (Loki) --------------------------------
@@ -74,7 +105,10 @@ resource "grafana_data_source" "loki" {
     ]
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Tenant Datasources (Mimir) --------------------------------
@@ -102,7 +136,10 @@ resource "grafana_data_source" "mimir" {
     ]
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Tenant Datasources (Prometheus) --------------------------
@@ -133,7 +170,10 @@ resource "grafana_data_source" "prometheus" {
     ]
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Tenant Datasources (Tempo) --------------------------------
@@ -171,7 +211,10 @@ resource "grafana_data_source" "tempo" {
     ]
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Datasource Permissions ------------------------------------
@@ -191,7 +234,10 @@ resource "grafana_data_source_permission" "loki" {
     permission = "Query"
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 resource "grafana_data_source_permission" "mimir" {
@@ -203,7 +249,10 @@ resource "grafana_data_source_permission" "mimir" {
     permission = "Query"
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 resource "grafana_data_source_permission" "prometheus" {
@@ -215,7 +264,10 @@ resource "grafana_data_source_permission" "prometheus" {
     permission = "Query"
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 resource "grafana_data_source_permission" "tempo" {
@@ -227,7 +279,10 @@ resource "grafana_data_source_permission" "tempo" {
     permission = "Query"
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- Dashboard Folders -----------------------------------------
@@ -240,7 +295,10 @@ resource "grafana_folder" "tenants" {
 
   title = "${title(each.key)} Dashboards"
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 resource "grafana_folder_permission" "tenants" {
@@ -253,7 +311,10 @@ resource "grafana_folder_permission" "tenants" {
     permission = "Edit" # Team members can create and edit dashboards in their folder
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.grafana,
+    null_resource.wait_for_grafana
+  ]
 }
 
 # ---- OSS Team Sync Workaround (Option 3) ----
