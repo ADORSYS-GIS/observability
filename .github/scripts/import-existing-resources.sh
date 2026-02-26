@@ -33,7 +33,8 @@ cleanup_conflicting_resources() {
   
   # Get all resources of this type that match any of the keywords
   local pattern=$(echo "$keywords" | sed 's/,/|/g')
-  local resources=$(kubectl get "$resource_type" -o name 2>/dev/null | grep -E "$pattern" || true)
+  local resources
+  resources=$(kubectl get "$resource_type" -o name 2>/dev/null | grep -E "$pattern" || true)
   
   for res in $resources; do
     # Get owner using multiple methods
