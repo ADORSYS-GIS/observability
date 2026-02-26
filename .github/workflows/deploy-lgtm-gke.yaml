@@ -24,6 +24,7 @@ on:
         default: false
   push:
     branches:
+      - main
       - feat/5-Implement-data-isolation-and-multitenancy
     paths:
       - 'lgtm-stack/terraform/**'
