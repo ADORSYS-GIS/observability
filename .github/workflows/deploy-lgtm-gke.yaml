@@ -294,16 +294,19 @@ jobs:
           tenants                       = ["webank"]
           EOF
 
-      # Remove Grafana resources from Terraform state to fix state drift.
-      # This allows Terraform to properly import existing resources or create new ones.
-      # This is safer than trying to delete from Grafana (which fails due to dependencies).
-      - name: Remove Grafana resources from state
+      # Import existing resources into state and clean up read-only datasources.
+      # - Teams: imported via terraform import (prevents CREATE → 409)
+      # - Datasources: deleted via Grafana API (can't import, so delete + recreate)
+      - name: Import existing resources
         working-directory: ${{ env.WORKING_DIR }}
-        run: bash ../../.github/scripts/remove-grafana-from-state.sh
+        run: bash ../../.github/scripts/import-existing-resources.sh
         env:
-          TENANTS: "webank"
+          CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          NAMESPACE: "observability"
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
         continue-on-error: true
 
 
