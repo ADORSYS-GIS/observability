@@ -238,10 +238,10 @@ if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
       echo "    ℹ️  Team '$TEAM_NAME' does not exist yet (will be created)"
     fi
 
-    # ── Import datasources if they exist ─────────────────────────────
-    # If datasources already exist in Grafana (especially provisioned ones),
-    # we import them into Terraform state to avoid 409 Conflict errors.
-    # This handles both manually created and provisioned datasources.
+    # ── Remove datasources from state to force recreation ────────────
+    # Datasources exist in Grafana but are provisioned/read-only.
+    # We remove them from Terraform state so Terraform will try to import them.
+    # If import fails, we delete them from Grafana so Terraform can recreate them.
     TENANT_TITLE=$(echo "$TENANT" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
     for DS_KEY in loki mimir prometheus tempo; do
       DS_TYPE_UPPER=$(echo "$DS_KEY" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
@@ -255,16 +255,25 @@ if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
         2>/dev/null || true)
 
       DS_UID=$(echo "$DS_RESPONSE" | jq -r '.uid // empty' 2>/dev/null || true)
+      DS_ID=$(echo "$DS_RESPONSE" | jq -r '.id // empty' 2>/dev/null || true)
 
       if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ] && [ "$DS_UID" != "" ]; then
-        echo "    ✓ Found datasource '$DS_NAME' (uid=$DS_UID) — importing into state..."
-        if ! import_resource \
-          "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" \
-          "$DS_UID" \
-          "Grafana Datasource: $DS_NAME"; then
-          echo "    ⚠️  Import failed for datasource $DS_NAME (continuing anyway)"
-          FAILURE_COUNT=$((FAILURE_COUNT+1))
-          FAILED_OPERATIONS+=("grafana: import datasource $DS_NAME")
+        echo "    ✓ Found datasource '$DS_NAME' (uid=$DS_UID, id=$DS_ID)"
+        
+        # Remove from state first
+        echo "    🗑️  Removing from Terraform state..."
+        terraform state rm "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" 2>/dev/null || true
+        
+        # Try to delete from Grafana
+        echo "    🗑️  Attempting to delete from Grafana..."
+        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE --user "$GRAFANA_AUTH" \
+          "${GRAFANA_URL}/api/datasources/uid/${DS_UID}" 2>/dev/null || echo "000")
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "    ✅ Deleted from Grafana - Terraform will recreate it"
+        else
+          echo "    ⚠️  Could not delete (HTTP $HTTP_CODE) - may be provisioned"
+          echo "    ℹ️  Terraform will attempt to import or update it"
         fi
       else
         echo "    ℹ️  Datasource '$DS_NAME' does not exist yet (will be created)"
