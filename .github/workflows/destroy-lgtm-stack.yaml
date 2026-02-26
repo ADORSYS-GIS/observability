@@ -153,6 +153,21 @@ jobs:
       - name: Terraform Destroy
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          # Construct URLs from monitoring domain if not explicitly set
+          GRAFANA_URL="${{ secrets.GRAFANA_URL }}"
+          KEYCLOAK_URL="${{ secrets.KEYCLOAK_URL }}"
+          
+          if [ -z "$GRAFANA_URL" ]; then
+            GRAFANA_URL="https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          fi
+          
+          if [ -z "$KEYCLOAK_URL" ]; then
+            KEYCLOAK_URL="https://keycloak.${{ secrets.MONITORING_DOMAIN }}"
+          fi
+          
+          echo "Using Grafana URL: $GRAFANA_URL"
+          echo "Using Keycloak URL: $KEYCLOAK_URL"
+          
           # Destroy with actual Keycloak/Grafana credentials from secrets
           terraform destroy -auto-approve -refresh=false \
             -var="cloud_provider=${{ inputs.cloud_provider }}" \
@@ -167,14 +182,14 @@ jobs:
             -var="force_destroy=${{ inputs.destroy_storage }}" \
             -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
             -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}" \
-            -var="keycloak_url=${{ secrets.KEYCLOAK_URL }}" \
+            -var="keycloak_url=$KEYCLOAK_URL" \
             -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM }}" \
             -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER }}" \
             -var="keycloak_admin_password=${{ secrets.KEYCLOAK_PASSWORD }}" \
             -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER }}" \
             -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}" \
             -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}" \
-            -var="grafana_url=${{ secrets.GRAFANA_URL }}"
+            -var="grafana_url=$GRAFANA_URL"
 
 
       - name: Clean up storage buckets - GKE
