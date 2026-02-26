@@ -412,7 +412,8 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
     namespace = kubernetes_namespace.observability.metadata[0].name
     annotations = merge(
       {
-        "nginx.org/redirect-to-https"     = "true"
+        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/ssl-redirect"          = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -565,6 +566,7 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
     annotations = merge(
       {
         "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/ssl-redirect"          = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -575,6 +577,7 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
   }
 
   spec {
+    ingress_class_name = var.ingress_class_name
     tls {
       hosts = [
         "tempo-grpc.${var.monitoring_domain}"

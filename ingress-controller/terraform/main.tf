@@ -92,9 +92,51 @@ resource "helm_release" "nginx_ingress" {
     value = "true"
   }
 
+  set {
+    name  = "controller.enableCustomResources"
+    value = "true"
+  }
+
   # Wait for the LoadBalancer to be ready
   wait    = true
   timeout = 600
+}
+
+# ClusterRole extension for cert-manager and Ingress status
+resource "kubernetes_cluster_role" "nginx_ingress_extension" {
+  metadata {
+    name = "nginx-ingress-cert-manager-extension"
+  }
+
+  rule {
+    api_groups = ["cert-manager.io"]
+    resources  = ["certificates", "certificaterequests"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources  = ["ingresses/status"]
+    verbs      = ["update"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding" "nginx_ingress_extension" {
+  metadata {
+    name = "nginx-ingress-cert-manager-extension-binding"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.nginx_ingress_extension.metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = "nginx-monitoring-nginx-ingress" # Match the SA name used by helm
+    namespace = var.namespace
+  }
 }
 
 # Explicit namespace cleanup on destroy
