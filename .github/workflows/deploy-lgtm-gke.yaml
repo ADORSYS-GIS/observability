@@ -170,6 +170,17 @@ jobs:
           TENANTS: "webank"
         continue-on-error: true
 
+      # Update existing datasource UIDs to match Terraform configuration
+      # This allows Terraform to update existing datasources instead of trying to create new ones
+      - name: Update datasource UIDs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bash ../../.github/scripts/update-datasource-uids.sh
+        env:
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
+        continue-on-error: true
+
       # Critical Step: Generate execution plan
       - name: Terraform Plan
         id: plan
@@ -304,6 +315,17 @@ jobs:
           CLOUD_PROVIDER: ${{ env.CLOUD_PROVIDER }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           NAMESPACE: "observability"
+          GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TENANTS: "webank"
+        continue-on-error: true
+
+      # Update existing datasource UIDs to match Terraform configuration
+      # This allows Terraform to update existing datasources instead of trying to create new ones
+      - name: Update datasource UIDs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bash ../../.github/scripts/update-datasource-uids.sh
+        env:
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TENANTS: "webank"
