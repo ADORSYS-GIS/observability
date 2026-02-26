@@ -145,13 +145,6 @@ grafana.ini:
 
 # Datasources are managed by Terraform (see grafana.tf)
 # Do not provision datasources via Helm chart to avoid conflicts
-# datasources: {}
-
-# Tempo configuration
-tempo:
-  serviceMap:
-    datasourceUid: Prometheus
-  nodeGraph:
-    enabled: true
+datasources: {}
 
 

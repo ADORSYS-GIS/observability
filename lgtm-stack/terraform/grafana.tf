@@ -156,6 +156,12 @@ resource "grafana_data_source" "tempo" {
     spanEndTimeShift   = "1h"
     filterByTraceID    = true
     filterBySpanID     = false
+    serviceMap = {
+      datasourceUid = grafana_data_source.prometheus[each.key].uid
+    }
+    nodeGraph = {
+      enabled = true
+    }
   })
 
   lifecycle {
