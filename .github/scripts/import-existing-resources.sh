@@ -95,27 +95,34 @@ import_resource() {
     return 0
   else
     if grep -q "Resource already managed" /tmp/import.log; then
-      echo "    ℹ️  Already managed by Terraform"
+      echo "    ✅ Already managed by Terraform"
       jq --arg addr "$tf_address" --arg reason "already_managed" \
-        '.skipped += [{"address": $addr, "reason": $reason}]' \
+        '.imports += [{"address": $addr, "reason": $reason}]' \
         "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
+      return 0  # Return success instead of failure
     else
       echo "    ⚠️  Import failed (resource may not exist)"
       jq --arg addr "$tf_address" --arg error "$(cat /tmp/import.log | tail -5)" \
         '.errors += [{"address": $addr, "error": $error}]' \
         "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
+      return 1
     fi
-    return 1
   fi
 }
 
 # Check if namespace exists
 if kubectl get namespace "$NAMESPACE" &>/dev/null; then
   echo "📂 Found existing namespace: $NAMESPACE"
-  import_resource \
-    "kubernetes_namespace.observability" \
-    "$NAMESPACE" \
-    "Namespace: $NAMESPACE"
+  
+  # Check if already in Terraform state
+  if terraform state list | grep -q "kubernetes_namespace.observability"; then
+    echo "  ℹ️  Namespace already managed by Terraform - skipping import"
+  else
+    import_resource \
+      "kubernetes_namespace.observability" \
+      "$NAMESPACE" \
+      "Namespace: $NAMESPACE"
+  fi
 else
   echo "  ℹ️  Namespace $NAMESPACE does not exist (will be created)"
 fi
