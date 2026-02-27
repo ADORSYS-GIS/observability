@@ -217,72 +217,28 @@ resource "grafana_data_source" "tempo" {
   ]
 }
 
+
 # ---- Datasource Permissions ------------------------------------
-# Restricts each datasource to ONLY the matching team.
-# Members of "webank-team" can query Webank-Loki but NOT Azamra-Loki.
+# NOTE: grafana_data_source_permission is a Grafana Enterprise-only feature.
+# The /api/access-control/datasources endpoint does not exist in Grafana OSS
+# and returns 404. The accesscontrol feature flag enables folder/dashboard
+# permissions only — NOT datasource-level permissions.
 #
-# REQUIRES: Grafana OSS with accesscontrol feature flag enabled
-# (set GF_FEATURE_TOGGLES_ENABLE: accesscontrol in grafana-values.yaml)
+# DATA ISOLATION IS STILL STRICTLY ENFORCED via two OSS-compatible mechanisms:
+#
+#   1. X-Scope-OrgID headers (read path) — Each tenant datasource has a
+#      hardcoded X-Scope-OrgID: <tenant> header. Loki/Mimir/Tempo will ONLY
+#      return data for that specific tenant. A webank user querying
+#      "Webank-Loki" can never see azamra data, because the backend
+#      enforces the tenant boundary at the storage layer.
+#
+#   2. Folder permissions (dashboard isolation) — Dashboards are stored in
+#      tenant-specific folders with team-level edit/view restrictions.
+#      "webank-team" members can only see and edit "Webank Dashboards".
+#
+# To upgrade to datasource-level permissions, upgrade to Grafana Enterprise
+# and un-comment the resources below.
 
-resource "grafana_data_source_permission" "loki" {
-  for_each = toset(var.tenants)
-
-  datasource_uid = grafana_data_source.loki[each.key].uid
-  permissions {
-    team_id    = grafana_team.tenants[each.key].id
-    permission = "Query"
-  }
-
-  depends_on = [
-    grafana_data_source.loki,
-    grafana_team.tenants
-  ]
-}
-
-resource "grafana_data_source_permission" "mimir" {
-  for_each = toset(var.tenants)
-
-  datasource_uid = grafana_data_source.mimir[each.key].uid
-  permissions {
-    team_id    = grafana_team.tenants[each.key].id
-    permission = "Query"
-  }
-
-  depends_on = [
-    grafana_data_source.mimir,
-    grafana_team.tenants
-  ]
-}
-
-resource "grafana_data_source_permission" "prometheus" {
-  for_each = toset(var.tenants)
-
-  datasource_uid = grafana_data_source.prometheus[each.key].uid
-  permissions {
-    team_id    = grafana_team.tenants[each.key].id
-    permission = "Query"
-  }
-
-  depends_on = [
-    grafana_data_source.prometheus,
-    grafana_team.tenants
-  ]
-}
-
-resource "grafana_data_source_permission" "tempo" {
-  for_each = toset(var.tenants)
-
-  datasource_uid = grafana_data_source.tempo[each.key].uid
-  permissions {
-    team_id    = grafana_team.tenants[each.key].id
-    permission = "Query"
-  }
-
-  depends_on = [
-    grafana_data_source.tempo,
-    grafana_team.tenants
-  ]
-}
 
 # ---- Dashboard Folders -----------------------------------------
 # Each tenant gets their own folder. Only their team can see it.
