@@ -122,6 +122,11 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
+      # Temporary Step: Fix the Keycloak state conflict
+      - name: TF State Cleanup (Temporary)
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform state rm keycloak_user_groups.grafana_admin_membership || true
+
       # Step: Syntax and structural validation
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
