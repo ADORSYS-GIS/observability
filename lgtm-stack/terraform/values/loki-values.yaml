@@ -166,6 +166,15 @@ gateway:
           default_type application/octet-stream;
           log_format main '{{ print "$" }}remote_addr - {{ print "$" }}remote_user [{{ print "$" }}time_local] "{{ print "$" }}request" {{ print "$" }}status';
           access_log /dev/stderr main;
+
+          # Determine if authentication is required based on the tenant ID
+          # The 'default' tenant is used by global infra and smoke tests, so we bypass auth for it.
+          map {{ print "$" }}http_x_scope_orgid {{ print "$" }}auth_realm {
+            "default" "off";
+            ""        "off";
+            default   "Loki Tenant Authentication";
+          }
+
           server {
             listen 8080;
 
@@ -175,19 +184,26 @@ gateway:
               auth_basic off;
             }
 
-            # Readiness and push paths (no auth needed for readiness/push)
-            location ~ ^/(loki/api/v1/push|loki/api/v1/tail|ready|log) {
+            # Log push paths (selecitvely authenticated via map)
+            location ~ ^/(loki/api/v1/push|otlp/v1/logs|api/prom/push) {
+              auth_basic {{ print "$" }}auth_realm;
+              auth_basic_user_file /etc/nginx/secrets/.htpasswd;
               proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
               proxy_http_version 1.1;
-              auth_basic off;
             }
 
-            # Read path (BasicAuth required)
+            # Log query/read paths (selectively authenticated via map)
             location / {
-              auth_basic "Loki Tenant Authentication";
+              auth_basic {{ print "$" }}auth_realm;
               auth_basic_user_file /etc/nginx/secrets/.htpasswd;
               proxy_pass http://monitoring-loki-query-frontend.observability.svc.cluster.local:3100;
               proxy_http_version 1.1;
+            }
+
+            # Readiness path for distributor
+            location = /ready {
+              proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
+              auth_basic off;
             }
           }
         }
