@@ -223,7 +223,6 @@ resource "grafana_data_source" "tempo" {
 #
 # REQUIRES: Grafana OSS with accesscontrol feature flag enabled
 # (set GF_FEATURE_TOGGLES_ENABLE: accesscontrol in grafana-values.yaml)
-# OR Grafana Enterprise.
 
 resource "grafana_data_source_permission" "loki" {
   for_each = toset(var.tenants)
@@ -235,8 +234,8 @@ resource "grafana_data_source_permission" "loki" {
   }
 
   depends_on = [
-    helm_release.grafana,
-    null_resource.wait_for_grafana
+    grafana_data_source.loki,
+    grafana_team.tenants
   ]
 }
 
@@ -250,8 +249,8 @@ resource "grafana_data_source_permission" "mimir" {
   }
 
   depends_on = [
-    helm_release.grafana,
-    null_resource.wait_for_grafana
+    grafana_data_source.mimir,
+    grafana_team.tenants
   ]
 }
 
@@ -265,8 +264,8 @@ resource "grafana_data_source_permission" "prometheus" {
   }
 
   depends_on = [
-    helm_release.grafana,
-    null_resource.wait_for_grafana
+    grafana_data_source.prometheus,
+    grafana_team.tenants
   ]
 }
 
@@ -280,8 +279,8 @@ resource "grafana_data_source_permission" "tempo" {
   }
 
   depends_on = [
-    helm_release.grafana,
-    null_resource.wait_for_grafana
+    grafana_data_source.tempo,
+    grafana_team.tenants
   ]
 }
 
@@ -299,6 +298,27 @@ resource "grafana_folder" "tenants" {
     helm_release.grafana,
     null_resource.wait_for_grafana
   ]
+}
+
+# ---- Global Data Sources (Cluster Admins) -----------------------
+# These data sources point to the "default" tenant where 
+# infrastructure metrics and logs are stored.
+# Restricted to the grafana-admins team.
+
+resource "grafana_data_source" "global_loki" {
+  name = "Global-Loki"
+  type = "loki"
+  url  = "http://monitoring-loki-gateway:80"
+  http_headers = { "X-Scope-OrgID" = "default" }
+  depends_on = [helm_release.grafana, null_resource.wait_for_grafana]
+}
+
+resource "grafana_data_source" "global_mimir" {
+  name = "Global-Mimir"
+  type = "prometheus"
+  url  = "http://monitoring-mimir-nginx:80/prometheus"
+  http_headers = { "X-Scope-OrgID" = "default" }
+  depends_on = [helm_release.grafana, null_resource.wait_for_grafana]
 }
 
 resource "grafana_folder_permission" "tenants" {

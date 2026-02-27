@@ -221,6 +221,12 @@ module "cert_manager" {
   issuer_namespace   = var.namespace
   ingress_class_name = var.ingress_class_name
 
+  # Pass GKE credentials for module-internal providers
+  gke_endpoint       = var.gke_endpoint
+  gke_ca_certificate = var.gke_ca_certificate
+  project_id         = var.project_id
+  region             = var.region
+
   # Ensure namespace exists before issuer creation (handled inside module)
 }
 
@@ -233,6 +239,12 @@ module "ingress_nginx" {
   release_name          = var.nginx_ingress_release_name
   namespace             = var.nginx_ingress_namespace
   ingress_class_name    = var.ingress_class_name
+
+  # Pass GKE credentials for module-internal providers
+  gke_endpoint       = var.gke_endpoint
+  gke_ca_certificate = var.gke_ca_certificate
+  project_id         = var.project_id
+  region             = var.region
 }
 
 # Loki
