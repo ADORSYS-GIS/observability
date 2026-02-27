@@ -28,30 +28,7 @@
 #   - Team membership determines which tenant data they see
 # ============================================================
 
-# ---- [MULTI-TENANCY] Tenant Groups ---------------------------
-# For each entry in var.tenants, Terraform creates a Keycloak group
-# named "<tenant>-team" (e.g. "webank-team", "azamra-team").
-#
-# HOW IT WORKS:
-#   1. This code creates the group in Keycloak automatically.
-#   2. You add a user to this group in the Keycloak Admin Console
-#      (or via API). The user can have any role (admin/editor/viewer).
-#   3. On their next login, the Keycloak JWT contains:
-#        "groups": ["webank-team", "grafana-editors"]  ← both signals
-#   4. Grafana reads the "groups" claim and auto-assigns the user
-#      to the "webank-team" Grafana Team (configured in grafana.tf).
-#   5. That team can only query Webank-* datasources → isolation enforced.
-#
-# To add a new tenant: add its name to var.tenants in terraform.tfvars
-# and redeploy. NO manual steps in Keycloak or Grafana.
-
-resource "keycloak_group" "tenant_teams" {
-  for_each = toset(var.tenants)
-
-  realm_id = var.keycloak_realm
-  name     = "${each.key}-team"
-}
-
+# ---- OPENID Connect Client -----------------------------------
 
 # ---- OpenID Connect Client -----------------------------------
 
