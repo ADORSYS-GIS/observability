@@ -148,37 +148,38 @@ gateway:
       readOnly: true
 
   nginxConfig:
-    file: |
-      worker_processes  5;
-      error_log  /dev/stderr;
-      pid        /tmp/nginx.pid;
-      worker_rlimit_nofile 8192;
-      events {
-        worker_connections  4096;
-      }
-      http {
-        client_body_temp_path /tmp/client_temp;
-        proxy_temp_path       /tmp/proxy_temp_path;
-        fastcgi_temp_path     /tmp/fastcgi_temp;
-        uwsgi_temp_path       /tmp/uwsgi_temp;
-        scgi_temp_path        /tmp/scgi_temp;
-        default_type application/octet-stream;
-        log_format main '{{ print "$" }}remote_addr - {{ print "$" }}remote_user [{{ print "$" }}time_local] "{{ print "$" }}request" {{ print "$" }}status';
-        access_log /dev/stderr main;
-        server {
-          listen 8080;
-          location ~ ^/(loki/api/v1/push|loki/api/v1/tail|ready|log) {
-            proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
-            proxy_http_version 1.1;
-          }
-          location / {
-            auth_basic "Loki Tenant Authentication";
-            auth_basic_user_file /etc/nginx/secrets/.htpasswd;
-            proxy_pass http://monitoring-loki-query-frontend.observability.svc.cluster.local:3100;
-            proxy_http_version 1.1;
+    file: |2
+
+        worker_processes  5;
+        error_log  /dev/stderr;
+        pid        /tmp/nginx.pid;
+        worker_rlimit_nofile 8192;
+        events {
+          worker_connections  4096;
+        }
+        http {
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path       /tmp/proxy_temp_path;
+          fastcgi_temp_path     /tmp/fastcgi_temp;
+          uwsgi_temp_path       /tmp/uwsgi_temp;
+          scgi_temp_path        /tmp/scgi_temp;
+          default_type application/octet-stream;
+          log_format main '{{ print "$" }}remote_addr - {{ print "$" }}remote_user [{{ print "$" }}time_local] "{{ print "$" }}request" {{ print "$" }}status';
+          access_log /dev/stderr main;
+          server {
+            listen 8080;
+            location ~ ^/(loki/api/v1/push|loki/api/v1/tail|ready|log) {
+              proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
+              proxy_http_version 1.1;
+            }
+            location / {
+              auth_basic "Loki Tenant Authentication";
+              auth_basic_user_file /etc/nginx/secrets/.htpasswd;
+              proxy_pass http://monitoring-loki-query-frontend.observability.svc.cluster.local:3100;
+              proxy_http_version 1.1;
+            }
           }
         }
-      }
 
 backend:
   replicas: 0
