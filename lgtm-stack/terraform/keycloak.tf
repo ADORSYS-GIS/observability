@@ -189,7 +189,6 @@ resource "keycloak_user_groups" "grafana_admin_membership" {
   user_id  = keycloak_user.grafana_admin.id
 
   group_ids = [
-    keycloak_group.grafana_admins.id,
-    keycloak_group.tenant_teams["webank"].id
+    keycloak_group.grafana_admins.id
   ]
 }
