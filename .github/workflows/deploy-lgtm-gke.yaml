@@ -153,9 +153,10 @@ jobs:
           grafana_keycloak_user     = "${{ secrets.GRAFANA_KEYCLOAK_USER }}"
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
-          grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          tenants                       = ["webank"]
+          grafana_url               = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           EOF
+          # Note: tenants are discovered dynamically from Keycloak by the sync script.
+          # No 'tenants' variable needed in Terraform.
 
       # Import existing resources AFTER tfvars exist, so Terraform providers
       # have credentials (Grafana URL + password) to authenticate during import.
@@ -168,7 +169,6 @@ jobs:
           NAMESPACE: "observability"
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          TENANTS: "webank"
         continue-on-error: true
 
 
@@ -292,9 +292,9 @@ jobs:
           grafana_keycloak_user     = "${{ secrets.GRAFANA_KEYCLOAK_USER }}"
           grafana_keycloak_email    = "${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}"
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
-          grafana_url                   = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
-          tenants                       = ["webank"]
+          grafana_url               = "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           EOF
+          # Note: tenants are discovered dynamically from Keycloak by the sync script.
 
       # Import existing resources into state and clean up read-only datasources.
       # - Teams: imported via terraform import (prevents CREATE → 409)
@@ -308,7 +308,6 @@ jobs:
           NAMESPACE: "observability"
           GRAFANA_URL: "https://grafana.${{ secrets.MONITORING_DOMAIN }}"
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          TENANTS: "webank"
         continue-on-error: true
 
 
