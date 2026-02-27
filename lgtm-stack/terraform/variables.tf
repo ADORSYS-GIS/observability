@@ -285,21 +285,19 @@ variable "grafana_url" {
   type        = string
 }
 
-# ---- Tenant Configuration --------------------------------
-# List of tenant names to manage. Each entry causes Terraform to:
-#   1. Create a Keycloak group  "<tenant>-team"
-#   2. Create a Grafana Team    "<tenant>-team" synced to that KC group
-#   3. Provision Grafana datasources (Loki, Mimir, Tempo, Prometheus)
-#      scoped to X-Scope-OrgID: <tenant>
-#   4. Restrict those datasources to the matching Grafana Team
-#   5. Create a Grafana Dashboard folder visible only to that team
+# ---- Tenant Discovery Configuration --------------------------
+# Tenants are discovered DYNAMICALLY from Keycloak by the sync script.
+# Any Keycloak group whose name ends with `tenant_group_suffix` is
+# treated as a tenant (e.g. "webank-team" → tenant "webank").
 #
-# To add a new tenant: just append its name to this list and redeploy.
-# No manual steps in Keycloak or Grafana are needed.
+# To add a new tenant:
+#   1. Create a `<name>-team` group in Keycloak
+#   2. Add users to the group
+#   3. Wait up to 5 minutes for the CronJob to sync
+# No Terraform changes or redeploys are needed.
 
-variable "tenants" {
-  description = "List of tenant names. Each tenant gets its own Keycloak group, Grafana Team, datasources, and dashboard folder."
-  type        = list(string)
-  default     = ["webank"]
-  # Example: ["webank", "azamra", "gik"]
+variable "tenant_group_suffix" {
+  description = "Suffix used to identify tenant groups in Keycloak (e.g. '-team' means 'webank-team' → tenant 'webank')"
+  type        = string
+  default     = "-team"
 }
