@@ -76,6 +76,25 @@ get_endpoint() {
   fi
 }
 
+# Get authentication arguments for a tenant
+get_tenant_auth() {
+  local tenant="${1:-default}"
+  if [[ "$tenant" == "default" ]]; then
+    echo "" # No auth for default tenant (infrastructure)
+    return
+  fi
+  
+  # Fetch password from the K8s Secret created by the sync script
+  local pass
+  pass=$(kubectl get secret grafana-tenant-passwords -n "$NAMESPACE" -o jsonpath="{.data.$tenant}" 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  
+  if [[ -n "$pass" ]]; then
+    echo "-u $tenant:$pass"
+  else
+    echo "" # Fallback to no auth if secret/tenant not found
+  fi
+}
+
 cleanup_port_forwards() {
   for service in "${!PF_PIDS[@]}"; do
     local pid="${PF_PIDS[$service]}"
@@ -101,7 +120,9 @@ echo "  📤 Pushing test logs..."
 TIMESTAMP=$(date +%s)000000000
 TRACE_ID=$(uuidgen | tr -d '-')
 
+LOKI_AUTH=$(get_tenant_auth "default")
 LOKI_PUSH_RESPONSE=$(curl -s -X POST "$LOKI_ENDPOINT/loki/api/v1/push" \
+  $LOKI_AUTH \
   -H "X-Scope-OrgID: default" \
   -H "Content-Type: application/json" \
   -d '{
@@ -140,7 +161,9 @@ START_TIME_LOKI=$(($(date +%s) - 300))
 # Try for up to 30 seconds
 for i in {1..6}; do
   sleep 5
+  LOKI_AUTH=$(get_tenant_auth "default")
   LOKI_QUERY_RESPONSE=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
+    $LOKI_AUTH \
     -H "X-Scope-OrgID: default" \
     --data-urlencode 'query={job="smoke-test"}' \
     --data-urlencode "start=$START_TIME_LOKI" \
@@ -417,7 +440,9 @@ echo "  📝 [Loki] Pushing a secret log to 'webank' tenant..."
 ISOLATION_TIMESTAMP=$(date +%s)000000000
 WEBANK_SECRET="WEBANK-ONLY-SECRET-$(uuidgen)"
 
+WEBANK_AUTH=$(get_tenant_auth "webank")
 curl -s -X POST "$LOKI_ENDPOINT/loki/api/v1/push" \
+  $WEBANK_AUTH \
   -H "X-Scope-OrgID: webank" \
   -H "Content-Type: application/json" \
   -d "{\"streams\":[{\"stream\":{\"job\":\"isolation-test\"},\"values\":[[\"$ISOLATION_TIMESTAMP\",\"$WEBANK_SECRET\"]]}" \
@@ -442,7 +467,9 @@ else
 fi
 
 # Query as 'webank' — MUST see its own secret
+WEBANK_AUTH=$(get_tenant_auth "webank")
 ISOLATION_AS_WEBANK=$(curl -s -G "$LOKI_ENDPOINT/loki/api/v1/query_range" \
+  $WEBANK_AUTH \
   -H "X-Scope-OrgID: webank" \
   --data-urlencode 'query={job="isolation-test"}' \
   --data-urlencode "start=$(($(date +%s) - 60))" \
@@ -453,7 +480,7 @@ if echo "$ISOLATION_AS_WEBANK" | grep -q "$WEBANK_SECRET"; then
   echo "    ✅ Loki: webank tenant can read its own logs"
 else
   record_test "isolation" "loki_tenant_reads_own" "FAIL" "webank tenant cannot read its own logs"
-  echo "    ❌ Loki: webank tenant cannot read its own logs"
+  echo "    ❌ Loki: webank tenant cannot read its own logs (Response: $(echo $ISOLATION_AS_WEBANK | cut -c1-50)...)"
   ISOLATION_OK=false
 fi
 
