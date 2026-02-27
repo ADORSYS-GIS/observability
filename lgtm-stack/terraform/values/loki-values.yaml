@@ -168,10 +168,21 @@ gateway:
           access_log /dev/stderr main;
           server {
             listen 8080;
+
+            # Health check path (must be open for k8s probes)
+            location = / {
+              return 200 'OK';
+              auth_basic off;
+            }
+
+            # Readiness and push paths (no auth needed for readiness/push)
             location ~ ^/(loki/api/v1/push|loki/api/v1/tail|ready|log) {
               proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
               proxy_http_version 1.1;
+              auth_basic off;
             }
+
+            # Read path (BasicAuth required)
             location / {
               auth_basic "Loki Tenant Authentication";
               auth_basic_user_file /etc/nginx/secrets/.htpasswd;
