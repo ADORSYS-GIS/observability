@@ -43,19 +43,19 @@ resource "null_resource" "wait_for_grafana" {
 # (Grafana Admins can see all datasources by default).
 
 resource "grafana_data_source" "global_loki" {
-  name = "Global-Loki"
-  type = "loki"
-  url  = "http://monitoring-loki-gateway:80"
+  name         = "Global-Loki"
+  type         = "loki"
+  url          = "http://monitoring-loki-gateway:80"
   http_headers = { "X-Scope-OrgID" = "default" }
-  depends_on = [helm_release.grafana, null_resource.wait_for_grafana]
+  depends_on   = [helm_release.grafana, null_resource.wait_for_grafana]
 }
 
 resource "grafana_data_source" "global_mimir" {
-  name = "Global-Mimir"
-  type = "prometheus"
-  url  = "http://monitoring-mimir-nginx:80/prometheus"
+  name         = "Global-Mimir"
+  type         = "prometheus"
+  url          = "http://monitoring-mimir-nginx:80/prometheus"
   http_headers = { "X-Scope-OrgID" = "default" }
-  depends_on = [helm_release.grafana, null_resource.wait_for_grafana]
+  depends_on   = [helm_release.grafana, null_resource.wait_for_grafana]
 }
 
 # ---- Bootstrap K8s Secrets for the sync script ----------------
