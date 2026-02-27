@@ -194,100 +194,25 @@ if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
 fi
 
 # ── Grafana Imports ─────────────────────────────────────────────────
-# IMPORTANT: This section MUST run after terraform.tfvars is created in the
-# workflow so the Grafana provider has credentials to authenticate during import.
-#
-# If a grafana_team or grafana_data_source already exists in Grafana but NOT
-# in the Terraform state, `terraform apply` would try to CREATE it → 409 Conflict.
-# We prevent this by importing the existing resource IDs into state first.
-#
-# This section ALWAYS executes regardless of any prior failures in cleanup.
+# Global datasources and other core Grafana resources would be imported here.
+# NOTE: Tenant teams, datasources, and folders are managed dynamically
+# by the grafana-team-sync CronJob, so they are NOT imported into Terraform.
 # ─────────────────────────────────────────────────────────────────────
 
 echo "📈 Scanning for existing Grafana resources to import into state..."
 
 if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   GRAFANA_AUTH="admin:${GRAFANA_ADMIN_PASSWORD}"
-  TENANTS="${TENANTS:-webank}"
   
-  echo "  ℹ️  Grafana URL: ${GRAFANA_URL}"
-  echo "  ℹ️  Tenants: ${TENANTS}"
-
-  for TENANT in $(echo "$TENANTS" | tr ',' ' '); do
-
-    # ── Import team if it exists ──────────────────────────────────────
-    TEAM_NAME="${TENANT}-team"
-    echo "  🔍 Looking up Grafana team: $TEAM_NAME"
-
-    # Test Grafana connectivity first
-    if ! curl -sf --user "$GRAFANA_AUTH" "${GRAFANA_URL}/api/health" >/dev/null 2>&1; then
-      echo "    ⚠️  Cannot reach Grafana API at ${GRAFANA_URL} - skipping Grafana imports"
-      FAILURE_COUNT=$((FAILURE_COUNT+1))
-      FAILED_OPERATIONS+=("grafana: API unreachable at ${GRAFANA_URL}")
-      break
-    fi
-
-    TEAM_ID=$(curl -sf --user "$GRAFANA_AUTH" \
-      "${GRAFANA_URL}/api/teams/search?name=${TEAM_NAME}" \
-      2>/dev/null | jq -r ".teams[]? | select(.name == \"${TEAM_NAME}\") | .id" 2>/dev/null || true)
-
-    if [ -n "$TEAM_ID" ] && [ "$TEAM_ID" != "null" ] && [ "$TEAM_ID" != "" ]; then
-      echo "    ✓ Found team '$TEAM_NAME' (id=$TEAM_ID) — importing into state..."
-      if ! import_resource \
-        "grafana_team.tenants[\"${TENANT}\"]" \
-        "$TEAM_ID" \
-        "Grafana Team: $TEAM_NAME"; then
-        echo "    ⚠️  Import failed for team $TEAM_NAME (continuing anyway)"
-        FAILURE_COUNT=$((FAILURE_COUNT+1))
-        FAILED_OPERATIONS+=("grafana: import team $TEAM_NAME")
-      fi
-    else
-      echo "    ℹ️  Team '$TEAM_NAME' does not exist yet (will be created)"
-    fi
-
-    # ── Remove datasources from state to force recreation ────────────
-    # Datasources exist in Grafana but are provisioned/read-only.
-    # We remove them from Terraform state so Terraform will try to import them.
-    # If import fails, we delete them from Grafana so Terraform can recreate them.
-    TENANT_TITLE=$(echo "$TENANT" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
-    for DS_KEY in loki mimir prometheus tempo; do
-      DS_TYPE_UPPER=$(echo "$DS_KEY" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
-      DS_NAME="${TENANT_TITLE}-${DS_TYPE_UPPER}"
-
-      echo "  🔍 Checking for existing datasource: $DS_NAME"
-
-      DS_NAME_ENCODED=$(echo "$DS_NAME" | sed 's/ /%20/g')
-      DS_RESPONSE=$(curl -sf --user "$GRAFANA_AUTH" \
-        "${GRAFANA_URL}/api/datasources/name/${DS_NAME_ENCODED}" \
-        2>/dev/null || true)
-
-      DS_UID=$(echo "$DS_RESPONSE" | jq -r '.uid // empty' 2>/dev/null || true)
-      DS_ID=$(echo "$DS_RESPONSE" | jq -r '.id // empty' 2>/dev/null || true)
-
-      if [ -n "$DS_UID" ] && [ "$DS_UID" != "null" ] && [ "$DS_UID" != "" ]; then
-        echo "    ✓ Found datasource '$DS_NAME' (uid=$DS_UID, id=$DS_ID)"
-        
-        # Remove from state first
-        echo "    🗑️  Removing from Terraform state..."
-        terraform state rm "grafana_data_source.${DS_KEY}[\"${TENANT}\"]" 2>/dev/null || true
-        
-        # Try to delete from Grafana
-        echo "    🗑️  Attempting to delete from Grafana..."
-        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE --user "$GRAFANA_AUTH" \
-          "${GRAFANA_URL}/api/datasources/uid/${DS_UID}" 2>/dev/null || echo "000")
-        
-        if [ "$HTTP_CODE" = "200" ]; then
-          echo "    ✅ Deleted from Grafana - Terraform will recreate it"
-        else
-          echo "    ⚠️  Could not delete (HTTP $HTTP_CODE) - may be provisioned"
-          echo "    ℹ️  Terraform will attempt to import or update it"
-        fi
-      else
-        echo "    ℹ️  Datasource '$DS_NAME' does not exist yet (will be created)"
-      fi
-    done
-
-  done
+  # Test Grafana connectivity first
+  if ! curl -sf --user "$GRAFANA_AUTH" "${GRAFANA_URL}/api/health" >/dev/null 2>&1; then
+    echo "    ⚠️  Cannot reach Grafana API at ${GRAFANA_URL} - skipping Grafana imports"
+    FAILURE_COUNT=$((FAILURE_COUNT+1))
+    FAILED_OPERATIONS+=("grafana: API unreachable at ${GRAFANA_URL}")
+  else
+    echo "  ℹ️  Grafana API is reachable at ${GRAFANA_URL}"
+    # Future global Grafana resource imports can be added here
+  fi
 else
   echo "⏭️  Skipping Grafana imports: GRAFANA_URL or GRAFANA_ADMIN_PASSWORD not set"
 fi
