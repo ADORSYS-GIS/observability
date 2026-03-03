@@ -450,7 +450,7 @@ jobs:
 
       # Save plan artifacts
       - name: Upload plan
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: tfplan-argocd-spokes-netbird
           path: |
@@ -789,7 +789,7 @@ jobs:
 
       # Save outputs as artifact
       - name: Upload outputs
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: terraform-outputs-argocd-spokes-netbird
           path: ${{ env.WORKING_DIR }}/terraform-outputs.json
