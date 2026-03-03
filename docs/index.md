@@ -69,6 +69,14 @@ Layer 7 load balancer and reverse proxy for HTTP/HTTPS traffic routing.
 | [Adoption Guide](adopting-ingress-controller.md) | Import existing controller |
 | [Troubleshooting](troubleshooting-ingress-controller.md) | Ingress routing issues |
 
+### Dependency Management
+Automated dependency update tooling for keeping infrastructure and CI dependencies current.
+
+| Guide | Purpose |
+|-------|---------|
+| [Setting Up Renovate](setting-up-renovate.md) | Install, configure, and test Renovate Bot |
+| [Renovate Documentation](RENOVATE-DOCUMENTATION.md) | Renovate concepts and reference |
+
 ---
 
 ## Quick Start by Use Case
