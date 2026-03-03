@@ -459,7 +459,7 @@ jobs:
       # Download the plan artifact generated in terraform-plan job
       - name: Download plan
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.force_reinstall_argocd != true }}
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: tfplan-argocd-hub-gke
           path: ${{ env.WORKING_DIR }}

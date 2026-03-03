@@ -772,7 +772,7 @@ jobs:
 
       # Download the plan artifact
       - name: Download plan
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: tfplan-argocd-spokes-netbird
           path: ${{ env.WORKING_DIR }}
