@@ -106,7 +106,7 @@ jobs:
 
       # Step: Install Terraform CLI
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
@@ -231,7 +231,7 @@ jobs:
 
       # Tool Setup: Identical to Plan job for consistency
       - name: Setup Tools
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
