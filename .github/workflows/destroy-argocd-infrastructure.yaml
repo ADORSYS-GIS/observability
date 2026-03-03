@@ -264,7 +264,7 @@ jobs:
           echo "State backup created"
 
       - name: Upload state backup
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spoke-state-backup
           path: ${{ env.WORKING_DIR }}/spoke-state-backup-*.json
@@ -498,7 +498,7 @@ jobs:
           fi
 
       - name: Upload PKI backup
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pki-ca-final-backup
           path: pki-ca-final-backup-*.yaml
@@ -563,7 +563,7 @@ jobs:
           echo "State backup created"
 
       - name: Upload state backup
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: hub-state-backup
           path: ${{ env.WORKING_DIR }}/hub-state-backup-*.json
