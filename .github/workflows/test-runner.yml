@@ -1,0 +1,22 @@
+name: Test Runner
+
+on:
+  push:
+    branches: [ "ci/test-runner" ] # Triggers only on this specific branch
+  workflow_dispatch: # Keeps the manual option for later (when on main)
+
+jobs:
+  test-connectivity:
+    runs-on: gis-ci
+    steps:
+      - name: Runner Information
+        run: |
+          echo "✅ ADORSYS-GIS Runner is Active"
+          echo "Runner Name: $(hostname)"
+          echo "System: $(uname -a)"
+          echo "Time: $(date)"
+
+      - name: Environment Check
+        run: |
+          ip addr | grep eth0
+          echo "Network isolation check..."
